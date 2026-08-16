@@ -123,5 +123,8 @@
   "sync_scope_no_categories": "Keine Kategorien für diese App gefunden",
   "import_mode_caveat_merge": "Am sichersten: stellt die Datei wieder her und löscht nur Einträge, die beim Export existierten — alles danach Erstellte bleibt erhalten.",
   "import_mode_caveat_full_override": "LÖSCHT alles in den aktivierten Apps — auch NACH dem Backup erstellte Einträge — und stellt nur den Dateiinhalt wieder her.",
-  "import_mode_caveat_additive": "Löscht nie etwas — derselbe Import ein zweites Mal DUPLIZIERT die Einträge."
+  "import_mode_caveat_additive": "Löscht nie etwas — derselbe Import ein zweites Mal DUPLIZIERT die Einträge.",
+  "logging_section": "Protokollierung",
+  "backup_frequency_label": "Häufigkeit",
+  "voxconnect_bridge_section": "Brücke"
 }

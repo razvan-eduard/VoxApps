@@ -123,5 +123,8 @@
   "sync_scope_no_categories": "Nicio categorie găsită pentru această aplicație",
   "import_mode_caveat_merge": "Cel mai sigur: restaurează fișierul și șterge doar înregistrările care existau la export — tot ce a fost creat pe acest dispozitiv după aceea rămâne.",
   "import_mode_caveat_full_override": "ȘTERGE tot din aplicațiile activate — inclusiv înregistrările create DUPĂ backup — apoi restaurează doar conținutul fișierului.",
-  "import_mode_caveat_additive": "Nu șterge nimic — importarea aceluiași fișier din nou DUBLEAZĂ înregistrările."
+  "import_mode_caveat_additive": "Nu șterge nimic — importarea aceluiași fișier din nou DUBLEAZĂ înregistrările.",
+  "logging_section": "Jurnalizare",
+  "backup_frequency_label": "Frecvență",
+  "voxconnect_bridge_section": "Punte"
 }

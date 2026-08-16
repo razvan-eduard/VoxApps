@@ -12,7 +12,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +31,7 @@ import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
+import com.voxapps.design.settings.SettingsSectionCard
 
 /**
  * Per-category and/or overall spending limits, checked daily by
@@ -56,87 +56,89 @@ fun SpendingLimitsSettingsTab(
     var newPeriod by remember { mutableStateOf(SpendingLimit.PERIOD_MONTHLY) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(languageManager.getString("spending_limits_title"), style = MaterialTheme.typography.titleMedium)
-        Text(
-            languageManager.getString("spending_limits_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        limits.forEach { limit ->
-            val categoryName = limit.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }
-                ?: languageManager.getString("overall_spending_label")
-            val periodLabel = languageManager.getString(
-                if (limit.period == SpendingLimit.PERIOD_WEEKLY) "period_weekly" else "period_monthly"
+    Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SettingsSectionCard(languageManager.getString("spending_limits_title")) {
+            Text(
+                languageManager.getString("spending_limits_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(categoryName, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "${formatAmount(limit.amountHomeCurrency, homeCurrency)} · $periodLabel",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { stateManager.deleteSpendingLimit(limit) }) {
-                        Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+
+            limits.forEach { limit ->
+                val categoryName = limit.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }
+                    ?: languageManager.getString("overall_spending_label")
+                val periodLabel = languageManager.getString(
+                    if (limit.period == SpendingLimit.PERIOD_WEEKLY) "period_weekly" else "period_monthly"
+                )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(categoryName, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "${formatAmount(limit.amountHomeCurrency, homeCurrency)} · $periodLabel",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { stateManager.deleteSpendingLimit(limit) }) {
+                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+                        }
                     }
                 }
             }
+
         }
 
-        HorizontalDivider()
-
-        if (addingNew) {
-            Picklist(
-                items = categories,
-                selected = categories.firstOrNull { it.id == newCategoryId },
-                itemLabel = { it.name },
-                onSelect = { newCategoryId = it.id },
-                // A limit with no category is the overall one, so "none" here is a real choice
-                // rather than an empty selection.
-                noneLabel = languageManager.getString("overall_spending_label"),
-                onNoneSelected = { newCategoryId = null }
-            )
-            OutlinedTextField(
-                value = newAmountText,
-                onValueChange = { newAmountText = it },
-                label = { Text(languageManager.getString("limit_amount_label") + " ($homeCurrency)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                FilterChip(
-                    selected = newPeriod == SpendingLimit.PERIOD_WEEKLY,
-                    onClick = { newPeriod = SpendingLimit.PERIOD_WEEKLY },
-                    label = { Text(languageManager.getString("period_weekly")) }
+        SettingsSectionCard(languageManager.getString("add_spending_limit")) {
+            if (addingNew) {
+                Picklist(
+                    items = categories,
+                    selected = categories.firstOrNull { it.id == newCategoryId },
+                    itemLabel = { it.name },
+                    onSelect = { newCategoryId = it.id },
+                    // A limit with no category is the overall one, so "none" here is a real choice
+                    // rather than an empty selection.
+                    noneLabel = languageManager.getString("overall_spending_label"),
+                    onNoneSelected = { newCategoryId = null }
                 )
-                FilterChip(
-                    selected = newPeriod == SpendingLimit.PERIOD_MONTHLY,
-                    onClick = { newPeriod = SpendingLimit.PERIOD_MONTHLY },
-                    label = { Text(languageManager.getString("period_monthly")) }
+                OutlinedTextField(
+                    value = newAmountText,
+                    onValueChange = { newAmountText = it },
+                    label = { Text(languageManager.getString("limit_amount_label") + " ($homeCurrency)") },
+                    modifier = Modifier.fillMaxWidth()
                 )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    val amount = newAmountText.toDoubleOrNull()
-                    if (amount != null) {
-                        stateManager.addSpendingLimit(newCategoryId, amount, newPeriod)
-                    }
-                    addingNew = false
-                    newCategoryId = null
-                    newAmountText = ""
-                }) { Text(languageManager.getString("save")) }
-                TextButton(onClick = { addingNew = false }) { Text(languageManager.getString("cancel")) }
-            }
-        } else {
-            TextButton(onClick = { addingNew = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Text(languageManager.getString("add_spending_limit"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    FilterChip(
+                        selected = newPeriod == SpendingLimit.PERIOD_WEEKLY,
+                        onClick = { newPeriod = SpendingLimit.PERIOD_WEEKLY },
+                        label = { Text(languageManager.getString("period_weekly")) }
+                    )
+                    FilterChip(
+                        selected = newPeriod == SpendingLimit.PERIOD_MONTHLY,
+                        onClick = { newPeriod = SpendingLimit.PERIOD_MONTHLY },
+                        label = { Text(languageManager.getString("period_monthly")) }
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        val amount = newAmountText.toDoubleOrNull()
+                        if (amount != null) {
+                            stateManager.addSpendingLimit(newCategoryId, amount, newPeriod)
+                        }
+                        addingNew = false
+                        newCategoryId = null
+                        newAmountText = ""
+                    }) { Text(languageManager.getString("save")) }
+                    TextButton(onClick = { addingNew = false }) { Text(languageManager.getString("cancel")) }
+                }
+            } else {
+                TextButton(onClick = { addingNew = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text(languageManager.getString("add_spending_limit"))
+                }
             }
         }
     }

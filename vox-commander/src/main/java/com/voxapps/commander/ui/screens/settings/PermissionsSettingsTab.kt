@@ -31,11 +31,6 @@ fun PermissionsSettingsTab(
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(
-            text = languageManager.getString("permissions_section") ?: "System Permissions",
-            style = MaterialTheme.typography.titleMedium
-        )
-
         // 1. Microphone Permission
         PermissionItem(
             title = languageManager.getString("permission_mic_title") ?: "Microphone",

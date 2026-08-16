@@ -54,8 +54,8 @@ import com.voxapps.design.settings.TodayEffectSettings
 import com.voxapps.design.settings.TodayEffectStrings
 import com.voxapps.design.toEnumOr
 import com.voxapps.logging.ui.LogViewerStrings
-import com.voxapps.logging.ui.LogsSettingsTab
-import com.voxapps.logging.ui.LogsTabStrings
+import com.voxapps.design.settings.LogsSettingsTab
+import com.voxapps.design.settings.LogsTabStrings
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.data.preferences.NotesSettingsRepository
 import com.voxapps.notes.state.NotesStateManager
@@ -289,6 +289,7 @@ fun SettingsScreen(
                 toastsEnabled = settings.debugToastsEnabled,
                 onToastsEnabledChange = { stateManager.setDebugToastsEnabled(it) },
                 strings = LogsTabStrings(
+                    sectionLabel = languageManager.getString("logging_section"),
                     enabledLabel = languageManager.getString("debug_logging"),
                     enabledDesc = languageManager.getString("debug_logging_desc"),
                     toastsLabel = languageManager.getString("debug_toasts_label"),

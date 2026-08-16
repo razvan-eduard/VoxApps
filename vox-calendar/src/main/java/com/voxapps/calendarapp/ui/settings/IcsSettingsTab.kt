@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.design.picklist.PicklistFieldAnchor
@@ -93,20 +94,21 @@ fun IcsSettingsTab(
     }
 
     Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(languageManager.getString("ics_settings_title"), style = MaterialTheme.typography.titleMedium)
-        Text(
-            languageManager.getString("ics_settings_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = { exportLauncher.launch("vox-calendar.ics") },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(languageManager.getString("ics_export_button")) }
-        Button(
-            onClick = { importLauncher.launch(arrayOf("text/calendar", "*/*")) },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(languageManager.getString("ics_import_button")) }
+        SettingsSectionCard(languageManager.getString("ics_settings_title")) {
+            Text(
+                languageManager.getString("ics_settings_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = { exportLauncher.launch("vox-calendar.ics") },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(languageManager.getString("ics_export_button")) }
+            Button(
+                onClick = { importLauncher.launch(arrayOf("text/calendar", "*/*")) },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(languageManager.getString("ics_import_button")) }
+        }
     }
 
     pendingImport?.let { pending ->

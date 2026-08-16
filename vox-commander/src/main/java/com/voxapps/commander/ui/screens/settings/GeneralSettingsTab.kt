@@ -31,6 +31,7 @@ import com.voxapps.design.settings.ThemeSettingsBody
 import com.voxapps.design.settings.ThemeSettingsStrings
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.toEnumOr
+import com.voxapps.design.settings.SettingsSectionCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,96 +60,95 @@ fun GeneralSettingsTab(
             ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(text = languageManager.getString("app_settings_section"), style = MaterialTheme.typography.titleMedium)
-
         // The same section every app that reads schemas shows. What differs between them is only
         // where the two values are stored, which is why it takes them rather than reading anything.
-        SchemaUpdatesSection(
-            strings = SchemaUpdatesStrings(
-                sectionLabel = languageManager.getString("schema_updates_section"),
-                description = languageManager.getString("schema_updates_desc"),
-                useRemoteLabel = languageManager.getString("schema_use_remote_label"),
-                useRemoteDescription = languageManager.getString("schema_use_remote_desc"),
-                repositoryUrlLabel = languageManager.getString("model_repository_url"),
-                checkNow = languageManager.getString("schema_sync_now"),
-                followingFormat = languageManager.getString("schema_following"),
-                inStep = languageManager.getString("schema_in_step"),
-                servingFormat = languageManager.getString("schema_serving"),
-                unreachableFormat = languageManager.getString("schema_unreachable"),
-                notCheckedYet = languageManager.getString("schema_not_checked"),
-                usingBundled = languageManager.getString("schema_using_bundled"),
-                problemFormat = languageManager.getString("schema_problem"),
-                reasonRejected = languageManager.getString("schema_reason_rejected"),
-                reasonUnsigned = languageManager.getString("schema_reason_unsigned"),
-                reasonUnreachable = languageManager.getString("schema_reason_unreachable")
-            ),
-            repositoryUrl = modelRepoUrl,
-            useRemote = uiState.useRemoteSchemas,
-            onRepositoryUrlChange = {
-                modelRepoUrl = it
-                scope.launch { settingsRepo.setModelRepoBaseUrl(it) }
-            },
-            onUseRemoteChange = { appStateManager.setUseRemoteSchemas(it) },
-            onSchemasChanged = { appStateManager.refreshAll() }
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-        Text(text = languageManager.getString("language"), style = MaterialTheme.typography.labelLarge)
-
-        Picklist(
-            items = languages,
-            selected = selectedLanguage,
-            itemLabel = { it.uppercase() },
-            onSelect = { lang ->
-                selectedLanguage = lang
-                languageManager.loadLanguage(lang)
-                appStateManager.setAppLanguage(lang)
-            }
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-        // Voice Language (used by STT, LLM interpretation, TTS)
-        Text(text = languageManager.getString("voice_language"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            text = languageManager.getString("voice_language_desc") ?: "Language used for voice recognition, AI interpretation, and text-to-speech",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        val voiceLanguages = Strings.VoiceLanguages.ALL
-        val autoDetect = uiState.voiceLanguageAutoDetect
-        Column {
-            Picklist(
-                items = voiceLanguages,
-                selected = uiState.voiceLanguage,
-                itemLabel = { it.uppercase() },
-                onSelect = { lang ->
-                    appStateManager.setVoiceLanguage(lang)
-                    appStateManager.setModelFilterLang(lang)
-                }
+        SettingsSectionCard(languageManager.getString("schema_updates_section")) {
+            SchemaUpdatesSection(
+                strings = SchemaUpdatesStrings(
+                    sectionLabel = languageManager.getString("schema_updates_section"),
+                    description = languageManager.getString("schema_updates_desc"),
+                    useRemoteLabel = languageManager.getString("schema_use_remote_label"),
+                    useRemoteDescription = languageManager.getString("schema_use_remote_desc"),
+                    repositoryUrlLabel = languageManager.getString("model_repository_url"),
+                    checkNow = languageManager.getString("schema_sync_now"),
+                    followingFormat = languageManager.getString("schema_following"),
+                    inStep = languageManager.getString("schema_in_step"),
+                    servingFormat = languageManager.getString("schema_serving"),
+                    unreachableFormat = languageManager.getString("schema_unreachable"),
+                    notCheckedYet = languageManager.getString("schema_not_checked"),
+                    usingBundled = languageManager.getString("schema_using_bundled"),
+                    problemFormat = languageManager.getString("schema_problem"),
+                    reasonRejected = languageManager.getString("schema_reason_rejected"),
+                    reasonUnsigned = languageManager.getString("schema_reason_unsigned"),
+                    reasonUnreachable = languageManager.getString("schema_reason_unreachable")
+                ),
+                repositoryUrl = modelRepoUrl,
+                useRemote = uiState.useRemoteSchemas,
+                onRepositoryUrlChange = {
+                    modelRepoUrl = it
+                    scope.launch { settingsRepo.setModelRepoBaseUrl(it) }
+                },
+                onUseRemoteChange = { appStateManager.setUseRemoteSchemas(it) },
+                onSchemasChanged = { appStateManager.refreshAll() }
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { appStateManager.setVoiceLanguageAutoDetect(!autoDetect) }
-            ) {
-                Checkbox(
-                    checked = autoDetect,
-                    onCheckedChange = { appStateManager.setVoiceLanguageAutoDetect(it) }
-                )
-                Text(
-                    text = "AutoDetect (Only for supported models)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (autoDetect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+
         }
 
-        HorizontalDivider()
+        SettingsSectionCard(languageManager.getString("language")) {
+            Picklist(
+                items = languages,
+                selected = selectedLanguage,
+                itemLabel = { it.uppercase() },
+                onSelect = { lang ->
+                    selectedLanguage = lang
+                    languageManager.loadLanguage(lang)
+                    appStateManager.setAppLanguage(lang)
+                }
+            )
+
+        }
+
+        // Voice Language (used by STT, LLM interpretation, TTS)
+        SettingsSectionCard(languageManager.getString("voice_language")) {
+            Text(
+                text = languageManager.getString("voice_language_desc") ?: "Language used for voice recognition, AI interpretation, and text-to-speech",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            val voiceLanguages = Strings.VoiceLanguages.ALL
+            val autoDetect = uiState.voiceLanguageAutoDetect
+            Column {
+                Picklist(
+                    items = voiceLanguages,
+                    selected = uiState.voiceLanguage,
+                    itemLabel = { it.uppercase() },
+                    onSelect = { lang ->
+                        appStateManager.setVoiceLanguage(lang)
+                        appStateManager.setModelFilterLang(lang)
+                    }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { appStateManager.setVoiceLanguageAutoDetect(!autoDetect) }
+                ) {
+                    Checkbox(
+                        checked = autoDetect,
+                        onCheckedChange = { appStateManager.setVoiceLanguageAutoDetect(it) }
+                    )
+                    Text(
+                        text = "AutoDetect (Only for supported models)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (autoDetect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+        }
+
         ThemeSettingsBody(
             darkMode = uiState.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
             colored = uiState.themeColored,

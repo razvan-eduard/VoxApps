@@ -114,7 +114,7 @@
   "app_alias_delete_msg": "Supprimer la règle d'alias pour \"${displayName}\" ? Alias : ${aliases}",
   "save_button": "Enregistrer",
   "tab_advanced": "Avancé",
-  "tab_backup": "Sauvegarde et diagnostic",
+  "tab_backup": "Sauvegarde",
   "engine_api_key": "Clé API",
   "tab_benchmark": "Diagnostic",
   "tab_verbose_logging": "Logs détaillés",
@@ -553,5 +553,17 @@
   "backup_import_mode_additive": "Additif",
   "backup_import_mode_caveat_merge": "Le plus sûr : restaure le fichier et ne supprime que les enregistrements existant à l'export — tout ce qui a été créé ensuite est conservé.",
   "backup_import_mode_caveat_full_override": "SUPPRIME tout — y compris les enregistrements créés APRÈS la sauvegarde — puis ne restaure que le contenu du fichier.",
-  "backup_import_mode_caveat_additive": "Ne supprime jamais rien — restaurer à nouveau le même fichier DUPLIQUE ses enregistrements."
+  "backup_import_mode_caveat_additive": "Ne supprime jamais rien — restaurer à nouveau le même fichier DUPLIQUE ses enregistrements.",
+  "logging_section": "Journalisation",
+  "intent_engine_section": "Moteur d'intention",
+  "ww_detection_section": "Détection",
+  "tts_playback_section": "Voix et lecture",
+  "return_after_action_section": "Retour à l'app précédente",
+  "app_control_section": "Contrôle et automatisation",
+  "external_trigger_section": "Déclencheur vocal externe",
+  "integrations_apps_title": "Applications connectées",
+  "youtube_url_engine": "Moteur d'URL YouTube",
+  "piped_section": "Piped",
+  "logs_settings_title": "Journaux",
+  "tab_diagnostics": "Diagnostics"
 }

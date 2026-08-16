@@ -21,7 +21,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -57,6 +56,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import com.voxapps.design.settings.SettingsSectionCard
 
 /** Cooldown after tapping "Force-check notifications now" — forceRecheckNow() is fire-and-forget
  *  with no completion signal, so this is a simple guard against a double-tap dispatching (and, with
@@ -191,174 +191,175 @@ fun NotificationCaptureSettingsTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(languageManager.getString("notification_capture_title"), style = MaterialTheme.typography.titleMedium)
-        Text(
-            languageManager.getString("notification_capture_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Button(
-            onClick = {
-                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (accessGranted) Color(0xFF4CAF50) else Color(0xFFF44336)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(languageManager.getString("grant_notification_access_button"), color = Color.White)
-        }
-
-        Text(
-            languageManager.getString("battery_optimization_warning"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = {
-                if (batteryOptimizationIgnored) {
-                    Toast.makeText(context, languageManager.getString("battery_optimization_already_disabled"), Toast.LENGTH_SHORT).show()
-                } else {
-                    context.startActivity(
-                        Intent(
-                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:${context.packageName}")
-                        )
-                    )
-                }
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (batteryOptimizationIgnored) Color(0xFF4CAF50) else Color(0xFFF44336)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(languageManager.getString("disable_battery_optimization_button"), color = Color.White)
-        }
-
-        // Distinct from (and, on an affected OEM, more load-bearing than) the battery-optimization
-        // exemption above: Honor/Huawei's own "App launch management" gate can block this service
-        // from ever rebinding after the process is killed — confirmed on-device via logcat
-        // ("Service starting has been prevented by iaware or trustsbase") — independently of whatever
-        // ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS reports, since that's a separate, stock-Android
-        // mechanism this OEM's own manager sits on top of. No public Intent action reaches this
-        // screen directly, so this best-effort deep-links straight to that OEM's known component and
-        // falls back to this app's own App Info page (where "Launch" / "Auto-launch" controls live on
-        // some OEM skins) if that component isn't present at all.
-        Text(
-            languageManager.getString("app_launch_management_warning"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        OutlinedButton(
-            onClick = { openAppLaunchManagement(context) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(languageManager.getString("open_app_launch_management_button"))
-        }
-
-        OutlinedButton(
-            onClick = {
-                if (!accessGranted) {
-                    Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
-                } else if (!forceCheckOnCooldown) {
-                    // Re-checks every notification currently in the shade directly against the
-                    // "already processed" guard, bypassing it entirely for this explicit user action
-                    // (see PaymentNotificationListenerService.forceRecheckNow's doc comment) — no
-                    // longer relies on wiping the whole processed-keys history + hoping the OS honors
-                    // a rebind request, which this OEM can silently block outright.
-                    PaymentNotificationListenerService.forceRecheckNow(context)
-                    Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
-                    forceCheckOnCooldown = true
-                    scope.launch {
-                        delay(FORCE_CHECK_COOLDOWN_MILLIS)
-                        forceCheckOnCooldown = false
-                    }
-                }
-            },
-            enabled = !forceCheckOnCooldown,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text(languageManager.getString("force_check_notifications_button"))
-        }
-
-        HorizontalDivider()
-
-        Text(languageManager.getString("payment_source_apps_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("payment_source_apps_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        OutlinedButton(
-            onClick = {
-                scope.launch {
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        LauncherAppsCache.scan(context)
-                    }
-                    installedApps = LauncherAppsCache.cachedApps
-                    settingsRepo.setAppCache(LauncherAppsCache.toJsonCache())
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text(languageManager.getString("rescan_apps"))
-        }
-        if (installedApps.isEmpty()) {
-            // Confirmed on-device: LauncherAppsCache.scan() (getInstalledApplications) is correctly
-            // implemented and QUERY_ALL_PACKAGES is granted at the stock-Android level, but this
-            // still comes back empty on Honor/MagicOS — logcat shows a separate OEM-only gate,
-            // ApplicationPackageManager.checkGetInstalledAppsPermissionStatus, denying the request.
-            // That toggle isn't exposed via a stable public Intent action, so the most reliable thing
-            // this app can do is point the user at its own App Info page, where this OEM surfaces the
-            // "Get installed apps" permission under Permissions / Other permissions.
+        SettingsSectionCard(languageManager.getString("notification_capture_title")) {
             Text(
-                languageManager.getString("installed_apps_empty_warning"),
+                languageManager.getString("notification_capture_desc"),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedButton(
+
+            Button(
                 onClick = {
-                    try {
+                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (accessGranted) Color(0xFF4CAF50) else Color(0xFFF44336)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("grant_notification_access_button"), color = Color.White)
+            }
+
+            Text(
+                languageManager.getString("battery_optimization_warning"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = {
+                    if (batteryOptimizationIgnored) {
+                        Toast.makeText(context, languageManager.getString("battery_optimization_already_disabled"), Toast.LENGTH_SHORT).show()
+                    } else {
                         context.startActivity(
                             Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                                 Uri.parse("package:${context.packageName}")
                             )
                         )
-                    } catch (e: ActivityNotFoundException) {
-                        Toast.makeText(context, "Couldn't open system settings", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (batteryOptimizationIgnored) Color(0xFF4CAF50) else Color(0xFFF44336)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("disable_battery_optimization_button"), color = Color.White)
+            }
+
+            // Distinct from (and, on an affected OEM, more load-bearing than) the battery-optimization
+            // exemption above: Honor/Huawei's own "App launch management" gate can block this service
+            // from ever rebinding after the process is killed — confirmed on-device via logcat
+            // ("Service starting has been prevented by iaware or trustsbase") — independently of whatever
+            // ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS reports, since that's a separate, stock-Android
+            // mechanism this OEM's own manager sits on top of. No public Intent action reaches this
+            // screen directly, so this best-effort deep-links straight to that OEM's known component and
+            // falls back to this app's own App Info page (where "Launch" / "Auto-launch" controls live on
+            // some OEM skins) if that component isn't present at all.
+            Text(
+                languageManager.getString("app_launch_management_warning"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { openAppLaunchManagement(context) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("open_app_launch_management_button"))
+            }
+
+            OutlinedButton(
+                onClick = {
+                    if (!accessGranted) {
+                        Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
+                    } else if (!forceCheckOnCooldown) {
+                        // Re-checks every notification currently in the shade directly against the
+                        // "already processed" guard, bypassing it entirely for this explicit user action
+                        // (see PaymentNotificationListenerService.forceRecheckNow's doc comment) — no
+                        // longer relies on wiping the whole processed-keys history + hoping the OS honors
+                        // a rebind request, which this OEM can silently block outright.
+                        PaymentNotificationListenerService.forceRecheckNow(context)
+                        Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
+                        forceCheckOnCooldown = true
+                        scope.launch {
+                            delay(FORCE_CHECK_COOLDOWN_MILLIS)
+                            forceCheckOnCooldown = false
+                        }
+                    }
+                },
+                enabled = !forceCheckOnCooldown,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(languageManager.getString("force_check_notifications_button"))
+            }
+
+        }
+
+        SettingsSectionCard(languageManager.getString("payment_source_apps_label")) {
+            Text(
+                languageManager.getString("payment_source_apps_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            LauncherAppsCache.scan(context)
+                        }
+                        installedApps = LauncherAppsCache.cachedApps
+                        settingsRepo.setAppCache(LauncherAppsCache.toJsonCache())
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(languageManager.getString("open_app_permissions_button"))
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(languageManager.getString("rescan_apps"))
             }
+            if (installedApps.isEmpty()) {
+                // Confirmed on-device: LauncherAppsCache.scan() (getInstalledApplications) is correctly
+                // implemented and QUERY_ALL_PACKAGES is granted at the stock-Android level, but this
+                // still comes back empty on Honor/MagicOS — logcat shows a separate OEM-only gate,
+                // ApplicationPackageManager.checkGetInstalledAppsPermissionStatus, denying the request.
+                // That toggle isn't exposed via a stable public Intent action, so the most reliable thing
+                // this app can do is point the user at its own App Info page, where this OEM surfaces the
+                // "Get installed apps" permission under Permissions / Other permissions.
+                Text(
+                    languageManager.getString("installed_apps_empty_warning"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                            )
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "Couldn't open system settings", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("open_app_permissions_button"))
+                }
+            }
+            AppPickerCard(
+                apps = installedApps,
+                selectedPackages = paymentSourcePackages.toList(),
+                onApply = { updated -> stateManager.setPaymentSourcePackages(updated.toSet()) },
+                strings = appPickerStrings,
+                modifier = Modifier.fillMaxWidth(),
+                label = languageManager.getString("payment_source_apps_label"),
+                starredPackages = bankingSourcePackages,
+                onApplyStarred = { updated -> stateManager.setBankingSourcePackages(updated) }
+            )
+
         }
-        AppPickerCard(
-            apps = installedApps,
-            selectedPackages = paymentSourcePackages.toList(),
-            onApply = { updated -> stateManager.setPaymentSourcePackages(updated.toSet()) },
-            strings = appPickerStrings,
-            modifier = Modifier.fillMaxWidth(),
-            label = languageManager.getString("payment_source_apps_label"),
-            starredPackages = bankingSourcePackages,
-            onApplyStarred = { updated -> stateManager.setBankingSourcePackages(updated) }
-        )
 
-        HorizontalDivider()
-
-        Column(modifier = Modifier.fillMaxWidth()) {
+        SettingsSectionCard(languageManager.getString("auto_accept_notification_expenses_label")) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    languageManager.getString("auto_accept_notification_expenses_label"),
-                    style = MaterialTheme.typography.labelLarge,
+                    languageManager.getString("auto_accept_notification_expenses_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
                 Switch(
@@ -366,58 +367,52 @@ fun NotificationCaptureSettingsTab(
                     onCheckedChange = { stateManager.setAutoAcceptNotificationExpenses(it) }
                 )
             }
-            Text(
-                languageManager.getString("auto_accept_notification_expenses_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
 
         if (pendingEntries.isNotEmpty()) {
-            HorizontalDivider()
-            Text(languageManager.getString("pending_notification_expenses_title"), style = MaterialTheme.typography.labelLarge)
-
-            pendingEntries.forEach { entry ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            entry.title?.takeIf { it.isNotBlank() } ?: entry.vendor ?: "—",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            formatAmount(entry.totalAmount, entry.currency) +
-                                (entry.bank?.let { " · $it" } ?: "") +
-                                (entry.category?.let { " · $it" } ?: "") +
-                                " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.capturedAt)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { stateManager.dismissNotificationExpense(entry.id) },
-                                modifier = Modifier.weight(1f)
+            SettingsSectionCard(languageManager.getString("pending_notification_expenses_title")) {
+                pendingEntries.forEach { entry ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                entry.title?.takeIf { it.isNotBlank() } ?: entry.vendor ?: "—",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                formatAmount(entry.totalAmount, entry.currency) +
+                                    (entry.bank?.let { " · $it" } ?: "") +
+                                    (entry.category?.let { " · $it" } ?: "") +
+                                    " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.capturedAt)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(languageManager.getString("dismiss_button"))
-                            }
-                            Button(
-                                onClick = { stateManager.approveNotificationExpense(entry, context) },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(languageManager.getString("approve_button"))
+                                OutlinedButton(
+                                    onClick = { stateManager.dismissNotificationExpense(entry.id) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(languageManager.getString("dismiss_button"))
+                                }
+                                Button(
+                                    onClick = { stateManager.approveNotificationExpense(entry, context) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(languageManager.getString("approve_button"))
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            OutlinedButton(
-                onClick = { stateManager.dismissAllNotificationExpenses() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString("dismiss_all_button"))
+                OutlinedButton(
+                    onClick = { stateManager.dismissAllNotificationExpenses() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("dismiss_all_button"))
+                }
             }
         }
     }

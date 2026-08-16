@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -33,12 +32,13 @@ data class ThemeSettingsStrings(
  * The shared "Theme" settings page every app renders identically — moved here verbatim from what
  * used to be a duplicated block inside each app's own General settings tab (mirrors [LogsSettingsTab]'s
  * shared-tab convention: pure values-in/callbacks-out, no direct DataStore access, this module has
- * no `LanguageManager` so every label is caller-supplied). [todayEffect], when non-null, adds the
- * "highlight today" section below the divider — only Calendar/Expenses/Notes pass one; the other
- * apps have no "today" card to configure this for. [extraContent], if given, renders below that in
- * the same scrollable column — lets a caller fold app-specific appearance-adjacent settings (e.g.
- * vox-calendar's widget border / animations toggles) into this page instead of duplicating the
- * scroll-column scaffolding to append them elsewhere.
+ * no `LanguageManager` so every label is caller-supplied). Each group is its own
+ * [SettingsSectionCard], as on every other final settings screen. [todayEffect], when non-null, adds
+ * the "highlight today" card — only Calendar/Expenses/Notes pass one; the other apps have no "today"
+ * card to configure this for. [extraContent], if given, renders below that in the same scrollable
+ * column — lets a caller fold app-specific appearance-adjacent settings (e.g. vox-calendar's widget
+ * border / animations toggles) into this page instead of duplicating the scroll-column scaffolding
+ * to append them elsewhere; the caller emits its own section cards there.
  */
 @Composable
 fun ThemeSettingsScreen(
@@ -78,40 +78,41 @@ fun ColumnScope.ThemeSettingsBody(
     todayEffect: TodayEffectSettings? = null,
     extraContent: (@Composable ColumnScope.() -> Unit)? = null
 ) {
-        Text(strings.darkModeSectionLabel, style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val modes = listOf(
-                VoxDarkMode.SYSTEM to strings.themeSystemLabel,
-                VoxDarkMode.LIGHT to strings.themeLightLabel,
-                VoxDarkMode.DARK to strings.themeDarkLabel
-            )
-            modes.forEach { (mode, label) ->
-                FilterChip(
-                    selected = darkMode == mode,
-                    onClick = { onDarkModeChange(mode) },
-                    label = { Text(label) }
+        SettingsSectionCard(strings.darkModeSectionLabel) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val modes = listOf(
+                    VoxDarkMode.SYSTEM to strings.themeSystemLabel,
+                    VoxDarkMode.LIGHT to strings.themeLightLabel,
+                    VoxDarkMode.DARK to strings.themeDarkLabel
                 )
+                modes.forEach { (mode, label) ->
+                    FilterChip(
+                        selected = darkMode == mode,
+                        onClick = { onDarkModeChange(mode) },
+                        label = { Text(label) }
+                    )
+                }
             }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(strings.coloredLabel, style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    strings.coloredDesc,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(strings.coloredLabel, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        strings.coloredDesc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = colored, onCheckedChange = onColoredChange)
             }
-            Switch(checked = colored, onCheckedChange = onColoredChange)
         }
 
         if (todayEffect != null) {
-            HorizontalDivider()
-            TodayEffectSettingsCard(todayEffect)
+            SettingsSectionCard(todayEffect.strings.sectionLabel) {
+                TodayEffectSettingsCard(todayEffect)
+            }
         }
 
-        if (extraContent != null) {
-            HorizontalDivider()
-            extraContent()
-        }
+        // Rendered bare: a caller folding its own appearance settings in here emits its own cards,
+        // so wrapping the slot would put a card around a column of cards.
+        extraContent?.invoke(this)
 }

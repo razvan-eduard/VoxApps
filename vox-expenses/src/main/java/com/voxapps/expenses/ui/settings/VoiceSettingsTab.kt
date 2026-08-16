@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -23,6 +22,7 @@ import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
+import com.voxapps.design.settings.SettingsSectionCard
 
 /** Category-resolution defaults for expenses created via Commander's LLM pipeline — both voice
  *  ("Vox, add expense...") and scan cleanup share this same resolution logic (see
@@ -41,56 +41,55 @@ fun VoiceSettingsTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // --- Toast on voice save ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("voice_save_toast"), style = MaterialTheme.typography.bodyLarge)
+        SettingsSectionCard(languageManager.getString("voice_save_toast")) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     languageManager.getString("voice_save_toast_desc"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = settings.voiceSaveToastEnabled,
+                    onCheckedChange = { stateManager.setVoiceSaveToastEnabled(it) }
                 )
             }
-            Switch(
-                checked = settings.voiceSaveToastEnabled,
-                onCheckedChange = { stateManager.setVoiceSaveToastEnabled(it) }
-            )
+
         }
 
-        HorizontalDivider()
-
         // --- Default category for voice/unresolved expenses ---
-        Text(languageManager.getString("default_voice_category"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("default_voice_category_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        SettingsSectionCard(languageManager.getString("default_voice_category")) {
+            Text(
+                languageManager.getString("default_voice_category_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-        Picklist(
-            items = categories,
-            selected = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId },
-            itemLabel = { it.name },
-            onSelect = { stateManager.setDefaultVoiceCategoryId(it.id) },
-            noneLabel = languageManager.getString("none"),
-            onNoneSelected = { stateManager.setDefaultVoiceCategoryId(null) }
-        )
+            Picklist(
+                items = categories,
+                selected = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId },
+                itemLabel = { it.name },
+                onSelect = { stateManager.setDefaultVoiceCategoryId(it.id) },
+                noneLabel = languageManager.getString("none"),
+                onNoneSelected = { stateManager.setDefaultVoiceCategoryId(null) }
+            )
 
-        HorizontalDivider()
+        }
 
         // --- Auto-create spoken categories ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("auto_create_voice_category"), style = MaterialTheme.typography.bodyLarge)
+        SettingsSectionCard(languageManager.getString("auto_create_voice_category")) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     languageManager.getString("auto_create_voice_category_desc"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = settings.autoCreateVoiceCategory,
+                    onCheckedChange = { stateManager.setAutoCreateVoiceCategory(it) }
                 )
             }
-            Switch(
-                checked = settings.autoCreateVoiceCategory,
-                onCheckedChange = { stateManager.setAutoCreateVoiceCategory(it) }
-            )
         }
     }
 }

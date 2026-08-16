@@ -65,8 +65,8 @@ import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.logging.ui.LogViewerStrings
-import com.voxapps.logging.ui.LogsSettingsTab
-import com.voxapps.logging.ui.LogsTabStrings
+import com.voxapps.design.settings.LogsSettingsTab
+import com.voxapps.design.settings.LogsTabStrings
 
 private enum class SettingsPage {
     MENU, GENERAL, SCANNING, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP,
@@ -398,6 +398,7 @@ fun SettingsScreen(
                 toastsEnabled = settings.debugToastsEnabled,
                 onToastsEnabledChange = { stateManager.setDebugToastsEnabled(it) },
                 strings = LogsTabStrings(
+                    sectionLabel = languageManager.getString("logging_section"),
                     enabledLabel = languageManager.getString("debug_logging"),
                     enabledDesc = languageManager.getString("debug_logging_desc"),
                     toastsLabel = languageManager.getString("debug_toasts"),

@@ -301,5 +301,10 @@
   "backup_import_mode_additive": "Additive",
   "backup_import_mode_caveat_merge": "Safest: restores the file and deletes only records that existed when it was exported — anything created here afterwards is kept.",
   "backup_import_mode_caveat_full_override": "DELETES everything — including records created AFTER the backup — then restores only what the file contains.",
-  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records."
+  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records.",
+  "logging_section": "Logging",
+  "zone_security": "Security",
+  "zone_capture": "Creating entries",
+  "zone_display": "What shows in the calendar",
+  "widget_zone": "Home-screen widget"
 }

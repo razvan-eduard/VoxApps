@@ -513,5 +513,6 @@
   "zone_money": "Bani și formate",
   "zone_browsing": "Navigare și widget-uri",
   "zone_places": "Locuri",
-  "zone_danger": "Zonă periculoasă"
+  "zone_danger": "Zonă periculoasă",
+  "logging_section": "Jurnalizare"
 }

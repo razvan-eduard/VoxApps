@@ -33,6 +33,7 @@ import com.voxapps.commander.state.AppStateManager
 import com.voxapps.commander.ui.components.AppSelectorDropdown
 import kotlinx.coroutines.launch
 import java.util.UUID
+import com.voxapps.design.settings.SettingsSectionCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,146 +53,143 @@ fun AppManagerTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // --- SECTION 1: Default Apps (moved from ServiceSettingsTab) ---
-        Text(
-            text = languageManager.getString("default_apps_description") ?: "Select which apps VoxCommander can use and set defaults per category.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        SettingsSectionCard(languageManager.getString("tab_default_apps")) {
+            Text(
+                text = languageManager.getString("default_apps_description") ?: "Select which apps VoxCommander can use and set defaults per category.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-        DefaultAppsContent(
+            DefaultAppsContent(
 
-            settingsRepo = settingsRepo,
-            appStateManager = appStateManager
-        )
+                settingsRepo = settingsRepo,
+                appStateManager = appStateManager
+            )
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        }
 
         // --- SECTION 2: App Alias Manager ---
-        Text(
-            text = languageManager.getString("app_alias_manager_title"),
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = languageManager.getString("app_alias_manager_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        SettingsSectionCard(languageManager.getString("app_alias_manager_title")) {
+            Text(
+                text = languageManager.getString("app_alias_manager_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-        AppAliasManagerSection(
-            aliasRules = uiState.appAliasRules,
-            onAddRule = { rule ->
-                val updated = (settings.appAliasRules + rule)
-                scope.launch { settingsRepo.setAppAliasRules(updated) }
-            },
-            onUpdateRule = { rule ->
-                val updated = settings.appAliasRules.map { if (it.id == rule.id) rule else it }
-                scope.launch { settingsRepo.setAppAliasRules(updated) }
-            },
-            onDeleteRule = { ruleId ->
-                val updated = settings.appAliasRules.filter { it.id != ruleId }
-                scope.launch { settingsRepo.setAppAliasRules(updated) }
-            }
+            AppAliasManagerSection(
+                aliasRules = uiState.appAliasRules,
+                onAddRule = { rule ->
+                    val updated = (settings.appAliasRules + rule)
+                    scope.launch { settingsRepo.setAppAliasRules(updated) }
+                },
+                onUpdateRule = { rule ->
+                    val updated = settings.appAliasRules.map { if (it.id == rule.id) rule else it }
+                    scope.launch { settingsRepo.setAppAliasRules(updated) }
+                },
+                onDeleteRule = { ruleId ->
+                    val updated = settings.appAliasRules.filter { it.id != ruleId }
+                    scope.launch { settingsRepo.setAppAliasRules(updated) }
+                }
 
-        )
+            )
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        }
 
         // --- SECTION 3: Media Session Permission (moved from DefaultAppsTab) ---
-        // Notification listener access can only be granted via the system Settings screen (no
-        // in-app permission dialog exists for it), so the check has to re-run when this screen
-        // resumes — the old `remember { ... }` with no key ran isPermissionGranted() exactly once
-        // on first composition and never again, meaning the switch stayed stuck at whatever it read
-        // that first time (usually "off") no matter what the user did in Settings afterward, and
-        // tapping it just kept reopening Settings instead of ever reflecting the real state.
-        var permissionGranted by remember { mutableStateOf(MediaSessionListenerService.isPermissionGranted(context)) }
-        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-            permissionGranted = MediaSessionListenerService.isPermissionGranted(context)
-        }
+        SettingsSectionCard(languageManager.getString("app_control_section")) {
+            // Notification listener access can only be granted via the system Settings screen (no
+            // in-app permission dialog exists for it), so the check has to re-run when this screen
+            // resumes — the old `remember { ... }` with no key ran isPermissionGranted() exactly once
+            // on first composition and never again, meaning the switch stayed stuck at whatever it read
+            // that first time (usually "off") no matter what the user did in Settings afterward, and
+            // tapping it just kept reopening Settings instead of ever reflecting the real state.
+            var permissionGranted by remember { mutableStateOf(MediaSessionListenerService.isPermissionGranted(context)) }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                permissionGranted = MediaSessionListenerService.isPermissionGranted(context)
+            }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = languageManager.getString("media_session_permission") ?: "Media session control",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = languageManager.getString("media_session_permission_desc") ?: "Allow VoxCommander to control media playback",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = languageManager.getString("media_session_permission") ?: "Media session control",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = languageManager.getString("media_session_permission_desc") ?: "Allow VoxCommander to control media playback",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = permissionGranted,
+                    onCheckedChange = {
+                        // Android has no API for an app to revoke its own notification listener
+                        // access — only Settings can do that — so once granted there's nothing useful
+                        // an in-app tap can do. Only navigate to Settings for the "not yet granted"
+                        // direction; tapping an already-granted switch previously reopened Settings
+                        // every time regardless, which just looked like the switch was stuck/broken.
+                        if (!permissionGranted) MediaSessionListenerService.requestPermission(context)
+                    }
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = permissionGranted,
-                onCheckedChange = {
-                    // Android has no API for an app to revoke its own notification listener
-                    // access — only Settings can do that — so once granted there's nothing useful
-                    // an in-app tap can do. Only navigate to Settings for the "not yet granted"
-                    // direction; tapping an already-granted switch previously reopened Settings
-                    // every time regardless, which just looked like the switch was stuck/broken.
-                    if (!permissionGranted) MediaSessionListenerService.requestPermission(context)
-                }
-            )
-        }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        }
 
         // --- SECTION 4: Return to previous app after action ---
-        var returnApps by remember { mutableStateOf(settingsRepo.getReturnAfterActionAppsSync()) }
+        SettingsSectionCard(languageManager.getString("return_after_action_section")) {
+            var returnApps by remember { mutableStateOf(settingsRepo.getReturnAfterActionAppsSync()) }
+            Text(
+                text = "Select apps that should automatically return you to the previous app after executing a command.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            AppSelectorDropdown(
+                selectedPackages = returnApps,
+                defaultPackage = null,
+                onApply = { updated ->
+                    returnApps = updated
+                    scope.launch { settingsRepo.setReturnAfterActionApps(updated) }
+                },
+                onApplyDefault = {},
+                label = "Apps (${returnApps.size} selected)"
 
-        Text(
-            text = "Return to previous app after action",
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = "Select apps that should automatically return you to the previous app after executing a command.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
-        AppSelectorDropdown(
-            selectedPackages = returnApps,
-            defaultPackage = null,
-            onApply = { updated ->
-                returnApps = updated
-                scope.launch { settingsRepo.setReturnAfterActionApps(updated) }
-            },
-            onApplyDefault = {},
-            label = "Apps (${returnApps.size} selected)"
+            )
 
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        }
 
         // --- SECTION 5: External Voice Trigger (MacroDroid, Tasker, etc.) ---
-        var externalTriggerEnabled by remember { mutableStateOf(settingsRepo.getExternalTriggerEnabledSync()) }
+        SettingsSectionCard(languageManager.getString("external_trigger_section")) {
+            var externalTriggerEnabled by remember { mutableStateOf(settingsRepo.getExternalTriggerEnabledSync()) }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "External voice trigger",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "Allow automation apps (MacroDroid, Tasker) to trigger voice assistant via broadcast intent: com.voxapps.commander.TRIGGER_VOICE",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "External voice trigger",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Allow automation apps (MacroDroid, Tasker) to trigger voice assistant via broadcast intent: com.voxapps.commander.TRIGGER_VOICE",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = externalTriggerEnabled,
+                    onCheckedChange = {
+                        externalTriggerEnabled = it
+                        scope.launch { settingsRepo.setExternalTriggerEnabled(it) }
+                    }
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = externalTriggerEnabled,
-                onCheckedChange = {
-                    externalTriggerEnabled = it
-                    scope.launch { settingsRepo.setExternalTriggerEnabled(it) }
-                }
-            )
         }
     }
 }

@@ -513,5 +513,6 @@
   "zone_money": "Geld und Formate",
   "zone_browsing": "Ansicht und Widgets",
   "zone_places": "Orte",
-  "zone_danger": "Gefahrenbereich"
+  "zone_danger": "Gefahrenbereich",
+  "logging_section": "Protokollierung"
 }

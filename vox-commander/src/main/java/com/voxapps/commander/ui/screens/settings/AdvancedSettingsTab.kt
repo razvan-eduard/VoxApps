@@ -4,7 +4,8 @@ import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -32,6 +33,10 @@ import com.voxapps.logging.ui.LogViewerStrings
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import com.voxapps.design.settings.SettingsSectionCard
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.PicklistCompactAnchor
+import com.voxapps.commander.data.remote.RemoteModelRegistry
 
 @Composable
 fun AdvancedSettingsTab(
@@ -79,113 +84,99 @@ fun AdvancedSettingsTab(
         appStateManager.refreshNativeLibsStatus()
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // --- BENCHMARK SECTION ---
-        item {
-            Card(
+        SettingsSectionCard(languageManager.getString("download_preference")) {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = languageManager.getString("global_engine_benchmark"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(text = languageManager.getString("benchmark_description"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { scope.launch { benchmarkEngine.runFullBenchmark() } },
-                        enabled = !isRunning,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isRunning) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(languageManager.getString("running_all_tests"))
-                        } else {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(languageManager.getString("start_benchmark"))
-                        }
-                    }
-                }
+                Text(languageManager.getString("download_preference_wifi_only"), style = MaterialTheme.typography.bodyMedium)
+                RadioButton(
+                    selected = uiState.downloadPreference == "wifi_only",
+                    onClick = { appStateManager.setDownloadPreference("wifi_only") }
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(languageManager.getString("download_preference_wifi_and_metered"), style = MaterialTheme.typography.bodyMedium)
+                RadioButton(
+                    selected = uiState.downloadPreference == "wifi_and_metered",
+                    onClick = { appStateManager.setDownloadPreference("wifi_and_metered") }
+                )
             }
         }
 
-        if (benchmarkResults.isNotEmpty()) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = languageManager.getString("performance_metrics"), style = MaterialTheme.typography.titleSmall)
-                    IconButton(onClick = {
-                        val report = buildBenchmarkReport(benchmarkResults, systemInfo)
-                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Vox Commander Benchmark Report")
-                            putExtra(android.content.Intent.EXTRA_TEXT, report)
-                        }
-                        context.startActivity(android.content.Intent.createChooser(shareIntent, "Share Benchmark Report"))
-                    }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
-                    }
-                }
+        // The timeout, what is in force, and the button that clears it, together — the button used
+        // to sit two sections away from the thing it clears.
+        SettingsSectionCard(languageManager.getString("offline_fallback_section")) {
+            val offlineFallbackTimeout = settings.offlineFallbackTimeout
+            val timeoutOptions = listOf(
+                5 to "5 s", 10 to "10 s", 20 to "20 s", 35 to "35 s", 50 to "50 s",
+                60 to "1 min", 300 to "5 min", 600 to "10 min"
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = languageManager.getString("timeout_label"), style = MaterialTheme.typography.labelLarge)
+                Picklist(
+                    items = timeoutOptions,
+                    // A stored value the option list does not offer still has to name itself — it
+                    // can come from a backup written when the list was different.
+                    selected = timeoutOptions.find { it.first == offlineFallbackTimeout }
+                        ?: (offlineFallbackTimeout to "${offlineFallbackTimeout} s"),
+                    itemLabel = { it.second },
+                    onSelect = { (seconds, _) -> appStateManager.setOfflineFallbackTimeout(seconds) },
+                    anchor = { label, onClick -> PicklistCompactAnchor(label, onClick) },
+                    menuFillsWidth = false
+                )
             }
-            items(benchmarkResults) { result -> BenchmarkResultItem(result) }
+
+            if (uiState.defaultVoiceFallbackProcessor != null && uiState.defaultVoiceFallbackModel != null) {
+                val allVoiceModels = RemoteModelRegistry.getEngineKeysByType("voice")
+                    .flatMap { uiState.availableModels[it] ?: emptyList() }
+                val voiceModelLabel = allVoiceModels.find { it.id == uiState.defaultVoiceFallbackModel }?.label
+                    ?: uiState.defaultVoiceFallbackModel
+                Text(
+                    text = "Voice: ${uiState.defaultVoiceFallbackProcessor} ($voiceModelLabel)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+
+            if (uiState.defaultIntentFallbackProcessor != null && uiState.defaultIntentFallbackModel != null) {
+                val allIntentModels = RemoteModelRegistry.getEngineKeysByType("intent")
+                    .flatMap { uiState.availableModels[it] ?: emptyList() }
+                val intentModelLabel = allIntentModels.find { it.id == uiState.defaultIntentFallbackModel }?.label
+                    ?: uiState.defaultIntentFallbackModel
+                Text(
+                    text = "Intent: ${uiState.defaultIntentFallbackProcessor} ($intentModelLabel)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+
+            Button(
+                onClick = onClearDefaultFallback,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                Text(languageManager.getString("clear_default_fallback"))
+            }
         }
 
-        // --- DOWNLOAD PREFERENCE ---
-        item {
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = languageManager.getString("download_preference"), style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(languageManager.getString("download_preference_wifi_only"), style = MaterialTheme.typography.bodyMedium)
-                        RadioButton(
-                            selected = uiState.downloadPreference == "wifi_only",
-                            onClick = { appStateManager.setDownloadPreference("wifi_only") }
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(languageManager.getString("download_preference_wifi_and_metered"), style = MaterialTheme.typography.bodyMedium)
-                        RadioButton(
-                            selected = uiState.downloadPreference == "wifi_and_metered",
-                            onClick = { appStateManager.setDownloadPreference("wifi_and_metered") }
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // --- EXPERIMENTAL FEATURES ---
-        item {
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = languageManager.getString("engine_model_management"), style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SettingsSectionCard(languageManager.getString("engine_model_management")) {
                     // --- Cloud AI engines ---
                     // Restricts engines the schema declares `runtime: "cloud"` — no engine names
                     // are hardcoded here or anywhere the gate is applied.
@@ -220,8 +211,6 @@ fun AdvancedSettingsTab(
                             onCheckedChange = { appStateManager.setGoogleServicesEnabled(it) }
                         )
                     }
-
-                    HorizontalDivider()
 
                     // --- Whisper Engine (DLC) ---
 
@@ -282,8 +271,6 @@ fun AdvancedSettingsTab(
                         )
                     }
 
-                    HorizontalDivider()
-
                     // --- GPU acceleration (Experimental), one switch per engine ---
                     // The switch IS the consent gesture: enabling arms the one-shot isolated
                     // probe, an incompatible verdict greys it out, and "Test again" forgets
@@ -300,8 +287,6 @@ fun AdvancedSettingsTab(
                         appStateManager = appStateManager
                     )
 
-                    HorizontalDivider()
-
                     GpuAccelerationRow(
                         title = languageManager.getString("gpu_llama_title"),
                         engine = com.voxapps.commander.data.preferences.SettingsRepository.GPU_LLAMA,
@@ -314,139 +299,49 @@ fun AdvancedSettingsTab(
                         appStateManager = appStateManager
                     )
 
-                    HorizontalDivider()
-
                     Button(onClick = onCleanupRequest, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
                         Text(languageManager.getString("delete_unused_models"))
                     }
-                }
-            }
         }
 
-        // --- SYSTEM MAINTENANCE ---
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = languageManager.getString("system_maintenance"), style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f))) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onClearDefaultFallback, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) {
-                        Text(languageManager.getString("clear_default_fallback"))
-                    }
-                    Text(text = languageManager.getString("maintenance_warning"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SettingsSectionCard(languageManager.getString("system_maintenance")) {
+            Text(text = languageManager.getString("maintenance_warning"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                    // Resetting the settings lived in a second card under its own heading, and that
-                    // heading read "System maintenance" — the same words as this one, one line
-                    // apart, so the screen appeared to have the section twice. All three are
-                    // destructive maintenance actions, so they belong in the one card.
-                    //
-                    // No "reset schemas" here: turning off *Use schemas from the repository* in
-                    // General is that reset, and one way to undo something is enough.
-                    OutlinedButton(
-                        onClick = { showResetSettings = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text(languageManager.getString("reset_settings_button"))
-                    }
-                    Text(
-                        text = languageManager.getString("reset_settings_description"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = languageManager.getString("tutorial_section"), style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(12.dp))
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = {
-                            appStateManager.setTutorialCompleted(false)
-                            appStateManager.setFirstLaunchCompleted(false)
-                            restartApp(context)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(languageManager.getString("replay_tutorial"))
-                    }
-                    Text(
-                        text = languageManager.getString("tutorial_description"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        // --- LOGGING SECTION (same two-switch + viewer shape as every other app's Logs tab) ---
-        // Deliberately the page's last section: the viewer below it grows without bound while
-        // logging is on, and anything placed after it would sit below an ever-longer scroll.
-        item {
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
+            // No "reset schemas" here: turning off *Use schemas from the repository* in General is
+            // that reset, and one way to undo something is enough.
+            OutlinedButton(
+                onClick = { showResetSettings = true },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        languageManager.getString("debug_logging_desc"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = settings.debugLoggingEnabled,
-                    onCheckedChange = { appStateManager.setDebugLoggingEnabled(it) }
-                )
+                Text(languageManager.getString("reset_settings_button"))
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Dependent on debug logging being on — same as every other app's Logs tab, and
-            // matches the fact that a toast is just an alternate rendering of the same log event.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    languageManager.getString("debug_toasts_label"),
-                    color = if (settings.debugLoggingEnabled) LocalContentColor.current else Color.Gray
-                )
-                Switch(
-                    checked = settings.debugToastsEnabled,
-                    enabled = settings.debugLoggingEnabled,
-                    onCheckedChange = { appStateManager.setDebugToastsEnabled(it) }
-                )
-            }
+            Text(
+                text = languageManager.getString("reset_settings_description"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
-        // --- VERBOSE LOGS SECTION (shared viewer, same as every other app's Logs tab) ---
-        if (settings.debugLoggingEnabled) {
-            item {
-                LogViewerCard(
-                    logs = logs,
-                    strings = LogViewerStrings(
-                        sectionTitle = languageManager.getString("verbose_logging_section"),
-                        clearLabel = languageManager.getString("clear_logs"),
-                        copyLabel = languageManager.getString("copy_button"),
-                        shareLabel = languageManager.getString("share_button"),
-                        noLogsLabel = languageManager.getString("no_logs")
-                    ),
-                    shareSubject = "VoxCommander Logs"
-                )
+        SettingsSectionCard(languageManager.getString("tutorial_section")) {
+            Button(
+                onClick = {
+                    appStateManager.setTutorialCompleted(false)
+                    appStateManager.setFirstLaunchCompleted(false)
+                    restartApp(context)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(languageManager.getString("replay_tutorial"))
             }
+            Text(
+                text = languageManager.getString("tutorial_description"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-
     }
+
 
     // --- GPU NO-BACKEND DIALOG ---
     // The probe ran and found nothing to test: no GPU backend in the build, or no usable device.

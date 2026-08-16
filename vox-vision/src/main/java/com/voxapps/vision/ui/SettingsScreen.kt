@@ -2,6 +2,7 @@ package com.voxapps.vision.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +16,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -38,12 +38,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.settings.LogsSettingsTab
+import com.voxapps.design.settings.LogsTabStrings
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
 import com.voxapps.design.toEnumOr
 import com.voxapps.logging.Logger
-import com.voxapps.logging.ui.LogViewerCard
 import com.voxapps.logging.ui.LogViewerStrings
 import com.voxapps.vision.di.VisionContainer
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
@@ -81,7 +83,6 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
     )
     val debugLoggingEnabled by container.settingsRepository.debugLoggingEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
     val debugToastsEnabled by container.settingsRepository.debugToastsEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
-    val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val sendPhotoToAi by container.settingsRepository.sendPhotoToAiFlow.collectAsStateWithLifecycle(initialValue = false)
     val photoDetailForAi by container.settingsRepository.photoDetailForAiFlow.collectAsStateWithLifecycle(
         initialValue = VisionSettingsRepository.DEFAULT_PHOTO_DETAIL
@@ -159,68 +160,33 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
         }
 
         if (page == SettingsPage.LOGS) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            languageManager.getString("debug_logging_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = debugLoggingEnabled,
-                        onCheckedChange = {
-                            Logger.setEnabled(it)
-                            scope.launch { container.settingsRepository.setDebugLoggingEnabled(it) }
-                        }
+            LogsSettingsTab(
+                enabled = debugLoggingEnabled,
+                onEnabledChange = {
+                    Logger.setEnabled(it)
+                    scope.launch { container.settingsRepository.setDebugLoggingEnabled(it) }
+                },
+                toastsEnabled = debugToastsEnabled,
+                onToastsEnabledChange = {
+                    Logger.setToastsEnabled(it)
+                    scope.launch { container.settingsRepository.setDebugToastsEnabled(it) }
+                },
+                strings = LogsTabStrings(
+                    sectionLabel = languageManager.getString("logging_section"),
+                    enabledLabel = languageManager.getString("debug_logging"),
+                    enabledDesc = languageManager.getString("debug_logging_desc"),
+                    toastsLabel = languageManager.getString("debug_toasts_label"),
+                    viewer = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
                     )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        languageManager.getString("debug_toasts_label"),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Switch(
-                        checked = debugToastsEnabled,
-                        enabled = debugLoggingEnabled,
-                        onCheckedChange = {
-                            Logger.setToastsEnabled(it)
-                            scope.launch { container.settingsRepository.setDebugToastsEnabled(it) }
-                        }
-                    )
-                }
-
-                if (debugLoggingEnabled) {
-                    LogViewerCard(
-                        logs = logs,
-                        strings = LogViewerStrings(
-                            sectionTitle = languageManager.getString("verbose_logging_section"),
-                            clearLabel = languageManager.getString("clear_logs"),
-                            copyLabel = languageManager.getString("copy_button"),
-                            shareLabel = languageManager.getString("share_button"),
-                            noLogsLabel = languageManager.getString("no_logs")
-                        ),
-                        shareSubject = "VoxVision Logs",
-                        modifier = Modifier.padding(top = 16.dp)
-                    )
-                }
-            }
+                ),
+                shareSubject = "VoxVision Logs",
+                modifier = Modifier.fillMaxSize().padding(padding)
+            )
             return@Scaffold
         }
 
@@ -229,155 +195,144 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(languageManager.getString("ocr_language_zone"), style = MaterialTheme.typography.titleMedium)
-            zones.forEach { zone ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
-                            selected = zone == activeZone,
-                            onClick = {
-                                if (zone == activeZone || switching != null) return@selectable
-                                switching = zone
-                                scope.launch {
-                                    try {
-                                        container.switchZone(zone)
-                                    } finally {
-                                        switching = null
+            SettingsSectionCard(languageManager.getString("ocr_language_zone")) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    zones.forEach { zone ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = zone == activeZone,
+                                    onClick = {
+                                        if (zone == activeZone || switching != null) return@selectable
+                                        switching = zone
+                                        scope.launch {
+                                            try {
+                                                container.switchZone(zone)
+                                            } finally {
+                                                switching = null
+                                            }
+                                        }
                                     }
-                                }
-                            }
-                        )
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = zone == activeZone, onClick = null)
-                    Text(zoneDisplayName(languageManager, zone), modifier = Modifier.padding(start = 8.dp))
-                }
-            }
-
-            Text(
-                languageManager.getString("auto_trigger_sensitivity"),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 24.dp)
-            )
-            SENSITIVITY_LEVELS.forEach { level ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
-                            selected = level == activeSensitivity,
-                            onClick = { scope.launch { container.settingsRepository.setAutoTriggerSensitivity(level) } }
-                        )
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = level == activeSensitivity, onClick = null)
-                    Text(languageManager.getString("sensitivity_$level"), modifier = Modifier.padding(start = 8.dp))
-                }
-            }
-
-            Text(
-                languageManager.getString("auto_capture_delay"),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 24.dp)
-            )
-            Text(
-                languageManager.getString("auto_capture_delay_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            AUTO_CAPTURE_DELAYS.forEach { delay ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
-                            selected = delay == activeAutoCaptureDelay,
-                            onClick = { scope.launch { container.settingsRepository.setAutoCaptureDelaySeconds(delay) } }
-                        )
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = delay == activeAutoCaptureDelay, onClick = null)
-                    Text(
-                        languageManager.getString(
-                            if (delay == VisionSettingsRepository.AUTO_CAPTURE_MANUAL) "auto_capture_manual" else "auto_capture_${delay}s"
-                        ),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(languageManager.getString("send_photo_to_ai"), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        languageManager.getString("send_photo_to_ai_desc"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = sendPhotoToAi,
-                    onCheckedChange = { scope.launch { container.settingsRepository.setSendPhotoToAi(it) } }
-                )
-            }
-
-            if (sendPhotoToAi) {
-                Text(
-                    languageManager.getString("photo_detail_for_ai"),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
-                PHOTO_DETAIL_LEVELS.forEach { level ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = level == photoDetailForAi,
-                                onClick = { scope.launch { container.settingsRepository.setPhotoDetailForAi(level) } }
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = level == photoDetailForAi, onClick = null)
-                        Text(languageManager.getString("photo_detail_$level"), modifier = Modifier.padding(start = 8.dp))
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = zone == activeZone, onClick = null)
+                            Text(zoneDisplayName(languageManager, zone), modifier = Modifier.padding(start = 8.dp))
+                        }
                     }
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(top = 24.dp))
+            SettingsSectionCard(languageManager.getString("auto_trigger_sensitivity")) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SENSITIVITY_LEVELS.forEach { level ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = level == activeSensitivity,
+                                    onClick = { scope.launch { container.settingsRepository.setAutoTriggerSensitivity(level) } }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = level == activeSensitivity, onClick = null)
+                            Text(languageManager.getString("sensitivity_$level"), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            }
 
-            Text(
-                languageManager.getString("stitch_continuity_strictness"),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 16.dp)
-            )
-            Text(
-                languageManager.getString("stitch_continuity_strictness_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            STITCH_STRICTNESS_LEVELS.forEach { level ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
-                            selected = level == stitchStrictness,
-                            onClick = { scope.launch { container.settingsRepository.setStitchContinuityStrictness(level) } }
-                        )
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = level == stitchStrictness, onClick = null)
-                    Text(languageManager.getString("stitch_strictness_$level"), modifier = Modifier.padding(start = 8.dp))
+            SettingsSectionCard(languageManager.getString("auto_capture_delay")) {
+                Text(
+                    languageManager.getString("auto_capture_delay_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AUTO_CAPTURE_DELAYS.forEach { delay ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = delay == activeAutoCaptureDelay,
+                                    onClick = { scope.launch { container.settingsRepository.setAutoCaptureDelaySeconds(delay) } }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = delay == activeAutoCaptureDelay, onClick = null)
+                            Text(
+                                languageManager.getString(
+                                    if (delay == VisionSettingsRepository.AUTO_CAPTURE_MANUAL) "auto_capture_manual" else "auto_capture_${delay}s"
+                                ),
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            SettingsSectionCard(languageManager.getString("send_photo_to_ai")) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        languageManager.getString("send_photo_to_ai_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = sendPhotoToAi,
+                        onCheckedChange = { scope.launch { container.settingsRepository.setSendPhotoToAi(it) } }
+                    )
+                }
+
+                // Detail level only exists to configure the switch above, so it stays in the same
+                // card rather than becoming a section that vanishes whenever the switch is off.
+                if (sendPhotoToAi) {
+                    Text(languageManager.getString("photo_detail_for_ai"), style = MaterialTheme.typography.labelLarge)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        PHOTO_DETAIL_LEVELS.forEach { level ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = level == photoDetailForAi,
+                                        onClick = { scope.launch { container.settingsRepository.setPhotoDetailForAi(level) } }
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = level == photoDetailForAi, onClick = null)
+                                Text(languageManager.getString("photo_detail_$level"), modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsSectionCard(languageManager.getString("stitch_continuity_strictness")) {
+                Text(
+                    languageManager.getString("stitch_continuity_strictness_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    STITCH_STRICTNESS_LEVELS.forEach { level ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = level == stitchStrictness,
+                                    onClick = { scope.launch { container.settingsRepository.setStitchContinuityStrictness(level) } }
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = level == stitchStrictness, onClick = null)
+                            Text(languageManager.getString("stitch_strictness_$level"), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
                 }
             }
         }

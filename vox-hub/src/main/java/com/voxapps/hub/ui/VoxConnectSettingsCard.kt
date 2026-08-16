@@ -52,6 +52,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.camera.view.PreviewView
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.hub.data.preferences.HubSettings
 import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.ipc.VoxAppInfo
@@ -168,146 +169,153 @@ fun VoxConnectSettingsCard(
     }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("voxconnect_enable_label"), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    languageManager.getString("voxconnect_enable_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.voxConnectEnabled,
-                onCheckedChange = { checked ->
-                    scope.launch { settingsRepo.setVoxConnectEnabled(checked) }
-                    if (checked) requestNotificationPermissionIfNeeded()
-                }
-            )
-        }
-
-        if (settings.voxConnectEnabled) {
-            Text(
-                String.format(languageManager.getString("voxconnect_port_label"), settings.voxConnectPort),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (!batteryExempted) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        languageManager.getString("voxconnect_battery_warning"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Button(onClick = {
-                        val intent = Intent(
-                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:${context.packageName}")
-                        )
-                        batteryOptimizationLauncher.launch(intent)
-                    }) {
-                        Text(languageManager.getString("voxconnect_battery_allow_button"))
-                    }
-                }
-            }
-
-            Button(onClick = { requestPairing() }) {
-                Text(languageManager.getString("voxconnect_pair_new_device"))
-            }
-
-            pairingError?.let { error ->
-                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-
-            if (pairedDevices.isNotEmpty()) {
-                Text(languageManager.getString("voxconnect_paired_devices_title"), style = MaterialTheme.typography.bodyMedium)
-                val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
-                pairedDevices.forEach { device ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(device.label, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                dateFormat.format(device.pairedAt),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(onClick = { pendingRenameDevice = device }) {
-                            Icon(Icons.Filled.Edit, contentDescription = languageManager.getString("voxconnect_rename_device"))
-                        }
-                        IconButton(onClick = { pendingDeleteDevice = device }) {
-                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("voxconnect_revoke_device"))
-                        }
-                    }
-                }
-            }
-
+        SettingsSectionCard(languageManager.getString("voxconnect_bridge_section")) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(languageManager.getString("voxconnect_media_control_label"), style = MaterialTheme.typography.bodyMedium)
+                    Text(languageManager.getString("voxconnect_enable_label"), style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        languageManager.getString("voxconnect_media_control_desc"),
+                        languageManager.getString("voxconnect_enable_desc"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Switch(
-                    checked = settings.voxConnectMediaControlEnabled,
-                    onCheckedChange = { scope.launch { settingsRepo.setVoxConnectMediaControlEnabled(it) } }
+                    checked = settings.voxConnectEnabled,
+                    onCheckedChange = { checked ->
+                        scope.launch { settingsRepo.setVoxConnectEnabled(checked) }
+                        if (checked) requestNotificationPermissionIfNeeded()
+                    }
                 )
             }
 
-            if (settings.voxConnectMediaControlEnabled && !mediaListenerGranted) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        languageManager.getString("voxconnect_media_permission_warning"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Button(onClick = {
-                        context.startActivity(
-                            Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (settings.voxConnectEnabled) {
+                Text(
+                    String.format(languageManager.getString("voxconnect_port_label"), settings.voxConnectPort),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (!batteryExempted) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            languageManager.getString("voxconnect_battery_warning"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
                         )
-                    }) {
-                        Text(languageManager.getString("voxconnect_media_permission_allow_button"))
+                        Button(onClick = {
+                            val intent = Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            batteryOptimizationLauncher.launch(intent)
+                        }) {
+                            Text(languageManager.getString("voxconnect_battery_allow_button"))
+                        }
                     }
                 }
-            }
 
-            if (apps.isEmpty()) {
-                Text(languageManager.getString("hub_no_apps_found"))
-            } else {
-                Text(languageManager.getString("voxconnect_monitored_apps_title"), style = MaterialTheme.typography.bodyMedium)
-                LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                    items(apps, key = { it.packageName }) { app ->
-                        val domain = app.domain
-                        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(app.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                                Switch(
-                                    checked = domain != null && settings.voxConnectMonitoredApps[domain] == true,
-                                    enabled = domain != null,
-                                    onCheckedChange = { checked ->
-                                        if (domain != null) {
-                                            scope.launch { settingsRepo.setVoxConnectMonitoredApp(domain, checked) }
-                                        }
-                                    }
+            }
+        }
+
+        if (settings.voxConnectEnabled) {
+            SettingsSectionCard(languageManager.getString("voxconnect_paired_devices_title")) {
+                Button(onClick = { requestPairing() }) {
+                    Text(languageManager.getString("voxconnect_pair_new_device"))
+                }
+
+                pairingError?.let { error ->
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+
+                if (pairedDevices.isNotEmpty()) {
+                    val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+                    pairedDevices.forEach { device ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(device.label, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    dateFormat.format(device.pairedAt),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                            IconButton(onClick = { pendingRenameDevice = device }) {
+                                Icon(Icons.Filled.Edit, contentDescription = languageManager.getString("voxconnect_rename_device"))
+                            }
+                            IconButton(onClick = { pendingDeleteDevice = device }) {
+                                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("voxconnect_revoke_device"))
+                            }
+                        }
+                    }
+                }
+
+                }
+
+                SettingsSectionCard(languageManager.getString("voxconnect_media_control_label")) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            languageManager.getString("voxconnect_media_control_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = settings.voxConnectMediaControlEnabled,
+                            onCheckedChange = { scope.launch { settingsRepo.setVoxConnectMediaControlEnabled(it) } }
+                        )
+                    }
+
+                    if (settings.voxConnectMediaControlEnabled && !mediaListenerGranted) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                languageManager.getString("voxconnect_media_permission_warning"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Button(onClick = {
+                                context.startActivity(
+                                    Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            }) {
+                                Text(languageManager.getString("voxconnect_media_permission_allow_button"))
+                            }
+                        }
+                    }
+
+                }
+
+                SettingsSectionCard(languageManager.getString("voxconnect_monitored_apps_title")) {
+                    if (apps.isEmpty()) {
+                        Text(languageManager.getString("hub_no_apps_found"))
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            apps.forEach { app ->
+                                val domain = app.domain
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(app.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                    Switch(
+                                        checked = domain != null && settings.voxConnectMonitoredApps[domain] == true,
+                                        enabled = domain != null,
+                                        onCheckedChange = { checked ->
+                                            if (domain != null) {
+                                                scope.launch { settingsRepo.setVoxConnectMonitoredApp(domain, checked) }
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
 
     pendingRenameDevice?.let { device ->
         RenameDeviceDialog(
