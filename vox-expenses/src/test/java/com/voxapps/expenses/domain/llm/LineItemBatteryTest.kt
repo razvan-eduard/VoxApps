@@ -232,6 +232,34 @@ class LineItemBatteryTest {
         assertNull(LineItemBattery.read("Ceva 1 5.00 5.00", LineItemBattery.Targets(invoiceTotal = 5.00)))
     }
 
+    /**
+     * The plain reading-order text of a real no-flash scan, copied from the device. Each printed row
+     * arrives on its own line with the unit, quantity and amounts in reading order — the shape the
+     * strict pattern is for, and the reason the plain text is offered to the battery alongside the
+     * column reconstruction.
+     */
+    @Test
+    fun `the plain text of a real scan reads row by row`() {
+        val scanned = """
+            Tarif pentru colectarea separata si transportul separat al
+            deseurilor de hartie,metal,plastic si sticla din deseurile pers 2 2.35 4.70 0.99
+            municipale-Tcs reciclabile Iun. 2026 Strada SAT PLEASA, Nr.
+            Tarif pentru colectarea separata si transportul separat al pers 2 1.62 3.24 0.68
+            biodeseurilor din deseuri municipale-Tcs biodeseuri Iun. 2026
+        """.trimIndent()
+
+        val reading = LineItemBattery.read(
+            scanned,
+            LineItemBattery.Targets(invoiceTotal = null, labelledOther = listOf(18.36, 3.85, 7.94))
+        )!!
+
+        // 4.70 + 3.24 = 7.94, and the VAT column would have summed to 1.67 — the rows won.
+        assertEquals(2, reading.rows.size)
+        assertEquals(7.94, reading.matchedTarget, 0.001)
+        assertEquals(2.35, reading.rows[0].unitPrice, 0.001)
+        assertEquals(2.0, reading.rows[0].quantity, 0.001)
+    }
+
     @Test
     fun `the built-in patterns run strictest first`() {
         assertEquals("numeric-tail", LineItemBattery.BUILT_IN.first().id)
