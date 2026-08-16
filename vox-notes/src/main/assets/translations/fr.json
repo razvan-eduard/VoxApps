@@ -196,5 +196,9 @@
   "backup_import_mode_additive": "Additif",
   "backup_import_mode_caveat_merge": "Le plus sûr : restaure le fichier et ne supprime que les enregistrements existant à l'export — tout ce qui a été créé ensuite est conservé.",
   "backup_import_mode_caveat_full_override": "SUPPRIME tout — y compris les enregistrements créés APRÈS la sauvegarde — puis ne restaure que le contenu du fichier.",
-  "backup_import_mode_caveat_additive": "Ne supprime jamais rien — restaurer à nouveau le même fichier DUPLIQUE ses enregistrements."
+  "backup_import_mode_caveat_additive": "Ne supprime jamais rien — restaurer à nouveau le même fichier DUPLIQUE ses enregistrements.",
+  "logging_section": "Journalisation",
+  "zone_security": "Sécurité",
+  "zone_notes": "Notes",
+  "zone_capture": "Numérisation"
 }

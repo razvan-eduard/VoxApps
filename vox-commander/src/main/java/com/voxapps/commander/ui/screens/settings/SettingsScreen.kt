@@ -15,11 +15,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +36,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.data.remote.RemoteModelRegistry
+import com.voxapps.logging.ui.LogViewerStrings
+import com.voxapps.design.settings.LogsSettingsTab
+import com.voxapps.design.settings.LogsTabStrings
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.WakeWordService
@@ -41,7 +48,18 @@ import com.voxapps.commander.ui.screens.main.ListeningScreen
 import com.voxapps.commander.utils.Strings
 
 private enum class SettingsPage {
-    MENU, GENERAL, MODELS, SERVICE, APP_MANAGER, INTEGRATIONS, PERMISSIONS, ADVANCED, BACKUP
+    MENU, GENERAL, MODELS, SERVICE, APP_MANAGER,
+    INTEGRATIONS, INTEGRATIONS_APPS, INTEGRATIONS_MEDIA, INTEGRATIONS_SEARCH,
+    PERMISSIONS, ADVANCED, LOGS, DIAGNOSTICS, BACKUP
+}
+
+/** Where the back arrow goes from a given page: the integrations subpages return to their own
+ *  submenu, everything else to the main menu. */
+private fun backTarget(page: SettingsPage): SettingsPage = when (page) {
+    SettingsPage.INTEGRATIONS_APPS,
+    SettingsPage.INTEGRATIONS_MEDIA,
+    SettingsPage.INTEGRATIONS_SEARCH -> SettingsPage.INTEGRATIONS
+    else -> SettingsPage.MENU
 }
 
 @Composable
@@ -74,7 +92,7 @@ fun SettingsContent(
     var page by remember { mutableStateOf(SettingsPage.MENU) }
     // The subpage back arrow and the system back do the same thing; on the menu itself the
     // system back keeps meaning "leave settings", which the caller already handles.
-    BackHandler(enabled = page != SettingsPage.MENU) { page = SettingsPage.MENU }
+    BackHandler(enabled = page != SettingsPage.MENU) { page = backTarget(page) }
 
     val isVoskLoading by modelManagementViewModel.isVoskLoading.collectAsStateWithLifecycle()
     val isVoskOffline by modelManagementViewModel.isVoskOffline.collectAsStateWithLifecycle()
@@ -189,8 +207,13 @@ fun SettingsContent(
         SettingsPage.SERVICE -> languageManager.getString("tab_service")
         SettingsPage.APP_MANAGER -> languageManager.getString("tab_app_manager")
         SettingsPage.INTEGRATIONS -> languageManager.getString("tab_integrations")
+        SettingsPage.INTEGRATIONS_APPS -> languageManager.getString("integrations_apps_title")
+        SettingsPage.INTEGRATIONS_MEDIA -> languageManager.getString("media_services_section")
+        SettingsPage.INTEGRATIONS_SEARCH -> languageManager.getString("search_section")
         SettingsPage.PERMISSIONS -> languageManager.getString("tab_permissions")
         SettingsPage.ADVANCED -> languageManager.getString("tab_advanced")
+        SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
+        SettingsPage.DIAGNOSTICS -> languageManager.getString("tab_diagnostics")
         SettingsPage.BACKUP -> languageManager.getString("tab_backup")
     }
 
@@ -204,7 +227,7 @@ fun SettingsContent(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (page != SettingsPage.MENU) {
-                            IconButton(onClick = { page = SettingsPage.MENU }) {
+                            IconButton(onClick = { page = backTarget(page) }) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = languageManager.getString("settings"))
                             }
                         }
@@ -222,8 +245,8 @@ fun SettingsContent(
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 when (page) {
-                    // Same menu shape as the other Vox apps' settings screens: full-bleed section
-                    // bands from core/design separating plain ListItem entries, one per page.
+                    // Same menu shape as the other Vox apps' settings screens: flat section
+                    // headers from core/design separating plain ListItem entries, one per page.
                     SettingsPage.MENU -> Column(
                         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     ) {
@@ -266,11 +289,21 @@ fun SettingsContent(
                             leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.ADVANCED }
                         )
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                            leadingContent = { Icon(Icons.Default.BugReport, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
+                        )
                         SettingsSectionHeader(languageManager.getString("settings_section_data"))
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_backup")) },
                             leadingContent = { Icon(Icons.Default.Backup, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
+                        )
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("tab_diagnostics")) },
+                            leadingContent = { Icon(Icons.Default.Speed, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.DIAGNOSTICS }
                         )
                     }
                     // Advanced uses a LazyColumn of its own, no scroll wrapper.
@@ -286,21 +319,69 @@ fun SettingsContent(
                             refreshTrigger = uiState.refreshTrigger
                         )
                     }
-                    // Backup & Diagnostics: the backup card rides as the diagnostics list's
-                    // header so the page has a single scroll surface.
-                    SettingsPage.BACKUP -> Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                    SettingsPage.BACKUP -> Box(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).verticalScroll(rememberScrollState())
+                    ) {
                         val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
+                        BackupSettingsSection(
+                            settingsRepo = settingsRepo,
+                            settings = settings,
+                            credentials = uiState.credentials
+                        )
+                    }
+                    // Benchmarks and the native-library inventory: what the install is made of and
+                    // how fast it runs, which is a different question from what gets backed up.
+                    SettingsPage.DIAGNOSTICS -> Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                         BenchmarkSettingsTab(
-
                             appStateManager = appStateManager,
-                            refreshTrigger = uiState.refreshTrigger,
-                            header = {
-                                BackupSettingsSection(
-                                    settingsRepo = settingsRepo,
-                                    settings = settings,
-                                    credentials = uiState.credentials
+                            refreshTrigger = uiState.refreshTrigger
+                        )
+                    }
+                    // The log viewer grows without bound, so it gets a page rather than a card at
+                    // the bottom of Advanced.
+                    SettingsPage.LOGS -> {
+                        val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = settingsRepo.getSettingsSnapshot())
+                        LogsSettingsTab(
+                            enabled = settings.debugLoggingEnabled,
+                            onEnabledChange = { appStateManager.setDebugLoggingEnabled(it) },
+                            toastsEnabled = settings.debugToastsEnabled,
+                            onToastsEnabledChange = { appStateManager.setDebugToastsEnabled(it) },
+                            strings = LogsTabStrings(
+                                sectionLabel = languageManager.getString("logging_section"),
+                                enabledLabel = languageManager.getString("debug_logging"),
+                                enabledDesc = languageManager.getString("debug_logging_desc"),
+                                toastsLabel = languageManager.getString("debug_toasts_label"),
+                                viewer = LogViewerStrings(
+                                    sectionTitle = languageManager.getString("verbose_logging_section"),
+                                    clearLabel = languageManager.getString("clear_logs"),
+                                    copyLabel = languageManager.getString("copy_button"),
+                                    shareLabel = languageManager.getString("share_button"),
+                                    noLogsLabel = languageManager.getString("no_logs")
                                 )
-                            }
+                            ),
+                            shareSubject = "VoxCommander Logs",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    // Three unrelated areas that used to be stacked on one page; a submenu instead,
+                    // so each opens as its own final screen.
+                    SettingsPage.INTEGRATIONS -> Column(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    ) {
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("integrations_apps_title")) },
+                            leadingContent = { Icon(Icons.Default.Extension, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS_APPS }
+                        )
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("media_services_section")) },
+                            leadingContent = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS_MEDIA }
+                        )
+                        ListItem(
+                            headlineContent = { Text(languageManager.getString("search_section")) },
+                            leadingContent = { Icon(Icons.Default.Search, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS_SEARCH }
                         )
                     }
                     else -> {
@@ -365,23 +446,16 @@ fun SettingsContent(
                                     settingsRepo = settingsRepo,
                                     appStateManager = appStateManager
                                 )
-                                SettingsPage.INTEGRATIONS -> {
-                                    IntegrationsTab(
-
-                                        settingsRepo = settingsRepo
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                                    PipedSettingsSection(
-
-                                        settingsRepo = settingsRepo
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                                    SearchSettingsSection(
-                                        appStateManager = appStateManager,
-
-                                        settingsRepo = settingsRepo
-                                    )
-                                }
+                                SettingsPage.INTEGRATIONS_APPS -> IntegrationsTab(
+                                    settingsRepo = settingsRepo
+                                )
+                                SettingsPage.INTEGRATIONS_MEDIA -> PipedSettingsSection(
+                                    settingsRepo = settingsRepo
+                                )
+                                SettingsPage.INTEGRATIONS_SEARCH -> SearchSettingsSection(
+                                    appStateManager = appStateManager,
+                                    settingsRepo = settingsRepo
+                                )
                                 SettingsPage.PERMISSIONS -> PermissionsSettingsTab(
 
                                     appStateManager = appStateManager,

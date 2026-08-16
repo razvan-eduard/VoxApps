@@ -301,5 +301,10 @@
   "backup_import_mode_additive": "Aditiv",
   "backup_import_mode_caveat_merge": "Cel mai sigur: restaurează fișierul și șterge doar înregistrările care existau la export — tot ce a fost creat aici după aceea rămâne.",
   "backup_import_mode_caveat_full_override": "ȘTERGE tot — inclusiv înregistrările create DUPĂ backup — apoi restaurează doar conținutul fișierului.",
-  "backup_import_mode_caveat_additive": "Nu șterge nimic — restaurarea aceluiași fișier din nou DUBLEAZĂ înregistrările."
+  "backup_import_mode_caveat_additive": "Nu șterge nimic — restaurarea aceluiași fișier din nou DUBLEAZĂ înregistrările.",
+  "logging_section": "Jurnalizare",
+  "zone_security": "Securitate",
+  "zone_capture": "Crearea intrărilor",
+  "zone_display": "Ce apare în calendar",
+  "widget_zone": "Widget pe ecranul principal"
 }

@@ -24,6 +24,7 @@ import com.voxapps.design.picklist.ConnectionTestCard
 import com.voxapps.design.picklist.ServicePicklist
 import com.voxapps.commander.ui.components.EngineModelSection
 import com.voxapps.commander.utils.Strings
+import com.voxapps.design.settings.SettingsSectionCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,21 +54,11 @@ fun IntentEnginesSubTab(
     val engineKey = uiState.aiProcessor
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // --- MASTER TOGGLE ---
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+        // --- ENGINE SELECTION ---
+        SettingsSectionCard(languageManager.getString("intent_engine_section")) {
+            run {
                 // The cloud/Google toggles live in Advanced settings → Engine & Model Management;
                 // this screen only reflects them (gated entries disable in the picker below).
-                Text(
-                    text = languageManager.getString("ai_processor_label"),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                    
-                Spacer(modifier = Modifier.height(8.dp))
 
                 // Every engine that interprets, on-device or not. The cloud services used to be
                 // appended here by hand — three lines that had to be kept in step with a label
@@ -134,90 +125,93 @@ fun IntentEnginesSubTab(
         }
 
         // --- NLU MODEL SELECTION ---
-        // Only show if the current engine is a JSON-defined LLM with actual models
-        val declaredNlu = uiState.availableModels[engineKey] ?: emptyList()
-        // The user's own gguf files, listed first and treated like any other model — same
-        // mechanism as the voice tabs, gated on the engine declaring custom_model_import.
-        // Keyed on the active selection too: importing selects the new import, so the second
-        // import in a row changes neither the declared list nor the trigger — only the selection.
-        val nluModels = remember(declaredNlu, refreshTrigger, uiState.activeIntentModelId) {
-            com.voxapps.commander.domain.engine.EngineSpecs.importedRows(settingsRepo, engineKey) + declaredNlu
-        }
-
-        if (RemoteModelRegistry.supportsCustomImport(engineKey)) {
-            OutlinedButton(
-                onClick = onImportIntentModel,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString("import_custom_model"))
-            }
-        }
-
-        if (nluModels.isNotEmpty()) {
-            val selectedModel = remember(uiState.activeIntentModelId, nluModels) {
-                nluModels.find { it.id == uiState.activeIntentModelId }
+        SettingsSectionCard(languageManager.getString("nlu_model_selection_title")) {
+            // Only show if the current engine is a JSON-defined LLM with actual models
+            val declaredNlu = uiState.availableModels[engineKey] ?: emptyList()
+            // The user's own gguf files, listed first and treated like any other model — same
+            // mechanism as the voice tabs, gated on the engine declaring custom_model_import.
+            // Keyed on the active selection too: importing selects the new import, so the second
+            // import in a row changes neither the declared list nor the trigger — only the selection.
+            val nluModels = remember(declaredNlu, refreshTrigger, uiState.activeIntentModelId) {
+                com.voxapps.commander.domain.engine.EngineSpecs.importedRows(settingsRepo, engineKey) + declaredNlu
             }
 
-            EngineModelSection(
-                title = languageManager.getString("nlu_model_selection_title"),
-                // Only a downloadable engine can be an offline fallback. Left at its default, the
-                // checkbox would also appear for a cloud engine — whose models report isBuiltIn,
-                // which this section reads as "already downloaded" and therefore selectable.
-                showFallback = RemoteModelRegistry.runtimeOf(engineKey) == EngineRuntime.LOCAL_FILE,
+            if (RemoteModelRegistry.supportsCustomImport(engineKey)) {
+                OutlinedButton(
+                    onClick = onImportIntentModel,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("import_custom_model"))
+                }
+            }
 
-                settingsRepo = settingsRepo,
-                appStateManager = appStateManager,
-                header = languageManager.getString("available_models_header"),
-                items = nluModels,
-                selectedItem = selectedModel,
-                itemLabel = {
-                    // A user's own file is told apart from a schema-declared model at a glance.
-                    val suffix = if (it is com.voxapps.commander.domain.model.ImportedModel)
-                        languageManager.getString("model_imported_suffix") else ""
-                    "${it.label}$suffix (${it.sizeDescription})"
-                },
-                modelIdProvider = { it.id },
-                onItemSelected = { model, isDownloaded ->
-                    appStateManager.setActiveIntentModelId(model.id)
-                    appStateManager.saveIntentModelSelection(engineKey, model.id)
-                },
-                onDownloadRequest = { model ->
-                    val downloadAction = {
+            if (nluModels.isNotEmpty()) {
+                val selectedModel = remember(uiState.activeIntentModelId, nluModels) {
+                    nluModels.find { it.id == uiState.activeIntentModelId }
+                }
+
+                EngineModelSection(
+                    title = languageManager.getString("nlu_model_selection_title"),
+                    showHeaderTitle = false,
+                    // Only a downloadable engine can be an offline fallback. Left at its default, the
+                    // checkbox would also appear for a cloud engine — whose models report isBuiltIn,
+                    // which this section reads as "already downloaded" and therefore selectable.
+                    showFallback = RemoteModelRegistry.runtimeOf(engineKey) == EngineRuntime.LOCAL_FILE,
+
+                    settingsRepo = settingsRepo,
+                    appStateManager = appStateManager,
+                    header = languageManager.getString("available_models_header"),
+                    items = nluModels,
+                    selectedItem = selectedModel,
+                    itemLabel = {
+                        // A user's own file is told apart from a schema-declared model at a glance.
+                        val suffix = if (it is com.voxapps.commander.domain.model.ImportedModel)
+                            languageManager.getString("model_imported_suffix") else ""
+                        "${it.label}$suffix (${it.sizeDescription})"
+                    },
+                    modelIdProvider = { it.id },
+                    onItemSelected = { model, isDownloaded ->
                         appStateManager.setActiveIntentModelId(model.id)
                         appStateManager.saveIntentModelSelection(engineKey, model.id)
-                        onDownloadModel(model.id, engineKey, null)
-                    }
-                    val isMetered = com.voxapps.commander.utils.NetworkMonitor.isMetered
-                    when {
-                        uiState.downloadPreference == "wifi_only" && isMetered -> {
-                            pendingDownloadSize = model.sizeDescription
-                            showWifiOnlyBlocked = true
+                    },
+                    onDownloadRequest = { model ->
+                        val downloadAction = {
+                            appStateManager.setActiveIntentModelId(model.id)
+                            appStateManager.saveIntentModelSelection(engineKey, model.id)
+                            onDownloadModel(model.id, engineKey, null)
                         }
-                        isMetered -> {
-                            pendingDownloadSize = model.sizeDescription
-                            pendingDownloadAction = downloadAction
-                            showMeteredWarning = true
+                        val isMetered = com.voxapps.commander.utils.NetworkMonitor.isMetered
+                        when {
+                            uiState.downloadPreference == "wifi_only" && isMetered -> {
+                                pendingDownloadSize = model.sizeDescription
+                                showWifiOnlyBlocked = true
+                            }
+                            isMetered -> {
+                                pendingDownloadSize = model.sizeDescription
+                                pendingDownloadAction = downloadAction
+                                showMeteredWarning = true
+                            }
+                            else -> downloadAction()
                         }
-                        else -> downloadAction()
-                    }
-                },
-                onDeleteRequest = { model -> onDeleteModel(model.id, engineKey) },
-                onCancelDownload = onCancelDownload,
-                downloadProgress = downloadProgress,
-                downloadingItem = downloadingItem,
-                currentProcessor = uiState.aiProcessor,
-                fallbackCategory = Strings.FallbackCategories.INTENT,
-                onFallbackChanged = onFallbackChanged,
-                refreshTrigger = refreshTrigger
-            )
-            
-            if (selectedModel != null) {
-                Text(
-                    text = languageManager.getString("engine_type_label").format(RemoteModelRegistry.getEngineLabel(engineKey, languageManager)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(horizontal = 4.dp)
+                    },
+                    onDeleteRequest = { model -> onDeleteModel(model.id, engineKey) },
+                    onCancelDownload = onCancelDownload,
+                    downloadProgress = downloadProgress,
+                    downloadingItem = downloadingItem,
+                    currentProcessor = uiState.aiProcessor,
+                    fallbackCategory = Strings.FallbackCategories.INTENT,
+                    onFallbackChanged = onFallbackChanged,
+                    refreshTrigger = refreshTrigger
                 )
+            
+                if (selectedModel != null) {
+                    Text(
+                        text = languageManager.getString("engine_type_label").format(RemoteModelRegistry.getEngineLabel(engineKey, languageManager)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                }
             }
         }
     }

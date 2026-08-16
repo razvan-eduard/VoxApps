@@ -36,6 +36,7 @@ import com.voxapps.commander.state.BenchmarkResult
 import com.voxapps.commander.state.VoiceState
 import kotlinx.coroutines.launch
 import java.util.Locale
+import com.voxapps.design.settings.SettingsSectionCard
 
 @Composable
 fun BenchmarkSettingsTab(
@@ -78,71 +79,55 @@ fun BenchmarkSettingsTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (header != null) {
-            item { header() }
-            item { HorizontalDivider() }
-        }
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = languageManager.getString("global_engine_benchmark"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(text = languageManager.getString("benchmark_description"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { scope.launch { benchmarkEngine.runFullBenchmark() } },
-                        enabled = !isRunning,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isRunning) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(languageManager.getString("running_all_tests"))
-                        } else {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(languageManager.getString("start_benchmark"))
-                        }
-                    }
-                }
-            }
-        }
-
-        if (benchmarkResults.isNotEmpty()) {
-            item {
+            SettingsSectionCard(languageManager.getString("global_engine_benchmark")) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = languageManager.getString("performance_metrics"), style = MaterialTheme.typography.titleSmall)
-                    IconButton(onClick = {
-                        val report = buildBenchmarkReport(benchmarkResults, systemInfo)
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_SUBJECT, "Vox Commander Benchmark Report")
-                            putExtra(Intent.EXTRA_TEXT, report)
+                    Text(
+                        text = languageManager.getString("benchmark_description"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (benchmarkResults.isNotEmpty()) {
+                        IconButton(onClick = {
+                            val report = buildBenchmarkReport(benchmarkResults, systemInfo)
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Vox Commander Benchmark Report")
+                                putExtra(Intent.EXTRA_TEXT, report)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share Benchmark Report"))
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
                         }
-                        context.startActivity(Intent.createChooser(shareIntent, "Share Benchmark Report"))
-                    }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
                     }
                 }
-            }
-            items(benchmarkResults) { result -> BenchmarkResultItem(result) }
-        }
-
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(text = languageManager.getString("native_library_inventory"), style = MaterialTheme.typography.titleSmall)
-                IconButton(onClick = { appStateManager.refreshNativeLibsStatus() }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
+                Button(
+                    onClick = { scope.launch { benchmarkEngine.runFullBenchmark() } },
+                    enabled = !isRunning,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isRunning) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(languageManager.getString("running_all_tests"))
+                    } else {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(languageManager.getString("start_benchmark"))
+                    }
+                }
+                if (benchmarkResults.isNotEmpty()) {
+                    Text(text = languageManager.getString("performance_metrics"), style = MaterialTheme.typography.labelLarge)
+                    benchmarkResults.forEach { result -> BenchmarkResultItem(result) }
                 }
             }
         }
-        
+
         item {
             // Grouped by the engine each library belongs to, and titled from the registry — the
             // same name the engine has everywhere else, in the user's language. This was three
@@ -152,7 +137,12 @@ fun BenchmarkSettingsTab(
             val byEngine = nativeLibsStatus.filter { it.category.isNotBlank() }.groupBy { it.category }
             val otherLibs = nativeLibsStatus.filter { it.category.isBlank() }
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionCard(languageManager.getString("native_library_inventory")) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    IconButton(onClick = { appStateManager.refreshNativeLibsStatus() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
+                    }
+                }
                 byEngine.forEach { (engineKey, libs) ->
                     EngineLibGroupCard(RemoteModelRegistry.getEngineLabel(engineKey, languageManager), libs)
                 }
@@ -162,7 +152,7 @@ fun BenchmarkSettingsTab(
 
         if (systemInfo.isNotBlank()) {
             item {
-                Text(text = languageManager.getString("engine_runtime_diagnostics"), style = MaterialTheme.typography.titleSmall)
+                SettingsSectionCard(languageManager.getString("engine_runtime_diagnostics")) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.Black)
@@ -182,6 +172,7 @@ fun BenchmarkSettingsTab(
                         modifier = Modifier.padding(12.dp),
                         fontSize = 10.sp
                     )
+                }
                 }
             }
         }

@@ -61,35 +61,35 @@ fun GeneralSettingsTab(
         modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(text = languageManager.getString("general"), style = MaterialTheme.typography.titleMedium)
-
         // The same section Commander shows, from :core:design — this app reads a schema of its own
         // (the currency services) and can follow a fork just as well.
         val scope = rememberCoroutineScope()
-        SchemaUpdatesSection(
-            strings = SchemaUpdatesStrings(
-                sectionLabel = languageManager.getString("schema_updates_section"),
-                description = languageManager.getString("schema_updates_desc"),
-                useRemoteLabel = languageManager.getString("schema_use_remote_label"),
-                useRemoteDescription = languageManager.getString("schema_use_remote_desc"),
-                repositoryUrlLabel = languageManager.getString("schema_repository_url"),
-                checkNow = languageManager.getString("schema_sync_now"),
-                followingFormat = languageManager.getString("schema_following"),
-                inStep = languageManager.getString("schema_in_step"),
-                servingFormat = languageManager.getString("schema_serving"),
-                unreachableFormat = languageManager.getString("schema_unreachable"),
-                notCheckedYet = languageManager.getString("schema_not_checked"),
-                usingBundled = languageManager.getString("schema_using_bundled"),
-                problemFormat = languageManager.getString("schema_problem"),
-                reasonRejected = languageManager.getString("schema_reason_rejected"),
-                reasonUnsigned = languageManager.getString("schema_reason_unsigned"),
-                reasonUnreachable = languageManager.getString("schema_reason_unreachable")
-            ),
-            repositoryUrl = settings.schemaRepoBaseUrl,
-            useRemote = settings.useRemoteSchemas,
-            onRepositoryUrlChange = { scope.launch { settingsRepo.setSchemaRepoBaseUrl(it) } },
-            onUseRemoteChange = { scope.launch { settingsRepo.setUseRemoteSchemas(it) } }
-        )
+        SettingsSectionCard(languageManager.getString("schema_updates_section")) {
+            SchemaUpdatesSection(
+                strings = SchemaUpdatesStrings(
+                    sectionLabel = languageManager.getString("schema_updates_section"),
+                    description = languageManager.getString("schema_updates_desc"),
+                    useRemoteLabel = languageManager.getString("schema_use_remote_label"),
+                    useRemoteDescription = languageManager.getString("schema_use_remote_desc"),
+                    repositoryUrlLabel = languageManager.getString("schema_repository_url"),
+                    checkNow = languageManager.getString("schema_sync_now"),
+                    followingFormat = languageManager.getString("schema_following"),
+                    inStep = languageManager.getString("schema_in_step"),
+                    servingFormat = languageManager.getString("schema_serving"),
+                    unreachableFormat = languageManager.getString("schema_unreachable"),
+                    notCheckedYet = languageManager.getString("schema_not_checked"),
+                    usingBundled = languageManager.getString("schema_using_bundled"),
+                    problemFormat = languageManager.getString("schema_problem"),
+                    reasonRejected = languageManager.getString("schema_reason_rejected"),
+                    reasonUnsigned = languageManager.getString("schema_reason_unsigned"),
+                    reasonUnreachable = languageManager.getString("schema_reason_unreachable")
+                ),
+                repositoryUrl = settings.schemaRepoBaseUrl,
+                useRemote = settings.useRemoteSchemas,
+                onRepositoryUrlChange = { scope.launch { settingsRepo.setSchemaRepoBaseUrl(it) } },
+                onUseRemoteChange = { scope.launch { settingsRepo.setUseRemoteSchemas(it) } }
+            )
+        }
 
         SettingsSectionCard(languageManager.getString("zone_security")) {
             // --- Require fingerprint ---

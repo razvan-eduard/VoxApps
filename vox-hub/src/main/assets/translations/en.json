@@ -123,5 +123,8 @@
   "sync_scope_no_categories": "No categories found for this app",
   "import_mode_caveat_merge": "Safest: restores the file and deletes only records that existed when it was exported — anything created on this device afterwards is kept.",
   "import_mode_caveat_full_override": "DELETES everything in the enabled apps — including records created AFTER the backup — then restores only what the file contains.",
-  "import_mode_caveat_additive": "Never deletes anything — importing the same file again DUPLICATES its records."
+  "import_mode_caveat_additive": "Never deletes anything — importing the same file again DUPLICATES its records.",
+  "logging_section": "Logging",
+  "backup_frequency_label": "Frequency",
+  "voxconnect_bridge_section": "Bridge"
 }

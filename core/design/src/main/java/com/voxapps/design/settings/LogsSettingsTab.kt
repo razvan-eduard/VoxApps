@@ -1,4 +1,4 @@
-package com.voxapps.logging.ui
+package com.voxapps.design.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,8 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.logging.Logger
+import com.voxapps.logging.ui.LogViewerCard
+import com.voxapps.logging.ui.LogViewerStrings
 
 data class LogsTabStrings(
+    val sectionLabel: String,
     val enabledLabel: String,
     val enabledDesc: String,
     val toastsLabel: String,
@@ -32,6 +35,10 @@ data class LogsTabStrings(
  * logging, a toasts switch (only meaningful while logging is on), and — while on — the
  * [LogViewerCard] ring-buffer viewer. State (the two booleans) stays per-app, backed by that app's
  * own DataStore-backed settings, same as every other toggle; only this composable is shared.
+ *
+ * It lives in this module rather than next to the viewer it shows because the two switches are a
+ * settings section like any other and are drawn as a [SettingsSectionCard]; the viewer already
+ * arrives as a card of its own and is left alone below it.
  */
 @Composable
 fun LogsSettingsTab(
@@ -58,21 +65,23 @@ fun LogsSettingsTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(strings.enabledLabel, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    strings.enabledDesc,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        SettingsSectionCard(strings.sectionLabel) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(strings.enabledLabel, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        strings.enabledDesc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onEnabledChange)
             }
-            Switch(checked = enabled, onCheckedChange = onEnabledChange)
-        }
 
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(strings.toastsLabel, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            Switch(checked = toastsEnabled, onCheckedChange = onToastsEnabledChange, enabled = enabled)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(strings.toastsLabel, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                Switch(checked = toastsEnabled, onCheckedChange = onToastsEnabledChange, enabled = enabled)
+            }
         }
 
         if (enabled) {

@@ -11,7 +11,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -32,6 +31,7 @@ import com.voxapps.notes.data.Note
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.DuplicateGroup
 import com.voxapps.notes.state.NotesStateManager
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.notes.ui.LocalLanguageManager
 
 private data class ResolvedGroup(val group: DuplicateGroup, val keep: Note, val duplicates: List<Note>)
@@ -80,107 +80,108 @@ fun NoteCleanupSettingsTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // --- Find duplicate notes (manual trigger) ---
-        Text(languageManager.getString("find_duplicate_notes_button"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("find_duplicate_notes_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (notes.size < 2) {
+        SettingsSectionCard(languageManager.getString("find_duplicate_notes_button")) {
             Text(
-                languageManager.getString("find_duplicate_notes_need_two"),
+                languageManager.getString("find_duplicate_notes_desc"),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        } else {
-            Button(
-                onClick = findDuplicatesGate.onClick,
-                modifier = Modifier.fillMaxWidth().alpha(findDuplicatesGate.alpha)
-            ) {
-                Text(languageManager.getString("find_duplicate_notes_button"))
+
+            if (notes.size < 2) {
+                Text(
+                    languageManager.getString("find_duplicate_notes_need_two"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Button(
+                    onClick = findDuplicatesGate.onClick,
+                    modifier = Modifier.fillMaxWidth().alpha(findDuplicatesGate.alpha)
+                ) {
+                    Text(languageManager.getString("find_duplicate_notes_button"))
+                }
             }
+
         }
 
-        HorizontalDivider()
-
         // --- Scheduled note cleanup ---
-        Text(languageManager.getString("scheduled_dedup_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("scheduled_dedup_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                NotesSettings.INTERVAL_OFF to "scheduled_dedup_off",
-                NotesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
-                NotesSettings.INTERVAL_WEEKLY to "scheduled_dedup_weekly",
-                NotesSettings.INTERVAL_MONTHLY to "scheduled_dedup_monthly"
+        SettingsSectionCard(languageManager.getString("scheduled_dedup_label")) {
+            Text(
+                languageManager.getString("scheduled_dedup_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            options.forEach { (interval, labelKey) ->
-                FilterChip(
-                    selected = settings.scheduledNoteDedupInterval == interval,
-                    onClick = { stateManager.setScheduledNoteDedupInterval(context, interval) },
-                    label = { Text(languageManager.getString(labelKey)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val options = listOf(
+                    NotesSettings.INTERVAL_OFF to "scheduled_dedup_off",
+                    NotesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
+                    NotesSettings.INTERVAL_WEEKLY to "scheduled_dedup_weekly",
+                    NotesSettings.INTERVAL_MONTHLY to "scheduled_dedup_monthly"
                 )
+                options.forEach { (interval, labelKey) ->
+                    FilterChip(
+                        selected = settings.scheduledNoteDedupInterval == interval,
+                        onClick = { stateManager.setScheduledNoteDedupInterval(context, interval) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
             }
+
         }
 
         // --- Pending suggestion review ---
         if (resolvedGroups.isNotEmpty()) {
-            HorizontalDivider()
-            Text(languageManager.getString("duplicate_notes_pending_title"), style = MaterialTheme.typography.labelLarge)
-
-            resolvedGroups.forEachIndexed { index, resolved ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Checkbox(
-                                checked = index in checkedGroups,
-                                onCheckedChange = { checked ->
-                                    checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
-                                }
-                            )
-                            Column(modifier = Modifier.padding(top = 12.dp)) {
-                                Text(
-                                    languageManager.getString("keep_label"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
+            SettingsSectionCard(languageManager.getString("duplicate_notes_pending_title")) {
+                resolvedGroups.forEachIndexed { index, resolved ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Checkbox(
+                                    checked = index in checkedGroups,
+                                    onCheckedChange = { checked ->
+                                        checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
+                                    }
                                 )
-                                Text(notePreview(resolved.keep), style = MaterialTheme.typography.bodyMedium)
-
-                                resolved.duplicates.forEach { dup ->
+                                Column(modifier = Modifier.padding(top = 12.dp)) {
                                     Text(
-                                        languageManager.getString("duplicate_label"),
+                                        languageManager.getString("keep_label"),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.padding(top = 8.dp)
+                                        color = MaterialTheme.colorScheme.primary
                                     )
-                                    Text(notePreview(dup), style = MaterialTheme.typography.bodySmall)
+                                    Text(notePreview(resolved.keep), style = MaterialTheme.typography.bodyMedium)
+
+                                    resolved.duplicates.forEach { dup ->
+                                        Text(
+                                            languageManager.getString("duplicate_label"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.padding(top = 8.dp)
+                                        )
+                                        Text(notePreview(dup), style = MaterialTheme.typography.bodySmall)
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = { stateManager.dismissNoteDeduplication() },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("dismiss_all_button"))
-                }
-                Button(
-                    onClick = {
-                        val approved = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it)?.group }
-                        stateManager.approveNoteDeduplication(approved)
-                    },
-                    enabled = checkedGroups.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("apply_selected_button"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { stateManager.dismissNoteDeduplication() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(languageManager.getString("dismiss_all_button"))
+                    }
+                    Button(
+                        onClick = {
+                            val approved = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it)?.group }
+                            stateManager.approveNoteDeduplication(approved)
+                        },
+                        enabled = checkedGroups.isNotEmpty(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(languageManager.getString("apply_selected_button"))
+                    }
                 }
             }
         }

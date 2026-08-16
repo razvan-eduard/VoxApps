@@ -48,6 +48,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
+import com.voxapps.design.settings.LogsSettingsTab
+import com.voxapps.design.settings.LogsTabStrings
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
@@ -60,7 +63,6 @@ import com.voxapps.hub.domain.backup.wantsExport
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.logging.Logger
-import com.voxapps.logging.ui.LogViewerCard
 import com.voxapps.logging.ui.LogViewerStrings
 import com.voxapps.voxconnect.PairedDeviceStore
 import com.voxapps.voxconnect.VoxConnectPairing
@@ -92,7 +94,6 @@ fun HubSettingsScreen(
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = HubSettings())
-    val logs by Logger.verboseLogs.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     // Same discovery HubScreen's Export section uses — needed here only to tell whether *any*
@@ -183,138 +184,144 @@ fun HubSettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // --- Scheduled backups: frequency, retention, past backups ---
-                Text(
-                    languageManager.getString("backup_schedule_uses_main_screen_config"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (!anyAppSelected) {
+                SettingsSectionCard(languageManager.getString("backup_frequency_label")) {
                     Text(
-                        languageManager.getString("backup_schedule_nothing_selected"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
+                        languageManager.getString("backup_schedule_uses_main_screen_config"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (!anyAppSelected) {
+                        Text(
+                            languageManager.getString("backup_schedule_nothing_selected"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val frequencies = listOf(
+                            HubSettings.INTERVAL_OFF to "backup_frequency_off",
+                            HubSettings.INTERVAL_DAILY to "backup_frequency_daily",
+                            HubSettings.INTERVAL_WEEKLY to "backup_frequency_weekly",
+                            HubSettings.INTERVAL_MONTHLY to "backup_frequency_monthly"
+                        )
+                        frequencies.forEach { (interval, labelKey) ->
+                            FilterChip(
+                                selected = settings.backupInterval == interval,
+                                enabled = anyAppSelected,
+                                onClick = {
+                                    scope.launch { settingsRepo.setBackupInterval(interval) }
+                                    BackupScheduler.reschedule(context, interval)
+                                },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
+                    }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val frequencies = listOf(
-                        HubSettings.INTERVAL_OFF to "backup_frequency_off",
-                        HubSettings.INTERVAL_DAILY to "backup_frequency_daily",
-                        HubSettings.INTERVAL_WEEKLY to "backup_frequency_weekly",
-                        HubSettings.INTERVAL_MONTHLY to "backup_frequency_monthly"
-                    )
-                    frequencies.forEach { (interval, labelKey) ->
-                        FilterChip(
-                            selected = settings.backupInterval == interval,
-                            enabled = anyAppSelected,
-                            onClick = {
-                                scope.launch { settingsRepo.setBackupInterval(interval) }
-                                BackupScheduler.reschedule(context, interval)
-                            },
-                            label = { Text(languageManager.getString(labelKey)) }
+
+                SettingsSectionCard(languageManager.getString("backup_retention_label")) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val retentions = listOf(
+                            HubSettings.RETENTION_NONE to "backup_retention_none",
+                            HubSettings.RETENTION_2 to "backup_retention_2",
+                            HubSettings.RETENTION_5 to "backup_retention_5",
+                            HubSettings.RETENTION_10 to "backup_retention_10",
+                            HubSettings.RETENTION_UNLIMITED to "backup_retention_unlimited"
+                        )
+                        retentions.forEach { (count, labelKey) ->
+                            FilterChip(
+                                selected = settings.backupRetentionCount == count,
+                                enabled = anyAppSelected,
+                                onClick = { scope.launch { settingsRepo.setBackupRetentionCount(count) } },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
+                    }
+                    if (settings.backupRetentionCount == HubSettings.RETENTION_UNLIMITED) {
+                        Text(
+                            languageManager.getString("backup_retention_unlimited_warning"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                Text(languageManager.getString("backup_retention_label"), style = MaterialTheme.typography.bodyMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val retentions = listOf(
-                        HubSettings.RETENTION_NONE to "backup_retention_none",
-                        HubSettings.RETENTION_2 to "backup_retention_2",
-                        HubSettings.RETENTION_5 to "backup_retention_5",
-                        HubSettings.RETENTION_10 to "backup_retention_10",
-                        HubSettings.RETENTION_UNLIMITED to "backup_retention_unlimited"
-                    )
-                    retentions.forEach { (count, labelKey) ->
-                        FilterChip(
-                            selected = settings.backupRetentionCount == count,
-                            enabled = anyAppSelected,
-                            onClick = { scope.launch { settingsRepo.setBackupRetentionCount(count) } },
-                            label = { Text(languageManager.getString(labelKey)) }
-                        )
-                    }
-                }
-                if (settings.backupRetentionCount == HubSettings.RETENTION_UNLIMITED) {
+                SettingsSectionCard(languageManager.getString("import_mode_label")) {
                     Text(
-                        languageManager.getString("backup_retention_unlimited_warning"),
+                        languageManager.getString("import_mode_desc"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-
-                Text(languageManager.getString("import_mode_label"), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    languageManager.getString("import_mode_desc"),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val importModes = listOf(
-                        HubSettings.IMPORT_MODE_FULL_OVERRIDE to "import_mode_full_override",
-                        HubSettings.IMPORT_MODE_MERGE to "import_mode_merge",
-                        HubSettings.IMPORT_MODE_ADDITIVE to "import_mode_additive"
-                    )
-                    importModes.forEach { (mode, labelKey) ->
-                        FilterChip(
-                            selected = settings.importMode == mode,
-                            onClick = { scope.launch { settingsRepo.setImportMode(mode) } },
-                            label = { Text(languageManager.getString(labelKey)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val importModes = listOf(
+                            HubSettings.IMPORT_MODE_FULL_OVERRIDE to "import_mode_full_override",
+                            HubSettings.IMPORT_MODE_MERGE to "import_mode_merge",
+                            HubSettings.IMPORT_MODE_ADDITIVE to "import_mode_additive"
                         )
+                        importModes.forEach { (mode, labelKey) ->
+                            FilterChip(
+                                selected = settings.importMode == mode,
+                                onClick = { scope.launch { settingsRepo.setImportMode(mode) } },
+                                label = { Text(languageManager.getString(labelKey)) }
+                            )
+                        }
                     }
-                }
-                // The selected mode spells out its own consequences — a 1 AM restore should not
-                // have to discover what "full override" means from its results.
-                val caveatKey = when (settings.importMode) {
-                    HubSettings.IMPORT_MODE_FULL_OVERRIDE -> "import_mode_caveat_full_override"
-                    HubSettings.IMPORT_MODE_ADDITIVE -> "import_mode_caveat_additive"
-                    else -> "import_mode_caveat_merge"
-                }
-                Text(
-                    languageManager.getString(caveatKey),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (settings.importMode == HubSettings.IMPORT_MODE_MERGE) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.error
+                    // The selected mode spells out its own consequences — a 1 AM restore should not
+                    // have to discover what "full override" means from its results.
+                    val caveatKey = when (settings.importMode) {
+                        HubSettings.IMPORT_MODE_FULL_OVERRIDE -> "import_mode_caveat_full_override"
+                        HubSettings.IMPORT_MODE_ADDITIVE -> "import_mode_caveat_additive"
+                        else -> "import_mode_caveat_merge"
                     }
-                )
+                    Text(
+                        languageManager.getString(caveatKey),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (settings.importMode == HubSettings.IMPORT_MODE_MERGE) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
+
+                }
 
                 if (backupFiles.isNotEmpty()) {
-                    Text(languageManager.getString("backup_list_title"), style = MaterialTheme.typography.bodyMedium)
-                    val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
-                    // Fixed to 5 rows' worth of height regardless of how many backups exist (unbounded
-                    // under RETENTION_UNLIMITED) — this list scrolls on its own instead of pushing the
-                    // rest of the settings screen down.
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = BACKUP_ROW_HEIGHT.dp * minOf(backupFiles.size, 5))
-                    ) {
-                        items(backupFiles, key = { it.name }) { file ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().height(BACKUP_ROW_HEIGHT.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(dateFormat.format(file.lastModified()), style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        "${file.length() / 1024} KB",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                IconButton(onClick = { onRestoreBackup(file) }) {
-                                    Icon(Icons.Filled.Restore, contentDescription = languageManager.getString("backup_restore_action"))
-                                }
-                                IconButton(onClick = {
-                                    val uri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", file)
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/zip"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    SettingsSectionCard(languageManager.getString("backup_list_title")) {
+                        val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+                        // Fixed to 5 rows' worth of height regardless of how many backups exist (unbounded
+                        // under RETENTION_UNLIMITED) — this list scrolls on its own instead of pushing the
+                        // rest of the settings screen down.
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = BACKUP_ROW_HEIGHT.dp * minOf(backupFiles.size, 5))
+                        ) {
+                            items(backupFiles, key = { it.name }) { file ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().height(BACKUP_ROW_HEIGHT.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(dateFormat.format(file.lastModified()), style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            "${file.length() / 1024} KB",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                    context.startActivity(Intent.createChooser(shareIntent, languageManager.getString("backup_share_action")))
-                                }) {
-                                    Icon(Icons.Filled.Share, contentDescription = languageManager.getString("backup_share_action"))
+                                    IconButton(onClick = { onRestoreBackup(file) }) {
+                                        Icon(Icons.Filled.Restore, contentDescription = languageManager.getString("backup_restore_action"))
+                                    }
+                                    IconButton(onClick = {
+                                        val uri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", file)
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/zip"
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, languageManager.getString("backup_share_action")))
+                                    }) {
+                                        Icon(Icons.Filled.Share, contentDescription = languageManager.getString("backup_share_action"))
+                                    }
                                 }
                             }
                         }
@@ -338,56 +345,33 @@ fun HubSettingsScreen(
                 modifier = Modifier.fillMaxSize().padding(padding)
             )
 
-            SettingsPage.LOGS -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(languageManager.getString("debug_logging"), style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            languageManager.getString("debug_logging_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = settings.debugLoggingEnabled,
-                        onCheckedChange = {
-                            Logger.setEnabled(it)
-                            scope.launch { settingsRepo.setDebugLoggingEnabled(it) }
-                        }
+            SettingsPage.LOGS -> LogsSettingsTab(
+                enabled = settings.debugLoggingEnabled,
+                onEnabledChange = {
+                    Logger.setEnabled(it)
+                    scope.launch { settingsRepo.setDebugLoggingEnabled(it) }
+                },
+                toastsEnabled = settings.debugToastsEnabled,
+                onToastsEnabledChange = {
+                    Logger.setToastsEnabled(it)
+                    scope.launch { settingsRepo.setDebugToastsEnabled(it) }
+                },
+                strings = LogsTabStrings(
+                    sectionLabel = languageManager.getString("logging_section"),
+                    enabledLabel = languageManager.getString("debug_logging"),
+                    enabledDesc = languageManager.getString("debug_logging_desc"),
+                    toastsLabel = languageManager.getString("debug_toasts_label"),
+                    viewer = LogViewerStrings(
+                        sectionTitle = languageManager.getString("verbose_logging_section"),
+                        clearLabel = languageManager.getString("clear_logs"),
+                        copyLabel = languageManager.getString("copy_button"),
+                        shareLabel = languageManager.getString("share_button"),
+                        noLogsLabel = languageManager.getString("no_logs")
                     )
-                }
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(languageManager.getString("debug_toasts_label"), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = settings.debugToastsEnabled,
-                        enabled = settings.debugLoggingEnabled,
-                        onCheckedChange = {
-                            Logger.setToastsEnabled(it)
-                            scope.launch { settingsRepo.setDebugToastsEnabled(it) }
-                        }
-                    )
-                }
-                if (settings.debugLoggingEnabled) {
-                    LogViewerCard(
-                        logs = logs,
-                        strings = LogViewerStrings(
-                            sectionTitle = languageManager.getString("verbose_logging_section"),
-                            clearLabel = languageManager.getString("clear_logs"),
-                            copyLabel = languageManager.getString("copy_button"),
-                            shareLabel = languageManager.getString("share_button"),
-                            noLogsLabel = languageManager.getString("no_logs")
-                        ),
-                        shareSubject = "VoxHub Logs"
-                    )
-                }
-            }
+                ),
+                shareSubject = "VoxHub Logs",
+                modifier = Modifier.fillMaxSize().padding(padding)
+            )
 
             SettingsPage.VOXCONNECT -> VoxConnectSettingsCard(
                 settings = settings,

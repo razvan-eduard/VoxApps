@@ -9,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -19,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.state.NotesStateManager
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.notes.ui.LocalLanguageManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,114 +33,110 @@ fun GeneralSettingsTab(
         modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(text = languageManager.getString("general"), style = MaterialTheme.typography.titleMedium)
-
-        // --- Require fingerprint ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("require_fingerprint"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("require_fingerprint_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        SettingsSectionCard(languageManager.getString("zone_security")) {
+            // --- Require fingerprint ---
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("require_fingerprint"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("require_fingerprint_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.isBiometricRequired,
+                    onCheckedChange = { stateManager.setBiometricRequired(it) }
                 )
             }
-            Switch(
-                checked = settings.isBiometricRequired,
-                onCheckedChange = { stateManager.setBiometricRequired(it) }
-            )
-        }
 
-        HorizontalDivider()
-
-        // --- Session timeout ---
-        Text(languageManager.getString("session_timeout"), style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                NotesSettings.TIMEOUT_30M to "timeout_30m",
-                NotesSettings.TIMEOUT_1H to "timeout_1h",
-                NotesSettings.TIMEOUT_1D to "timeout_1d",
-                NotesSettings.TIMEOUT_UNLIMITED to "timeout_unlimited"
-            )
-            options.forEach { (minutes, labelKey) ->
-                FilterChip(
-                    selected = settings.sessionTimeoutMinutes == minutes,
-                    onClick = { stateManager.setSessionTimeoutMinutes(minutes) },
-                    label = { Text(languageManager.getString(labelKey)) }
+            // --- Session timeout ---
+            Text(languageManager.getString("session_timeout"), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val options = listOf(
+                    NotesSettings.TIMEOUT_30M to "timeout_30m",
+                    NotesSettings.TIMEOUT_1H to "timeout_1h",
+                    NotesSettings.TIMEOUT_1D to "timeout_1d",
+                    NotesSettings.TIMEOUT_UNLIMITED to "timeout_unlimited"
                 )
+                options.forEach { (minutes, labelKey) ->
+                    FilterChip(
+                        selected = settings.sessionTimeoutMinutes == minutes,
+                        onClick = { stateManager.setSessionTimeoutMinutes(minutes) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
             }
         }
 
-        HorizontalDivider()
-
-        // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("calendar_view"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("calendar_view_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        SettingsSectionCard(languageManager.getString("zone_notes")) {
+            // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("calendar_view"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("calendar_view_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.calendarViewEnabled,
+                    onCheckedChange = { stateManager.setCalendarViewEnabled(it) }
                 )
             }
-            Switch(
-                checked = settings.calendarViewEnabled,
-                onCheckedChange = { stateManager.setCalendarViewEnabled(it) }
-            )
         }
 
-        HorizontalDivider()
-
-        // --- Attach photo to AI on scan (opt-in; costs real LLM tokens on top of free OCR text,
-        // and only takes effect when Vision's own "send photo to AI" setting also provided one). ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("attach_photo_on_scan"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("attach_photo_on_scan_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        SettingsSectionCard(languageManager.getString("zone_capture")) {
+            // --- Attach photo to AI on scan (opt-in; costs real LLM tokens on top of free OCR text,
+            // and only takes effect when Vision's own "send photo to AI" setting also provided one). ---
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("attach_photo_on_scan"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("attach_photo_on_scan_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.attachPhotoOnScan,
+                    onCheckedChange = { stateManager.setAttachPhotoOnScan(it) }
                 )
             }
-            Switch(
-                checked = settings.attachPhotoOnScan,
-                onCheckedChange = { stateManager.setAttachPhotoOnScan(it) }
-            )
-        }
 
-        HorizontalDivider()
-
-        // --- Keep the scanned photo on the note (independent of attachPhotoOnScan above, which
-        // only controls whether the LLM sees it during cleanup) ---
-        Text(languageManager.getString("scan_image_retention"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("scan_image_retention_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val retentionOptions = listOf(
-                NotesSettings.RETENTION_NEVER to "retention_never",
-                NotesSettings.RETENTION_ON_FAILURE to "retention_on_failure",
-                NotesSettings.RETENTION_ALWAYS to "retention_always"
+            // --- Keep the scanned photo on the note (independent of attachPhotoOnScan above, which
+            // only controls whether the LLM sees it during cleanup) ---
+            Text(languageManager.getString("scan_image_retention"), style = MaterialTheme.typography.labelLarge)
+            Text(
+                languageManager.getString("scan_image_retention_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            retentionOptions.forEach { (mode, labelKey) ->
-                FilterChip(
-                    selected = settings.scanImageRetention == mode,
-                    onClick = { stateManager.setScanImageRetention(mode) },
-                    label = { Text(languageManager.getString(labelKey)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val retentionOptions = listOf(
+                    NotesSettings.RETENTION_NEVER to "retention_never",
+                    NotesSettings.RETENTION_ON_FAILURE to "retention_on_failure",
+                    NotesSettings.RETENTION_ALWAYS to "retention_always"
                 )
+                retentionOptions.forEach { (mode, labelKey) ->
+                    FilterChip(
+                        selected = settings.scanImageRetention == mode,
+                        onClick = { stateManager.setScanImageRetention(mode) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
             }
         }
 
         if (com.voxapps.notes.BuildConfig.DEBUG) {
-            HorizontalDivider()
-            Text(languageManager.getString("debug_section"), style = MaterialTheme.typography.labelLarge)
-            androidx.compose.material3.OutlinedButton(
-                onClick = { stateManager.seedDebugTestData() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString("add_test_data"))
+            SettingsSectionCard(languageManager.getString("debug_section")) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { stateManager.seedDebugTestData() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("add_test_data"))
+                }
             }
         }
     }

@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -64,8 +63,9 @@ import com.voxapps.design.settings.TodayEffectSettings
 import com.voxapps.design.settings.TodayEffectStrings
 import com.voxapps.design.toEnumOr
 import com.voxapps.logging.ui.LogViewerStrings
-import com.voxapps.logging.ui.LogsSettingsTab
-import com.voxapps.logging.ui.LogsTabStrings
+import com.voxapps.design.settings.SettingsSectionCard
+import com.voxapps.design.settings.LogsSettingsTab
+import com.voxapps.design.settings.LogsTabStrings
 
 private enum class SettingsPage { MENU, GENERAL, THEME, NOTIFICATIONS, ICS, BACKUP, LOGS }
 
@@ -267,6 +267,7 @@ fun SettingsScreen(
                 toastsEnabled = settings.debugToastsEnabled,
                 onToastsEnabledChange = { stateManager.setDebugToastsEnabled(it) },
                 strings = LogsTabStrings(
+                    sectionLabel = languageManager.getString("logging_section"),
                     enabledLabel = languageManager.getString("debug_logging"),
                     enabledDesc = languageManager.getString("debug_logging_desc"),
                     toastsLabel = languageManager.getString("debug_toasts_label"),
@@ -294,66 +295,78 @@ private fun ColumnScope.CalendarThemeExtras(
     stateManager: CalendarStateManager,
     languageManager: LanguageManager
 ) {
-    HorizontalDivider()
-
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(languageManager.getString("animations_enabled"), style = MaterialTheme.typography.bodyLarge)
+    SettingsSectionCard(languageManager.getString("animations_enabled")) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 languageManager.getString("animations_enabled_desc"),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = settings.animationsEnabled,
+                onCheckedChange = { stateManager.setAnimationsEnabled(it) }
             )
         }
-        Switch(
-            checked = settings.animationsEnabled,
-            onCheckedChange = { stateManager.setAnimationsEnabled(it) }
-        )
     }
 
-    HorizontalDivider()
+    SettingsSectionCard(languageManager.getString("widget_zone")) {
+        // What the widget shows, then how it is drawn — one card, since both are the same widget.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("widget_show_event_details"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("widget_show_event_details_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.showEventDetailsInWidget,
+                onCheckedChange = { stateManager.setShowEventDetailsInWidget(it) }
+            )
+        }
 
-    Text(languageManager.getString("widget_border_section"), style = MaterialTheme.typography.labelLarge)
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(languageManager.getString("widget_border_enabled"), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                languageManager.getString("widget_border_enabled_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("widget_border_enabled"), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    languageManager.getString("widget_border_enabled_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.widgetBorderEnabled,
+                onCheckedChange = { stateManager.setWidgetBorderEnabled(it) }
             )
         }
-        Switch(
-            checked = settings.widgetBorderEnabled,
-            onCheckedChange = { stateManager.setWidgetBorderEnabled(it) }
-        )
-    }
-    Text(languageManager.getString("widget_border_thickness"), style = MaterialTheme.typography.bodyMedium)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        val thicknessOptions = listOf(
-            CalendarSettings.THICKNESS_THIN to "widget_border_thickness_thin",
-            CalendarSettings.THICKNESS_MEDIUM to "widget_border_thickness_medium",
-            CalendarSettings.THICKNESS_THICK to "widget_border_thickness_thick"
-        )
-        thicknessOptions.forEach { (thicknessDp, labelKey) ->
-            FilterChip(
-                enabled = settings.widgetBorderEnabled,
-                selected = settings.widgetBorderThicknessDp == thicknessDp,
-                onClick = { stateManager.setWidgetBorderThicknessDp(thicknessDp) },
-                label = { Text(languageManager.getString(labelKey)) }
+        Text(languageManager.getString("widget_border_thickness"), style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            val thicknessOptions = listOf(
+                CalendarSettings.THICKNESS_THIN to "widget_border_thickness_thin",
+                CalendarSettings.THICKNESS_MEDIUM to "widget_border_thickness_medium",
+                CalendarSettings.THICKNESS_THICK to "widget_border_thickness_thick"
             )
+            thicknessOptions.forEach { (thicknessDp, labelKey) ->
+                FilterChip(
+                    enabled = settings.widgetBorderEnabled,
+                    selected = settings.widgetBorderThicknessDp == thicknessDp,
+                    onClick = { stateManager.setWidgetBorderThicknessDp(thicknessDp) },
+                    label = { Text(languageManager.getString(labelKey)) }
+                )
+            }
         }
+        Text(languageManager.getString("widget_border_color"), style = MaterialTheme.typography.labelLarge)
+        VoxColorSwatchPicker(
+            selectedColor = settings.widgetBorderColorArgb,
+            onColorSelected = { stateManager.setWidgetBorderColorArgb(it) },
+            customColorDialogTitle = languageManager.getString("custom_color_title"),
+            customColorUseLabel = languageManager.getString("use_color_button"),
+            customColorCancelLabel = languageManager.getString("cancel"),
+            customColorHueLabel = languageManager.getString("hue_label"),
+            customColorSaturationLabel = languageManager.getString("saturation_label"),
+            customColorBrightnessLabel = languageManager.getString("brightness_label")
+        )
     }
-    Text(languageManager.getString("widget_border_color"), style = MaterialTheme.typography.bodyMedium)
-    VoxColorSwatchPicker(
-        selectedColor = settings.widgetBorderColorArgb,
-        onColorSelected = { stateManager.setWidgetBorderColorArgb(it) },
-        modifier = Modifier.padding(top = 4.dp),
-        customColorDialogTitle = languageManager.getString("custom_color_title"),
-        customColorUseLabel = languageManager.getString("use_color_button"),
-        customColorCancelLabel = languageManager.getString("cancel"),
-        customColorHueLabel = languageManager.getString("hue_label"),
-        customColorSaturationLabel = languageManager.getString("saturation_label"),
-        customColorBrightnessLabel = languageManager.getString("brightness_label")
-    )
 }

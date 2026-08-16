@@ -134,7 +134,7 @@
   "app_alias_delete_msg": "Delete alias rule for \"${displayName}\"? Aliases: ${aliases}",
   "save_button": "Save",
   "tab_advanced": "Advanced",
-  "tab_backup": "Backup & Diagnostics",
+  "tab_backup": "Backup",
   "engine_api_key": "API key",
   "tab_benchmark": "Benchmark",
   "tab_verbose_logging": "Verbose Logging",
@@ -553,5 +553,17 @@
   "backup_import_mode_additive": "Additive",
   "backup_import_mode_caveat_merge": "Safest: restores the file and deletes only records that existed when it was exported — anything created here afterwards is kept.",
   "backup_import_mode_caveat_full_override": "DELETES everything — including records created AFTER the backup — then restores only what the file contains.",
-  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records."
+  "backup_import_mode_caveat_additive": "Never deletes anything — restoring the same file again DUPLICATES its records.",
+  "logging_section": "Logging",
+  "intent_engine_section": "Intent engine",
+  "ww_detection_section": "Detection",
+  "tts_playback_section": "Voice and playback",
+  "return_after_action_section": "Return to previous app",
+  "app_control_section": "Control and automation",
+  "external_trigger_section": "External voice trigger",
+  "integrations_apps_title": "Connected apps",
+  "youtube_url_engine": "YouTube URL engine",
+  "piped_section": "Piped",
+  "logs_settings_title": "Logs",
+  "tab_diagnostics": "Diagnostics"
 }

@@ -99,8 +99,6 @@ data class TodayEffectSettings(
 fun TodayEffectSettingsCard(settings: TodayEffectSettings, modifier: Modifier = Modifier) {
     val strings = settings.strings
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(strings.sectionLabel, style = MaterialTheme.typography.labelLarge)
-
         // Preview + effect picker + style picker are one tight visual group (what does it look like,
         // and where) — spaced closer together than the major sections below (color, gradient, speed).
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

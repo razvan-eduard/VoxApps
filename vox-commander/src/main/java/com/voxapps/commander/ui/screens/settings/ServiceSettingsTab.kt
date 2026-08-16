@@ -44,6 +44,7 @@ import com.voxapps.commander.ui.components.VoiceInputTextField
 import com.voxapps.commander.ui.screens.main.ListeningScreen
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import com.voxapps.commander.utils.Strings
+import com.voxapps.design.settings.SettingsSectionCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,8 +145,6 @@ fun ServiceSettingsTab(
         )
     }
 
-    Text(text = languageManager.getString("service_settings_section"), style = MaterialTheme.typography.titleMedium)
-
     // --- SUB-TABS: Wake Word + TTS ---
     var selectedSubTab by remember { mutableIntStateOf(0) }
 
@@ -176,6 +175,7 @@ fun ServiceSettingsTab(
     Spacer(modifier = Modifier.height(8.dp))
 
     if (selectedSubTab == 0) {
+    SettingsSectionCard(languageManager.getString("ww_engine_title")) {
     // --- COMMON: Wake Word Enable Switch ---
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -196,10 +196,6 @@ fun ServiceSettingsTab(
 
     if (uiState.wakeWordEnabled) {
         // --- ENGINE PICKLIST (same pattern as VoiceEnginesSubTab) ---
-        Text(
-            text = languageManager.getString("ww_engine_title"),
-            style = MaterialTheme.typography.labelLarge
-        )
         Text(
             text = languageManager.getString("ww_engine_desc"),
             style = MaterialTheme.typography.bodySmall,
@@ -231,7 +227,11 @@ fun ServiceSettingsTab(
                     " — needs an API key" else ""
             }
         )
+    }
+    }
 
+    if (uiState.wakeWordEnabled) {
+        SettingsSectionCard(languageManager.getString("ww_detection_section")) {
         // --- COMMON: Command Queue Toggle ---
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -290,14 +290,12 @@ fun ServiceSettingsTab(
             )
         }
 
+        }
+
         // --- ENGINE-SPECIFIC: Calibration ---
         if (supportsCalibration) {
             val hasProfile = uiState.wakeWordProfileJson != null
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-        Text(
-            text = languageManager.getString("ww_calibrate_title"),
-            style = MaterialTheme.typography.labelLarge
-        )
+        SettingsSectionCard(languageManager.getString("ww_calibrate_title")) {
         Text(
             text = languageManager.getString("ww_calibrate_desc"),
             style = MaterialTheme.typography.bodySmall,
@@ -513,14 +511,11 @@ fun ServiceSettingsTab(
             )
         }
 
+        }
         } // end if (supportsCalibration) — calibration section
 
         // --- WAKE WORD SENSITIVITY ---
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-        Text(
-            text = languageManager.getString("ww_sensitivity_label") ?: "Wake Word Sensitivity",
-            style = MaterialTheme.typography.labelLarge
-        )
+        SettingsSectionCard(languageManager.getString("ww_sensitivity_label")) {
         Text(
             text = languageManager.getString("ww_sensitivity_desc") ?: "Adjust how easily the wake word triggers",
             style = MaterialTheme.typography.bodySmall,
@@ -587,6 +582,8 @@ fun ServiceSettingsTab(
             )
         }
 
+        }
+
         // --- ENGINE-SPECIFIC: Model Selection via EngineModelSection ---
         val engineModels = remember(currentEngineKey, refreshTrigger) {
             RemoteModelRegistry.getModels(currentEngineKey)
@@ -616,9 +613,11 @@ fun ServiceSettingsTab(
             uiState.activeWakeModelId?.let { id -> displayModels.find { it.id == id } }
         }
 
+        SettingsSectionCard(languageManager.getString("wake_word_model")) {
         if (displayModels.isNotEmpty()) {
             EngineModelSection(
                 title = languageManager.getString("wake_word_model"),
+                showHeaderTitle = false,
 
                 settingsRepo = settingsRepo,
                 appStateManager = appStateManager,
@@ -725,8 +724,14 @@ fun ServiceSettingsTab(
             )
         }
 
+        }
+
         // --- COMMON: Service Status + Start/Stop ---
-        Text(text = languageManager.getString("service_status"), style = MaterialTheme.typography.labelLarge)
+        SettingsSectionCard(languageManager.getString("service_settings_section")) {
+        Text(
+            text = languageManager.getString("service_status"),
+            style = MaterialTheme.typography.labelLarge
+        )
         Text(
             text = if (uiState.isWakeWordServiceListening) languageManager.getString("service_running") else languageManager.getString("service_stopped"),
             style = MaterialTheme.typography.bodyMedium,
@@ -772,15 +777,12 @@ fun ServiceSettingsTab(
                 color = MaterialTheme.colorScheme.error
             )
         }
+        }
     } // end if (uiState.wakeWordEnabled)
     } // end if (selectedSubTab == 0)
     else {
         // --- TTS SUB-TAB ---
-        Text(
-            text = languageManager.getString("tts_settings_title") ?: "Text-to-Speech",
-            style = MaterialTheme.typography.titleMedium
-        )
-
+        SettingsSectionCard(languageManager.getString("tts_engine_title")) {
         // TTS Enable Toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -799,10 +801,6 @@ fun ServiceSettingsTab(
 
         if (uiState.ttsEnabled) {
             // --- TTS ENGINE PICKLIST (same pattern as the wake-word engine picker above) ---
-            Text(
-                text = languageManager.getString("tts_engine_title") ?: "TTS Engine",
-                style = MaterialTheme.typography.labelLarge
-            )
             Text(
                 text = languageManager.getString("tts_engine_desc")
                     ?: "Piper runs fully on-device with a neural voice, but needs a voice model downloaded below for your language — falls back to the Android engine automatically if none is available.",
@@ -838,16 +836,22 @@ fun ServiceSettingsTab(
                 }
             )
 
+        }
+        }
+
+        if (uiState.ttsEnabled) {
             // --- PIPER VOICE MODELS (only relevant once Piper is selected) ---
             // The stored value is already normalised by SettingsRepositoryImpl, so comparing it to
             // the engine's own key is enough — no second alias table on this side.
-            if (currentTtsEngineKey == PiperTtsEngine.ENGINE_KEY) {
+            if (uiState.ttsEngineType == PiperTtsEngine.ENGINE_KEY) {
+                SettingsSectionCard(languageManager.getString("tts_voice_models")) {
                 val piperModels = remember(refreshTrigger) {
                     RemoteModelRegistry.getModels(PiperTtsEngine.ENGINE_KEY)
                 }
                 if (piperModels.isNotEmpty()) {
                     EngineModelSection(
                         title = languageManager.getString("tts_voice_models") ?: "Piper voice models",
+                        showHeaderTitle = false,
                         settingsRepo = settingsRepo,
                         appStateManager = appStateManager,
                         header = languageManager.getString("available_models_header") ?: "AVAILABLE MODELS",
@@ -870,10 +874,10 @@ fun ServiceSettingsTab(
                         refreshTrigger = refreshTrigger
                     )
                 }
+                }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
+            SettingsSectionCard(languageManager.getString("tts_playback_section")) {
             // Speech Rate Slider
             Text(
                 text = (languageManager.getString("tts_speech_rate_label") ?: "Speech rate") + ": ${"%.1f".format(uiState.ttsSpeechRate)}x",
@@ -925,11 +929,12 @@ fun ServiceSettingsTab(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            }
 
             // Overlay Text Size
+            SettingsSectionCard(languageManager.getString("overlay_text_size_label")) {
             Text(
-                text = languageManager.getString("overlay_text_size_label") + ": ${"%.1f".format(uiState.overlayTextSize)}x",
+                text = "${"%.1f".format(uiState.overlayTextSize)}x",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -954,6 +959,7 @@ fun ServiceSettingsTab(
                     modifier = Modifier.padding(12.dp),
                     maxLines = 3
                 )
+            }
             }
         }
     } // end else (TTS sub-tab)

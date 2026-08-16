@@ -18,7 +18,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +40,7 @@ import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.SupportedLanguages
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.notes.ui.CategoryColors
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.notes.ui.LocalLanguageManager
 
 /**
@@ -64,166 +64,167 @@ fun CategoriesSettingsTab(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // --- Language (drives both UI copy and Auto-Merge prompt language) ---
-        Text(languageManager.getString("language_setting_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("language_setting_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        SettingsSectionCard(languageManager.getString("language_setting_label")) {
+            Text(
+                languageManager.getString("language_setting_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-        Picklist(
-            items = SupportedLanguages.ALL,
-            selected = settings.language,
-            itemLabel = { it.uppercase() },
-            onSelect = { code ->
-                stateManager.setLanguage(code)
-                languageManager.loadLanguage(code)
-            }
-        )
+            Picklist(
+                items = SupportedLanguages.ALL,
+                selected = settings.language,
+                itemLabel = { it.uppercase() },
+                onSelect = { code ->
+                    stateManager.setLanguage(code)
+                    languageManager.loadLanguage(code)
+                }
+            )
 
-        HorizontalDivider()
+        }
 
         // --- Voice notes: which category they land in ---
         //
         // These belong beside the categories they choose between rather than beside notifications,
         // which is where they used to live and how they came to be dropped when that screen was
         // replaced by the shared notification card.
-        Text(languageManager.getString("default_voice_category"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("default_voice_category_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        SettingsSectionCard(languageManager.getString("default_voice_category")) {
+            Text(
+                languageManager.getString("default_voice_category_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-        Picklist(
-            items = categories,
-            selected = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId },
-            itemLabel = { it.name },
-            onSelect = { stateManager.setDefaultVoiceCategoryId(it.id) },
-            noneLabel = languageManager.getString("none"),
-            onNoneSelected = { stateManager.setDefaultVoiceCategoryId(null) }
-        )
+            Picklist(
+                items = categories,
+                selected = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId },
+                itemLabel = { it.name },
+                onSelect = { stateManager.setDefaultVoiceCategoryId(it.id) },
+                noneLabel = languageManager.getString("none"),
+                onNoneSelected = { stateManager.setDefaultVoiceCategoryId(null) }
+            )
 
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("auto_create_voice_category"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("auto_create_voice_category_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("auto_create_voice_category"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("auto_create_voice_category_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.autoCreateVoiceCategory,
+                    onCheckedChange = { stateManager.setAutoCreateVoiceCategory(it) }
                 )
             }
-            Switch(
-                checked = settings.autoCreateVoiceCategory,
-                onCheckedChange = { stateManager.setAutoCreateVoiceCategory(it) }
-            )
+
         }
 
-        HorizontalDivider()
-
         // --- Auto-Merge Categories (manual trigger, selectable list) ---
-        Text(languageManager.getString("auto_merge_categories_button"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("auto_merge_categories_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        // Defaults to "all selected"; re-defaults whenever the category list itself changes (added,
-        // removed, or merged away) rather than trying to preserve a sticky selection across that.
-        var selectedIds by remember(categories) { mutableStateOf(categories.map { it.id }.toSet()) }
-
-        if (categories.size < 2) {
+        SettingsSectionCard(languageManager.getString("auto_merge_categories_button")) {
             Text(
-                languageManager.getString("auto_merge_categories_need_two"),
+                languageManager.getString("auto_merge_categories_desc"),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable {
-                    selectedIds = if (selectedIds.size == categories.size) emptySet() else categories.map { it.id }.toSet()
-                },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = selectedIds.size == categories.size,
-                    onCheckedChange = { checked ->
-                        selectedIds = if (checked) categories.map { it.id }.toSet() else emptySet()
-                    }
-                )
-                Text(languageManager.getString("select_all"))
-            }
 
-            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
-                items(categories, key = { it.id }) { cat ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateItem()
-                            .clickable {
-                                selectedIds = if (cat.id in selectedIds) selectedIds - cat.id else selectedIds + cat.id
-                            }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = cat.id in selectedIds,
-                            onCheckedChange = {
-                                selectedIds = if (it) selectedIds + cat.id else selectedIds - cat.id
-                            }
-                        )
-                        Box(
+            // Defaults to "all selected"; re-defaults whenever the category list itself changes (added,
+            // removed, or merged away) rather than trying to preserve a sticky selection across that.
+            var selectedIds by remember(categories) { mutableStateOf(categories.map { it.id }.toSet()) }
+
+            if (categories.size < 2) {
+                Text(
+                    languageManager.getString("auto_merge_categories_need_two"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        selectedIds = if (selectedIds.size == categories.size) emptySet() else categories.map { it.id }.toSet()
+                    },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = selectedIds.size == categories.size,
+                        onCheckedChange = { checked ->
+                            selectedIds = if (checked) categories.map { it.id }.toSet() else emptySet()
+                        }
+                    )
+                    Text(languageManager.getString("select_all"))
+                }
+
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+                    items(categories, key = { it.id }) { cat ->
+                        Row(
                             modifier = Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(CategoryColors.fromStored(cat.colorArgb))
-                        )
-                        Text(cat.name, modifier = Modifier.padding(start = 8.dp))
+                                .fillMaxWidth()
+                                .animateItem()
+                                .clickable {
+                                    selectedIds = if (cat.id in selectedIds) selectedIds - cat.id else selectedIds + cat.id
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = cat.id in selectedIds,
+                                onCheckedChange = {
+                                    selectedIds = if (it) selectedIds + cat.id else selectedIds - cat.id
+                                }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape)
+                                    .background(CategoryColors.fromStored(cat.colorArgb))
+                            )
+                            Text(cat.name, modifier = Modifier.padding(start = 8.dp))
+                        }
                     }
                 }
             }
-        }
 
-        val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
-        val autoMergeGate = rememberRequirementGate(
-            satisfied = commanderInstalled,
-            requiredMessage = languageManager.getString("commander_required_message")
-        ) {
-            val names = categories.filter { it.id in selectedIds }.map { it.name }
-            stateManager.requestCategoryAutoMerge(context, names)
-            Toast.makeText(context, languageManager.getString("auto_merge_categories_sent_toast"), Toast.LENGTH_SHORT).show()
-        }
-        Button(
-            onClick = autoMergeGate.onClick,
-            enabled = selectedIds.size >= 2,
-            modifier = Modifier.fillMaxWidth().alpha(autoMergeGate.alpha)
-        ) {
-            Text(languageManager.getString("auto_merge_categories_button"))
-        }
+            val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+            val autoMergeGate = rememberRequirementGate(
+                satisfied = commanderInstalled,
+                requiredMessage = languageManager.getString("commander_required_message")
+            ) {
+                val names = categories.filter { it.id in selectedIds }.map { it.name }
+                stateManager.requestCategoryAutoMerge(context, names)
+                Toast.makeText(context, languageManager.getString("auto_merge_categories_sent_toast"), Toast.LENGTH_SHORT).show()
+            }
+            Button(
+                onClick = autoMergeGate.onClick,
+                enabled = selectedIds.size >= 2,
+                modifier = Modifier.fillMaxWidth().alpha(autoMergeGate.alpha)
+            ) {
+                Text(languageManager.getString("auto_merge_categories_button"))
+            }
 
-        HorizontalDivider()
+        }
 
         // --- Scheduled Auto-Merge ---
-        Text(languageManager.getString("scheduled_merge_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("scheduled_merge_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                NotesSettings.INTERVAL_OFF to "scheduled_merge_off",
-                NotesSettings.INTERVAL_DAILY to "scheduled_merge_daily",
-                NotesSettings.INTERVAL_WEEKLY to "scheduled_merge_weekly",
-                NotesSettings.INTERVAL_MONTHLY to "scheduled_merge_monthly"
+        SettingsSectionCard(languageManager.getString("scheduled_merge_label")) {
+            Text(
+                languageManager.getString("scheduled_merge_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            options.forEach { (interval, labelKey) ->
-                FilterChip(
-                    selected = settings.scheduledMergeInterval == interval,
-                    onClick = { stateManager.setScheduledMergeInterval(context, interval) },
-                    label = { Text(languageManager.getString(labelKey)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val options = listOf(
+                    NotesSettings.INTERVAL_OFF to "scheduled_merge_off",
+                    NotesSettings.INTERVAL_DAILY to "scheduled_merge_daily",
+                    NotesSettings.INTERVAL_WEEKLY to "scheduled_merge_weekly",
+                    NotesSettings.INTERVAL_MONTHLY to "scheduled_merge_monthly"
                 )
+                options.forEach { (interval, labelKey) ->
+                    FilterChip(
+                        selected = settings.scheduledMergeInterval == interval,
+                        onClick = { stateManager.setScheduledMergeInterval(context, interval) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
             }
         }
     }

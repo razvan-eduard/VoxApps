@@ -76,5 +76,6 @@
   "auto_capture_2s": "Automatisch — 2 s",
   "auto_capture_3s": "Automatisch — 3 s",
   "auto_capture_5s": "Automatisch — 5 s",
-  "auto_capture_countdown": "Aufnahme in %1$d s…"
+  "auto_capture_countdown": "Aufnahme in %1$d s…",
+  "logging_section": "Protokollierung"
 }

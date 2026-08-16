@@ -196,272 +196,261 @@ fun DuplicatesSettingsPage(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         HowItWorksCard(languageManager.getString("cleanup_info_duplicates"))
-        Text(languageManager.getString("expense_cleanup_section_title"), style = MaterialTheme.typography.titleMedium)
         Text(
             languageManager.getString("expense_cleanup_section_desc"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        // --- Rules manager — relevant whenever either trigger above includes Local ---
+        // --- Rules manager — relevant whenever either trigger below includes Local ---
         val subAlpha = if (localTuningRelevant) 1f else 0.4f
-        Card(modifier = Modifier.fillMaxWidth().alpha(subAlpha)) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(languageManager.getString("near_duplicate_time_window_label"), style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val windowOptions = listOf(
-                        ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
-                        ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
-                        ExpensesSettings.NEAR_DUP_WINDOW_15M
+        SettingsSectionCard(
+            title = languageManager.getString("near_duplicate_time_window_label"),
+            modifier = Modifier.alpha(subAlpha)
+        ) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val windowOptions = listOf(
+                    ExpensesSettings.NEAR_DUP_WINDOW_1M, ExpensesSettings.NEAR_DUP_WINDOW_2M,
+                    ExpensesSettings.NEAR_DUP_WINDOW_5M, ExpensesSettings.NEAR_DUP_WINDOW_10M,
+                    ExpensesSettings.NEAR_DUP_WINDOW_15M
+                )
+                windowOptions.forEach { minutes ->
+                    FilterChip(
+                        selected = settings.nearDuplicateTimeWindowMinutes == minutes,
+                        onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
+                        label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
                     )
-                    windowOptions.forEach { minutes ->
-                        FilterChip(
-                            selected = settings.nearDuplicateTimeWindowMinutes == minutes,
-                            onClick = { stateManager.setNearDuplicateTimeWindowMinutes(minutes) },
-                            label = { Text(String.format(languageManager.getString("near_duplicate_interval_minutes"), minutes)) }
+                }
+            }
+        }
+
+        SettingsSectionCard(
+            title = languageManager.getString("duplicate_rules_label"),
+            modifier = Modifier.alpha(subAlpha)
+        ) {
+            val duplicateRules by stateManager.duplicateRules.collectAsStateWithLifecycle(initialValue = emptyList())
+            DuplicateRulesSection(
+                rules = duplicateRules,
+                globalCombinator = settings.duplicateRuleSetGlobalCombinator,
+                onGlobalCombinatorChange = { stateManager.setDuplicateRuleSetGlobalCombinator(it) },
+                onUpsertRule = { stateManager.upsertDuplicateRule(it) },
+                onDeleteRule = { stateManager.deleteDuplicateRule(it) },
+                onSetRuleEnabled = { id, enabled -> stateManager.setDuplicateRuleEnabled(id, enabled) },
+                languageManager = languageManager
+            )
+        }
+
+        // --- Trigger: automatic (insert-time) protection ---
+        SettingsSectionCard(languageManager.getString("duplicate_check_automatic_label")) {
+            Text(
+                languageManager.getString("duplicate_check_automatic_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            DuplicateModeChipRow(
+                selected = settings.duplicateCheckModeAutomatic,
+                onSelect = { stateManager.setDuplicateCheckModeAutomatic(it) },
+                languageManager = languageManager,
+                includeOff = true
+            )
+
+            if (settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_OFF) {
+                if (settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
+                    settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(languageManager.getString("automatic_protection_review_only_label"), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                languageManager.getString("automatic_protection_review_only_desc"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = settings.automaticProtectionReviewOnly,
+                            onCheckedChange = { stateManager.setAutomaticProtectionReviewOnly(it) }
                         )
                     }
                 }
 
-                val duplicateRules by stateManager.duplicateRules.collectAsStateWithLifecycle(initialValue = emptyList())
-                DuplicateRulesSection(
-                    rules = duplicateRules,
-                    globalCombinator = settings.duplicateRuleSetGlobalCombinator,
-                    onGlobalCombinatorChange = { stateManager.setDuplicateRuleSetGlobalCombinator(it) },
-                    onUpsertRule = { stateManager.upsertDuplicateRule(it) },
-                    onDeleteRule = { stateManager.deleteDuplicateRule(it) },
-                    onSetRuleEnabled = { id, enabled -> stateManager.setDuplicateRuleEnabled(id, enabled) },
-                    languageManager = languageManager
-                )
-            }
-        }
-
-        // --- Trigger: automatic (insert-time) protection ---
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(languageManager.getString("duplicate_check_automatic_label"), style = MaterialTheme.typography.labelLarge)
-                Text(
-                    languageManager.getString("duplicate_check_automatic_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                DuplicateModeChipRow(
-                    selected = settings.duplicateCheckModeAutomatic,
-                    onSelect = { stateManager.setDuplicateCheckModeAutomatic(it) },
-                    languageManager = languageManager,
-                    includeOff = true
-                )
-
-                if (settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_OFF) {
-                    if (settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
-                        settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
-                    ) {
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(languageManager.getString("automatic_protection_review_only_label"), style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    languageManager.getString("automatic_protection_review_only_desc"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = settings.automaticProtectionReviewOnly,
-                                onCheckedChange = { stateManager.setAutomaticProtectionReviewOnly(it) }
+                if (settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_LOCAL) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(languageManager.getString("auto_accept_duplicate_merges_label"), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                languageManager.getString("auto_accept_duplicate_merges_desc"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-
-                    if (settings.duplicateCheckModeAutomatic != ExpensesSettings.MODE_LOCAL) {
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(languageManager.getString("auto_accept_duplicate_merges_label"), style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    languageManager.getString("auto_accept_duplicate_merges_desc"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = settings.autoAcceptDuplicateMerges,
-                                onCheckedChange = { stateManager.setAutoAcceptDuplicateMerges(it) }
-                            )
-                        }
+                        Switch(
+                            checked = settings.autoAcceptDuplicateMerges,
+                            onCheckedChange = { stateManager.setAutoAcceptDuplicateMerges(it) }
+                        )
                     }
                 }
             }
         }
 
         // --- Manual trigger ---
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(languageManager.getString("duplicate_check_manual_label"), style = MaterialTheme.typography.labelLarge)
-                Text(
-                    languageManager.getString("duplicate_check_manual_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                DuplicateModeChipRow(
-                    selected = settings.duplicateCheckModeManual,
-                    onSelect = { stateManager.setDuplicateCheckModeManual(it) },
-                    languageManager = languageManager
-                )
+        SettingsSectionCard(languageManager.getString("duplicate_check_manual_label")) {
+            Text(
+                languageManager.getString("duplicate_check_manual_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            DuplicateModeChipRow(
+                selected = settings.duplicateCheckModeManual,
+                onSelect = { stateManager.setDuplicateCheckModeManual(it) },
+                languageManager = languageManager
+            )
 
-                if (expenses.size < 2) {
-                    Text(
-                        languageManager.getString("find_duplicate_expenses_need_two"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                } else {
-                    Button(
-                        onClick = checkNowGate.onClick,
-                        modifier = Modifier.fillMaxWidth().alpha(checkNowGate.alpha)
-                    ) {
-                        Text(languageManager.getString("find_duplicate_expenses_button"))
-                    }
+            if (expenses.size < 2) {
+                Text(
+                    languageManager.getString("find_duplicate_expenses_need_two"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Button(
+                    onClick = checkNowGate.onClick,
+                    modifier = Modifier.fillMaxWidth().alpha(checkNowGate.alpha)
+                ) {
+                    Text(languageManager.getString("find_duplicate_expenses_button"))
                 }
             }
         }
 
         // --- Schedule — reruns whatever the manual trigger's mode above is set to ---
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        languageManager.getString("scheduled_dedup_label"),
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (settings.scheduledExpenseDedupInterval != ExpensesSettings.INTERVAL_OFF && nextScheduledDedupMillis != null) {
-                        val format = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-                        Text(
-                            text = String.format(languageManager.getString("scheduled_dedup_next_run"), format.format(Date(nextScheduledDedupMillis))),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+        SettingsSectionCard(languageManager.getString("scheduled_dedup_label")) {
+            if (settings.scheduledExpenseDedupInterval != ExpensesSettings.INTERVAL_OFF && nextScheduledDedupMillis != null) {
+                val format = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
                 Text(
-                    languageManager.getString("scheduled_dedup_desc"),
+                    text = String.format(languageManager.getString("scheduled_dedup_next_run"), format.format(Date(nextScheduledDedupMillis))),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val options = listOf(
-                        ExpensesSettings.INTERVAL_OFF to "scheduled_dedup_off",
-                        ExpensesSettings.INTERVAL_HOURLY to "scheduled_dedup_hourly",
-                        ExpensesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
-                        ExpensesSettings.INTERVAL_WEEKLY to "scheduled_dedup_weekly",
-                        ExpensesSettings.INTERVAL_MONTHLY to "scheduled_dedup_monthly"
+            }
+            Text(
+                languageManager.getString("scheduled_dedup_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val options = listOf(
+                    ExpensesSettings.INTERVAL_OFF to "scheduled_dedup_off",
+                    ExpensesSettings.INTERVAL_HOURLY to "scheduled_dedup_hourly",
+                    ExpensesSettings.INTERVAL_DAILY to "scheduled_dedup_daily",
+                    ExpensesSettings.INTERVAL_WEEKLY to "scheduled_dedup_weekly",
+                    ExpensesSettings.INTERVAL_MONTHLY to "scheduled_dedup_monthly"
+                )
+                options.forEach { (interval, labelKey) ->
+                    FilterChip(
+                        selected = settings.scheduledExpenseDedupInterval == interval,
+                        onClick = { stateManager.setScheduledExpenseDedupInterval(context, interval) },
+                        label = { Text(languageManager.getString(labelKey)) }
                     )
-                    options.forEach { (interval, labelKey) ->
-                        FilterChip(
-                            selected = settings.scheduledExpenseDedupInterval == interval,
-                            onClick = { stateManager.setScheduledExpenseDedupInterval(context, interval) },
-                            label = { Text(languageManager.getString(labelKey)) }
-                        )
-                    }
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(languageManager.getString("batch_manual_review_label"), style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            languageManager.getString("batch_manual_review_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = settings.batchCleanupManualReview,
-                        onCheckedChange = { stateManager.setBatchCleanupManualReview(it) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("batch_manual_review_label"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("batch_manual_review_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Switch(
+                    checked = settings.batchCleanupManualReview,
+                    onCheckedChange = { stateManager.setBatchCleanupManualReview(it) }
+                )
             }
         }
 
         // --- Pending suggestion review ---
         if (resolvedGroups.isNotEmpty()) {
-            Text(languageManager.getString("duplicate_expenses_pending_title"), style = MaterialTheme.typography.labelLarge)
-
-            resolvedGroups.forEachIndexed { index, resolved ->
-                // All group members in one list so "which one survives" is just which radio
-                // button is selected, rather than a fixed keep/duplicates split — the detector's
-                // pick (resolved.group.keepId) is only the initial selection, not forced.
-                val members = remember(resolved) { listOf(resolved.keep) + resolved.duplicates }
-                val selectedId = selectedKeepIdByGroup[resolved.group.keepId] ?: resolved.group.keepId
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Checkbox(
-                                checked = index in checkedGroups,
-                                onCheckedChange = { checked ->
-                                    checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
-                                }
-                            )
-                            Column(modifier = Modifier.padding(top = 12.dp).weight(1f)) {
-                                members.forEach { member ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth().clickable {
-                                            selectedKeepIdByGroup = selectedKeepIdByGroup + (resolved.group.keepId to member.id)
-                                        }
-                                    ) {
-                                        RadioButton(
-                                            selected = member.id == selectedId,
-                                            onClick = {
+            SettingsSectionCard(languageManager.getString("duplicate_expenses_pending_title")) {
+                resolvedGroups.forEachIndexed { index, resolved ->
+                    // All group members in one list so "which one survives" is just which radio
+                    // button is selected, rather than a fixed keep/duplicates split — the detector's
+                    // pick (resolved.group.keepId) is only the initial selection, not forced.
+                    val members = remember(resolved) { listOf(resolved.keep) + resolved.duplicates }
+                    val selectedId = selectedKeepIdByGroup[resolved.group.keepId] ?: resolved.group.keepId
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Checkbox(
+                                    checked = index in checkedGroups,
+                                    onCheckedChange = { checked ->
+                                        checkedGroups = if (checked) checkedGroups + index else checkedGroups - index
+                                    }
+                                )
+                                Column(modifier = Modifier.padding(top = 12.dp).weight(1f)) {
+                                    members.forEach { member ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth().clickable {
                                                 selectedKeepIdByGroup = selectedKeepIdByGroup + (resolved.group.keepId to member.id)
                                             }
-                                        )
-                                        Column {
-                                            Text(
-                                                languageManager.getString(if (member.id == selectedId) "keep_label" else "duplicate_label"),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (member.id == selectedId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                        ) {
+                                            RadioButton(
+                                                selected = member.id == selectedId,
+                                                onClick = {
+                                                    selectedKeepIdByGroup = selectedKeepIdByGroup + (resolved.group.keepId to member.id)
+                                                }
                                             )
-                                            Text(expensePreview(member, languageManager), style = MaterialTheme.typography.bodyMedium)
+                                            Column {
+                                                Text(
+                                                    languageManager.getString(if (member.id == selectedId) "keep_label" else "duplicate_label"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (member.id == selectedId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                                )
+                                                Text(expensePreview(member, languageManager), style = MaterialTheme.typography.bodyMedium)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            IconButton(onClick = { stateManager.dismissExpenseDuplicateGroup(resolved.group) }) {
-                                Icon(
-                                    Icons.Filled.Close,
-                                    contentDescription = languageManager.getString("dismiss_group_content_description")
-                                )
+                                IconButton(onClick = { stateManager.dismissExpenseDuplicateGroup(resolved.group) }) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = languageManager.getString("dismiss_group_content_description")
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = { stateManager.dismissExpenseDeduplication() },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("dismiss_all_button"))
-                }
-                Button(
-                    onClick = {
-                        val checked = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it) }
-                        val original = checked.map { it.group }
-                        val effective = checked.map { resolved ->
-                            val memberIds = listOf(resolved.keep.id) + resolved.duplicates.map { it.id }
-                            val keepId = selectedKeepIdByGroup[resolved.group.keepId] ?: resolved.group.keepId
-                            DuplicateGroup(keepId = keepId, duplicateIds = memberIds.filterNot { it == keepId })
-                        }
-                        stateManager.approveExpenseDeduplication(original, effective)
-                    },
-                    enabled = checkedGroups.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("apply_selected_button"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { stateManager.dismissExpenseDeduplication() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(languageManager.getString("dismiss_all_button"))
+                    }
+                    Button(
+                        onClick = {
+                            val checked = checkedGroups.mapNotNull { resolvedGroups.getOrNull(it) }
+                            val original = checked.map { it.group }
+                            val effective = checked.map { resolved ->
+                                val memberIds = listOf(resolved.keep.id) + resolved.duplicates.map { it.id }
+                                val keepId = selectedKeepIdByGroup[resolved.group.keepId] ?: resolved.group.keepId
+                                DuplicateGroup(keepId = keepId, duplicateIds = memberIds.filterNot { it == keepId })
+                            }
+                            stateManager.approveExpenseDeduplication(original, effective)
+                        },
+                        enabled = checkedGroups.isNotEmpty(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(languageManager.getString("apply_selected_button"))
+                    }
                 }
             }
         }
@@ -483,52 +472,57 @@ fun CorrectionsSettingsPage(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         HowItWorksCard(languageManager.getString("cleanup_info_corrections"))
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(languageManager.getString("field_correction_memory_label"), style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            languageManager.getString("field_correction_memory_desc"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = settings.fieldCorrectionMemoryEnabled,
-                        onCheckedChange = { stateManager.setFieldCorrectionMemoryEnabled(it) }
+        SettingsSectionCard(languageManager.getString("field_correction_memory_label")) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    languageManager.getString("field_correction_memory_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = settings.fieldCorrectionMemoryEnabled,
+                    onCheckedChange = { stateManager.setFieldCorrectionMemoryEnabled(it) }
+                )
+            }
+        }
+
+        // Both tuning cards are dimmed together while the memory itself is off — they configure it.
+        val correctionAlpha = if (settings.fieldCorrectionMemoryEnabled) 1f else 0.4f
+        SettingsSectionCard(
+            title = languageManager.getString("field_correction_speed_label"),
+            modifier = Modifier.alpha(correctionAlpha)
+        ) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    ExpensesSettings.CORRECTION_SPEED_INSTANT to "field_correction_speed_instant",
+                    ExpensesSettings.CORRECTION_SPEED_FAST to "field_correction_speed_fast",
+                    ExpensesSettings.CORRECTION_SPEED_MEDIUM to "field_correction_speed_medium",
+                    ExpensesSettings.CORRECTION_SPEED_SLOW to "field_correction_speed_slow"
+                ).forEach { (count, labelKey) ->
+                    FilterChip(
+                        selected = settings.fieldCorrectionThreshold == count,
+                        onClick = { stateManager.setFieldCorrectionThreshold(count) },
+                        label = { Text(languageManager.getString(labelKey)) }
                     )
                 }
-                val correctionAlpha = if (settings.fieldCorrectionMemoryEnabled) 1f else 0.4f
-                Column(modifier = Modifier.alpha(correctionAlpha), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(languageManager.getString("field_correction_speed_label"), style = MaterialTheme.typography.labelLarge)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            ExpensesSettings.CORRECTION_SPEED_INSTANT to "field_correction_speed_instant",
-                            ExpensesSettings.CORRECTION_SPEED_FAST to "field_correction_speed_fast",
-                            ExpensesSettings.CORRECTION_SPEED_MEDIUM to "field_correction_speed_medium",
-                            ExpensesSettings.CORRECTION_SPEED_SLOW to "field_correction_speed_slow"
-                        ).forEach { (count, labelKey) ->
-                            FilterChip(
-                                selected = settings.fieldCorrectionThreshold == count,
-                                onClick = { stateManager.setFieldCorrectionThreshold(count) },
-                                label = { Text(languageManager.getString(labelKey)) }
-                            )
-                        }
-                    }
-                    Text(languageManager.getString("field_correction_apply_mode_label"), style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            ExpensesSettings.CORRECTION_APPLY_SUGGEST to "field_correction_apply_suggest",
-                            ExpensesSettings.CORRECTION_APPLY_AUTO to "field_correction_apply_auto"
-                        ).forEach { (mode, labelKey) ->
-                            FilterChip(
-                                selected = settings.fieldCorrectionApplyMode == mode,
-                                onClick = { stateManager.setFieldCorrectionApplyMode(mode) },
-                                label = { Text(languageManager.getString(labelKey)) }
-                            )
-                        }
-                    }
+            }
+        }
+
+        SettingsSectionCard(
+            title = languageManager.getString("field_correction_apply_mode_label"),
+            modifier = Modifier.alpha(correctionAlpha)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    ExpensesSettings.CORRECTION_APPLY_SUGGEST to "field_correction_apply_suggest",
+                    ExpensesSettings.CORRECTION_APPLY_AUTO to "field_correction_apply_auto"
+                ).forEach { (mode, labelKey) ->
+                    FilterChip(
+                        selected = settings.fieldCorrectionApplyMode == mode,
+                        onClick = { stateManager.setFieldCorrectionApplyMode(mode) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
                 }
             }
         }
@@ -598,81 +592,83 @@ fun NotificationTemplatesSettingsPage(
 
     Column(
         modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         HowItWorksCard(languageManager.getString("cleanup_info_templates"))
-        if (templates.isEmpty()) {
-            Text(
-                languageManager.getString("template_list_empty"),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        templates.forEach { t ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = t.skeleton ?: languageManager.getString("template_skeleton_pending"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (t.skeleton != null) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val statusKey = when {
-                            t.conflicted -> "template_quarantined"
-                            t.answersDirection -> "template_active"
-                            else -> "template_learning"
-                        }
+        SettingsSectionCard(languageManager.getString("cleanup_templates_title")) {
+            if (templates.isEmpty()) {
+                Text(
+                    languageManager.getString("template_list_empty"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            templates.forEach { t ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            languageManager.getString(statusKey),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = when {
-                                t.conflicted -> MaterialTheme.colorScheme.error
-                                t.answersDirection -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            text = t.skeleton ?: languageManager.getString("template_skeleton_pending"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (t.skeleton != null) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (t.answersDirection) {
-                            val directionKey = if (t.direction.equals("incoming", ignoreCase = true)) {
-                                "transaction_direction_incoming"
-                            } else {
-                                "transaction_direction_outgoing"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val statusKey = when {
+                                t.conflicted -> "template_quarantined"
+                                t.answersDirection -> "template_active"
+                                else -> "template_learning"
                             }
                             Text(
-                                languageManager.getString(directionKey),
+                                languageManager.getString(statusKey),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = when {
+                                    t.conflicted -> MaterialTheme.colorScheme.error
+                                    t.answersDirection -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                            if (t.answersDirection) {
+                                val directionKey = if (t.direction.equals("incoming", ignoreCase = true)) {
+                                    "transaction_direction_incoming"
+                                } else {
+                                    "transaction_direction_outgoing"
+                                }
+                                Text(
+                                    languageManager.getString(directionKey),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                String.format(languageManager.getString("template_confirmations_format"), t.confirmations),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
                             )
                         }
-                        Text(
-                            String.format(languageManager.getString("template_confirmations_format"), t.confirmations),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (t.conflicted) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (t.conflicted) {
+                                OutlinedButton(onClick = {
+                                    scope.launch {
+                                        stateManager.reteachLearnedTemplate(t.hash)
+                                        refreshKey++
+                                    }
+                                }) {
+                                    Text(languageManager.getString("template_reteach_button"))
+                                }
+                            }
                             OutlinedButton(onClick = {
                                 scope.launch {
-                                    stateManager.reteachLearnedTemplate(t.hash)
+                                    stateManager.forgetLearnedTemplate(t.hash)
                                     refreshKey++
                                 }
                             }) {
-                                Text(languageManager.getString("template_reteach_button"))
+                                Text(languageManager.getString("template_forget_button"))
                             }
-                        }
-                        OutlinedButton(onClick = {
-                            scope.launch {
-                                stateManager.forgetLearnedTemplate(t.hash)
-                                refreshKey++
-                            }
-                        }) {
-                            Text(languageManager.getString("template_forget_button"))
                         }
                     }
                 }

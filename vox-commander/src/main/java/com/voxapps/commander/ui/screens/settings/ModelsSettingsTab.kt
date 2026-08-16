@@ -73,63 +73,6 @@ fun ModelsSettingsTab(
                 onClick = { focusManager.clearFocus() }
             )
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // --- OFFLINE FALLBACK SECTION ---
-        Text(text = languageManager.getString("offline_fallback_section"), style = MaterialTheme.typography.titleMedium)
-
-        val timeoutOptions = listOf(
-            5 to "5 s", 10 to "10 s", 20 to "20 s", 35 to "35 s", 50 to "50 s",
-            60 to "1 min", 300 to "5 min", 600 to "10 min"
-        )
-    
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = languageManager.getString("timeout_label"), style = MaterialTheme.typography.labelLarge)
-
-            Picklist(
-                items = timeoutOptions,
-                // A stored value the option list does not offer still has to name itself — it can
-                // come from a backup written when the list was different.
-                selected = timeoutOptions.find { it.first == offlineFallbackTimeout }
-                    ?: (offlineFallbackTimeout to "$offlineFallbackTimeout s"),
-                itemLabel = { it.second },
-                onSelect = { (seconds, _) ->
-                    offlineFallbackTimeout = seconds
-                    appStateManager.setOfflineFallbackTimeout(seconds)
-                },
-                // Sits at the end of its own labelled row, so it takes the inline anchor and a menu
-                // that drops from the button rather than spanning the row.
-                anchor = { label, onClick -> PicklistCompactAnchor(label, onClick) },
-                menuFillsWidth = false
-            )
-        }
-
-        if (uiState.defaultVoiceFallbackProcessor != null && uiState.defaultVoiceFallbackModel != null) {
-            val allVoiceModels = RemoteModelRegistry.getEngineKeysByType("voice").flatMap { uiState.availableModels[it] ?: emptyList() }
-
-            val voiceModelLabel = allVoiceModels.find { it.id == uiState.defaultVoiceFallbackModel }?.label ?: uiState.defaultVoiceFallbackModel
-            Text(
-                text = "Voice: ${uiState.defaultVoiceFallbackProcessor} ($voiceModelLabel)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary
-            )
-        }
-
-        if (uiState.defaultIntentFallbackProcessor != null && uiState.defaultIntentFallbackModel != null) {
-            val intentModelLabel = nluModels.find { it.id == uiState.defaultIntentFallbackModel }?.label ?: uiState.defaultIntentFallbackModel
-            Text(
-                text = "Intent: ${uiState.defaultIntentFallbackProcessor} ($intentModelLabel)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary
-            )
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
         // --- ENGINE SUB-TABS ---
         TabRow(
             selectedTabIndex = selectedSubTab,

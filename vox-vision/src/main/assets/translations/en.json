@@ -76,5 +76,6 @@
   "auto_capture_2s": "Auto — 2s",
   "auto_capture_3s": "Auto — 3s",
   "auto_capture_5s": "Auto — 5s",
-  "auto_capture_countdown": "Capturing in %1$ds…"
+  "auto_capture_countdown": "Capturing in %1$ds…",
+  "logging_section": "Logging"
 }

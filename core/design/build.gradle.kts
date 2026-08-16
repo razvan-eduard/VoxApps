@@ -23,7 +23,9 @@ android {
 
 dependencies {
     implementation(project(":core:services"))
-    implementation(project(":core:logging"))
+    // api, not implementation: LogsSettingsTab's strings carry a LogViewerStrings from this module,
+    // so a caller naming the type needs it on its compile classpath.
+    api(project(":core:logging"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

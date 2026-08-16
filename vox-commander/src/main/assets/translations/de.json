@@ -114,7 +114,7 @@
   "app_alias_delete_msg": "Alias-Regel für \"${displayName}\" löschen? Aliase: ${aliases}",
   "save_button": "Speichern",
   "tab_advanced": "Erweitert",
-  "tab_backup": "Backup & Diagnose",
+  "tab_backup": "Sicherung",
   "engine_api_key": "API-Schlüssel",
   "tab_benchmark": "Diagnose",
   "tab_verbose_logging": "Detaillierte Logs",
@@ -553,5 +553,17 @@
   "backup_import_mode_additive": "Additiv",
   "backup_import_mode_caveat_merge": "Am sichersten: stellt die Datei wieder her und löscht nur Einträge, die beim Export existierten — alles danach Erstellte bleibt.",
   "backup_import_mode_caveat_full_override": "LÖSCHT alles — auch NACH dem Backup erstellte Einträge — und stellt nur den Dateiinhalt wieder her.",
-  "backup_import_mode_caveat_additive": "Löscht nie etwas — dieselbe Datei erneut wiederherzustellen DUPLIZIERT die Einträge."
+  "backup_import_mode_caveat_additive": "Löscht nie etwas — dieselbe Datei erneut wiederherzustellen DUPLIZIERT die Einträge.",
+  "logging_section": "Protokollierung",
+  "intent_engine_section": "Absichts-Engine",
+  "ww_detection_section": "Erkennung",
+  "tts_playback_section": "Stimme und Wiedergabe",
+  "return_after_action_section": "Zurück zur vorherigen App",
+  "app_control_section": "Steuerung und Automatisierung",
+  "external_trigger_section": "Externer Sprachauslöser",
+  "integrations_apps_title": "Verbundene Apps",
+  "youtube_url_engine": "YouTube-URL-Engine",
+  "piped_section": "Piped",
+  "logs_settings_title": "Protokolle",
+  "tab_diagnostics": "Diagnose"
 }

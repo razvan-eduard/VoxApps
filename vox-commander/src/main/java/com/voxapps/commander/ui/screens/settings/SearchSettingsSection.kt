@@ -52,8 +52,6 @@ fun SearchSettingsSection(
 
     val categories = SearchProviderRegistry.categories
 
-    Text(text = languageManager.getString("search_section"), style = MaterialTheme.typography.titleMedium)
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CommanderLocationSettingsSection(
             settingsRepo = settingsRepo,

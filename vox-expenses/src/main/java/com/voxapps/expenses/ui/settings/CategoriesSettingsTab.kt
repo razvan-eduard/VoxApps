@@ -22,7 +22,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.StarBorder
 import com.voxapps.design.color.VoxSwatchShapes
@@ -54,6 +53,7 @@ import com.voxapps.expenses.ui.CategoryColors
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.design.color.VoxColorPalette
+import com.voxapps.design.settings.SettingsSectionCard
 
 /**
  * Category CRUD, the Auto-Merge Categories trigger + schedule, and — unlike vox-notes, where the
@@ -94,183 +94,184 @@ fun CategoriesSettingsTab(
     }
     var checkedEntries by remember(resolvedEntries) { mutableStateOf(resolvedEntries.indices.toSet()) }
 
-    Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(languageManager.getString("categories_settings_title"), style = MaterialTheme.typography.titleMedium)
+    Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SettingsSectionCard(languageManager.getString("categories_settings_title")) {
 
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(categories, key = { it.id }) { cat ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // The fallback wears a star instead of a dot and reads "(main)", the same way
-                    // the calendar marks the layer entries fall back to.
-                    Box(
-                        modifier = Modifier
-                            .size(if (cat.isDefault) 17.dp else 14.dp)
-                            .clip(if (cat.isDefault) VoxSwatchShapes.Star else CircleShape)
-                            .background(CategoryColors.fromStored(cat.colorArgb))
-                    )
-                    Text(
-                        if (cat.isDefault) {
-                            "${cat.name} (${languageManager.getString("default_category_suffix")})"
-                        } else {
-                            cat.name
-                        },
-                        modifier = Modifier.weight(1f).padding(start = 8.dp)
-                    )
-                    if (!cat.isDefault) {
-                        IconButton(onClick = { stateManager.setDefaultCategory(cat.id) }) {
-                            Icon(
-                                Icons.Filled.StarBorder,
-                                contentDescription = languageManager.getString("set_default_category")
-                            )
-                        }
-                        IconButton(onClick = { pendingDeleteCategory = cat }) {
-                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(categories, key = { it.id }) { cat ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // The fallback wears a star instead of a dot and reads "(main)", the same way
+                        // the calendar marks the layer entries fall back to.
+                        Box(
+                            modifier = Modifier
+                                .size(if (cat.isDefault) 17.dp else 14.dp)
+                                .clip(if (cat.isDefault) VoxSwatchShapes.Star else CircleShape)
+                                .background(CategoryColors.fromStored(cat.colorArgb))
+                        )
+                        Text(
+                            if (cat.isDefault) {
+                                "${cat.name} (${languageManager.getString("default_category_suffix")})"
+                            } else {
+                                cat.name
+                            },
+                            modifier = Modifier.weight(1f).padding(start = 8.dp)
+                        )
+                        if (!cat.isDefault) {
+                            IconButton(onClick = { stateManager.setDefaultCategory(cat.id) }) {
+                                Icon(
+                                    Icons.Filled.StarBorder,
+                                    contentDescription = languageManager.getString("set_default_category")
+                                )
+                            }
+                            IconButton(onClick = { pendingDeleteCategory = cat }) {
+                                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (addingNew) {
-            var newColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
-            OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                label = { Text(languageManager.getString("category_name")) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            VoxColorSwatchPicker(
-                selectedColor = newColor,
-                onColorSelected = { newColor = it },
-                modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
-                customColorDialogTitle = languageManager.getString("custom_color_title"),
-                customColorUseLabel = languageManager.getString("use_color_button"),
-                customColorCancelLabel = languageManager.getString("cancel"),
-                customColorHueLabel = languageManager.getString("hue_label"),
-                customColorSaturationLabel = languageManager.getString("saturation_label"),
-                customColorBrightnessLabel = languageManager.getString("brightness_label")
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    if (newName.isNotBlank()) {
-                        stateManager.addCategory(newName.trim(), newColor)
+            if (addingNew) {
+                var newColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text(languageManager.getString("category_name")) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                VoxColorSwatchPicker(
+                    selectedColor = newColor,
+                    onColorSelected = { newColor = it },
+                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                    customColorDialogTitle = languageManager.getString("custom_color_title"),
+                    customColorUseLabel = languageManager.getString("use_color_button"),
+                    customColorCancelLabel = languageManager.getString("cancel"),
+                    customColorHueLabel = languageManager.getString("hue_label"),
+                    customColorSaturationLabel = languageManager.getString("saturation_label"),
+                    customColorBrightnessLabel = languageManager.getString("brightness_label")
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        if (newName.isNotBlank()) {
+                            stateManager.addCategory(newName.trim(), newColor)
+                        }
+                        newName = ""
+                        addingNew = false
+                    }) { Text(languageManager.getString("save")) }
+                    TextButton(onClick = { addingNew = false; newName = "" }) {
+                        Text(languageManager.getString("cancel"))
                     }
-                    newName = ""
-                    addingNew = false
-                }) { Text(languageManager.getString("save")) }
-                TextButton(onClick = { addingNew = false; newName = "" }) {
-                    Text(languageManager.getString("cancel"))
+                }
+            } else {
+                TextButton(onClick = { addingNew = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text(languageManager.getString("add_category"))
                 }
             }
-        } else {
-            TextButton(onClick = { addingNew = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Text(languageManager.getString("add_category"))
-            }
-        }
 
-        HorizontalDivider()
+        }
 
         // --- Auto-Merge Categories (manual trigger) ---
-        Text(languageManager.getString("auto_merge_categories_button"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("auto_merge_categories_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (categories.size < 2) {
+        SettingsSectionCard(languageManager.getString("auto_merge_categories_button")) {
             Text(
-                languageManager.getString("auto_merge_categories_need_two"),
+                languageManager.getString("auto_merge_categories_desc"),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        } else {
-            Button(
-                onClick = autoMergeGate.onClick,
-                modifier = Modifier.fillMaxWidth().alpha(autoMergeGate.alpha)
-            ) {
-                Text(languageManager.getString("auto_merge_categories_button"))
+
+            if (categories.size < 2) {
+                Text(
+                    languageManager.getString("auto_merge_categories_need_two"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Button(
+                    onClick = autoMergeGate.onClick,
+                    modifier = Modifier.fillMaxWidth().alpha(autoMergeGate.alpha)
+                ) {
+                    Text(languageManager.getString("auto_merge_categories_button"))
+                }
             }
+
         }
 
-        HorizontalDivider()
-
         // --- Scheduled Auto-Merge ---
-        Text(languageManager.getString("scheduled_merge_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("scheduled_merge_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                ExpensesSettings.INTERVAL_OFF to "scheduled_merge_off",
-                ExpensesSettings.INTERVAL_DAILY to "scheduled_merge_daily",
-                ExpensesSettings.INTERVAL_WEEKLY to "scheduled_merge_weekly",
-                ExpensesSettings.INTERVAL_MONTHLY to "scheduled_merge_monthly"
+        SettingsSectionCard(languageManager.getString("scheduled_merge_label")) {
+            Text(
+                languageManager.getString("scheduled_merge_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            options.forEach { (interval, labelKey) ->
-                FilterChip(
-                    selected = settings.scheduledMergeInterval == interval,
-                    onClick = { stateManager.setScheduledMergeInterval(context, interval) },
-                    label = { Text(languageManager.getString(labelKey)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val options = listOf(
+                    ExpensesSettings.INTERVAL_OFF to "scheduled_merge_off",
+                    ExpensesSettings.INTERVAL_DAILY to "scheduled_merge_daily",
+                    ExpensesSettings.INTERVAL_WEEKLY to "scheduled_merge_weekly",
+                    ExpensesSettings.INTERVAL_MONTHLY to "scheduled_merge_monthly"
                 )
+                options.forEach { (interval, labelKey) ->
+                    FilterChip(
+                        selected = settings.scheduledMergeInterval == interval,
+                        onClick = { stateManager.setScheduledMergeInterval(context, interval) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
             }
+
         }
 
         // --- Pending merge suggestion review ---
         if (resolvedEntries.isNotEmpty()) {
-            HorizontalDivider()
-            Text(languageManager.getString("category_merge_pending_title"), style = MaterialTheme.typography.labelLarge)
-
-            resolvedEntries.forEachIndexed { index, (oldName, canonicalName) ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = index in checkedEntries,
-                            onCheckedChange = { checked ->
-                                checkedEntries = if (checked) checkedEntries + index else checkedEntries - index
+            SettingsSectionCard(languageManager.getString("category_merge_pending_title")) {
+                resolvedEntries.forEachIndexed { index, (oldName, canonicalName) ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = index in checkedEntries,
+                                onCheckedChange = { checked ->
+                                    checkedEntries = if (checked) checkedEntries + index else checkedEntries - index
+                                }
+                            )
+                            Column(modifier = Modifier.padding(start = 4.dp)) {
+                                Text(
+                                    languageManager.getString("duplicate_label"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Text(oldName, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    languageManager.getString("keep_label"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                                Text(canonicalName, style = MaterialTheme.typography.bodyMedium)
                             }
-                        )
-                        Column(modifier = Modifier.padding(start = 4.dp)) {
-                            Text(
-                                languageManager.getString("duplicate_label"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Text(oldName, style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                languageManager.getString("keep_label"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-                            Text(canonicalName, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
-            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = { stateManager.dismissCategoryMerge() },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("dismiss_all_button"))
-                }
-                Button(
-                    onClick = {
-                        val approved = checkedEntries.mapNotNull { resolvedEntries.getOrNull(it) }.toMap()
-                        stateManager.approveCategoryMerge(approved)
-                    },
-                    enabled = checkedEntries.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("apply_selected_button"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { stateManager.dismissCategoryMerge() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(languageManager.getString("dismiss_all_button"))
+                    }
+                    Button(
+                        onClick = {
+                            val approved = checkedEntries.mapNotNull { resolvedEntries.getOrNull(it) }.toMap()
+                            stateManager.approveCategoryMerge(approved)
+                        },
+                        enabled = checkedEntries.isNotEmpty(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(languageManager.getString("apply_selected_button"))
+                    }
                 }
             }
         }

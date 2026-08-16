@@ -123,5 +123,8 @@
   "sync_scope_no_categories": "Aucune catégorie trouvée pour cette application",
   "import_mode_caveat_merge": "Le plus sûr : restaure le fichier et ne supprime que les enregistrements existant à l'export — tout ce qui a été créé ensuite est conservé.",
   "import_mode_caveat_full_override": "SUPPRIME tout dans les applications activées — y compris les enregistrements créés APRÈS la sauvegarde — puis ne restaure que le contenu du fichier.",
-  "import_mode_caveat_additive": "Ne supprime jamais rien — réimporter le même fichier DUPLIQUE ses enregistrements."
+  "import_mode_caveat_additive": "Ne supprime jamais rien — réimporter le même fichier DUPLIQUE ses enregistrements.",
+  "logging_section": "Journalisation",
+  "backup_frequency_label": "Fréquence",
+  "voxconnect_bridge_section": "Passerelle"
 }

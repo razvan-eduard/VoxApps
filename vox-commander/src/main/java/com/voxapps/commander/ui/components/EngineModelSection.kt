@@ -31,6 +31,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun <T> EngineModelSection(
     title: String,
+    /** False when the section already sits inside a titled card, so the header would repeat it.
+     *  The title is still used by the selection sheet either way. */
+    showHeaderTitle: Boolean = true,
     settingsRepo: SettingsRepository,
     appStateManager: AppStateManager,
     /** The caption above the rows, and the rows. There was a list of sections here and every caller
@@ -87,7 +90,11 @@ fun <T> EngineModelSection(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = title, style = MaterialTheme.typography.labelLarge)
+        if (showHeaderTitle) {
+            Text(text = title, style = MaterialTheme.typography.labelLarge)
+        } else {
+            Spacer(modifier = Modifier.width(0.dp))
+        }
         if (onShowInfo != null) {
             IconButton(onClick = onShowInfo) {
                 Icon(Icons.Outlined.Info, contentDescription = "Info")

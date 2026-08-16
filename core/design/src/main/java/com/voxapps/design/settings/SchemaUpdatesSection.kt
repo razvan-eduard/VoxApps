@@ -85,7 +85,6 @@ fun SchemaUpdatesSection(
     var refreshedAt by remember { mutableStateOf(0) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(strings.sectionLabel, style = MaterialTheme.typography.titleSmall)
         Text(
             text = strings.description,
             style = MaterialTheme.typography.bodySmall,
