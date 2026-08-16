@@ -49,13 +49,31 @@ object ScanItemsReader {
         val columnar = TableItemsPreParse.parse(rawText, targets.invoiceTotal)
             ?.map { LineItemBattery.Row(it.name, it.quantity, it.unitPrice) }
 
-        val reading = LineItemBattery.read(
-            itemsText = sections.items,
-            targets = targets,
-            columnarRows = columnar,
-            preferredTemplateId = preferredTemplateId
-        ) ?: run {
-            Logger.d(TAG, "No reading of this document reconciles — emitting no items")
+        // Two bodies of text are worth reading, and which one carries the rows varies by scan.
+        //
+        // The items section holds the column reconstruction, whose cells are separated by " | " and
+        // whose gaps are "-" — a shape the patterns cannot match, so it is flattened back to plain
+        // spacing for them. The plain reading-order text is the other: it sits before the markers,
+        // belongs to no section, and on a well-photographed page it already reads
+        // "… pers 2 2.35 4.70 0.99", exactly what the strict pattern wants. A reconstruction that
+        // fragmented a row can leave the plain text the better of the two, so both are offered and
+        // the arithmetic decides.
+        val candidates = listOf(flattenColumns(sections.items), TableItemsPreParse.plainText(rawText))
+            .filter { it.isNotBlank() }
+
+        val reading = candidates.firstNotNullOfOrNull { text ->
+            LineItemBattery.read(
+                itemsText = text,
+                targets = targets,
+                columnarRows = columnar,
+                preferredTemplateId = preferredTemplateId
+            )
+        } ?: run {
+            Logger.d(
+                TAG,
+                "No reading of this document reconciles — emitting no items " +
+                    "(targets: ${targets.accepted().joinToString()})"
+            )
             return null
         }
 
@@ -86,6 +104,24 @@ object ScanItemsReader {
             .distinct()
             .take(MAX_FOOTER_CANDIDATES)
             .toList()
+
+    /**
+     * The reconstruction's rows as ordinary spaced text: cell separators become spaces and empty
+     * cells disappear.
+     *
+     * The columns are still doing their work — this is the reconstruction's own row grouping, which
+     * is what makes each line one printed row — but the patterns read words and numbers, not a
+     * table format, so the punctuation that carried the structure is removed before they see it.
+     */
+    private fun flattenColumns(itemsSection: String): String =
+        itemsSection.lines()
+            .joinToString("\n") { line ->
+                line.split(" | ")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && it != "-" }
+                    .joinToString(" ")
+            }
+            .trim()
 
     private val AMOUNT = Regex("""\d{1,3}(?:[ .,]\d{3})*[.,]\d{1,2}|\d+[.,]\d{1,2}""")
 
