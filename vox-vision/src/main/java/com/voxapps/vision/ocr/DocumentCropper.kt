@@ -66,6 +66,17 @@ object DocumentCropper {
         HIGH(0.03)
     }
 
+    /**
+     * How much of the document's own size to keep beyond each detected edge, in [warp].
+     *
+     * Corner detection is accurate but not exact, and its errors are not symmetric in consequence:
+     * a crop a little too wide costs a band of background that recognises as nothing, while a crop a
+     * little too tight costs whatever was printed nearest the edge — and on an invoice that is the
+     * totals block and the outermost column. Small enough that the extra band stays background on a
+     * normally framed photograph.
+     */
+    private const val EDGE_MARGIN_FRACTION = 0.025
+
     private const val DOCQUAD_MODEL_ASSET_PATH = "docquad/docquadnet256_trained_opset17.ort"
 
     @Volatile
@@ -112,8 +123,16 @@ object DocumentCropper {
             // FALLBACK_MIN_AREA_FRACTION's doc comment). A plain axis-aligned crop to the largest
             // blob's bounding rect is still strictly better than keeping the whole background.
             findLargestBlobRect(gray, FALLBACK_MIN_AREA_FRACTION)?.let { rect ->
-                Logger.d("DocumentCropper", "crop: bounding-rect fallback -> ${rect.width}x${rect.height}")
-                return Bitmap.createBitmap(bitmap, rect.x, rect.y, rect.width, rect.height)
+                // The same margin the warp keeps, here limited by the photograph's own edges since
+                // an axis-aligned crop can only take pixels that exist.
+                val padX = (rect.width * EDGE_MARGIN_FRACTION).toInt()
+                val padY = (rect.height * EDGE_MARGIN_FRACTION).toInt()
+                val left = (rect.x - padX).coerceAtLeast(0)
+                val top = (rect.y - padY).coerceAtLeast(0)
+                val right = (rect.x + rect.width + padX).coerceAtMost(bitmap.width)
+                val bottom = (rect.y + rect.height + padY).coerceAtMost(bitmap.height)
+                Logger.d("DocumentCropper", "crop: bounding-rect fallback -> ${right - left}x${bottom - top}")
+                return Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
             }
             Logger.d("DocumentCropper", "crop: no crop, returning original ${bitmap.width}x${bitmap.height}")
             return bitmap
@@ -453,14 +472,30 @@ object DocumentCropper {
         val width = max(dist(bottomRight, bottomLeft), dist(topRight, topLeft))
         val height = max(dist(topRight, bottomRight), dist(topLeft, bottomLeft))
 
+        // The document is placed inside a slightly larger canvas rather than filling it exactly, so
+        // the warp keeps a margin of whatever surrounded the detected edge.
+        //
+        // Mapping the four corners straight onto the output rectangle makes the detector's opinion
+        // of where the paper ends the definition of where the image ends, and a corner that lands a
+        // few pixels inside the sheet silently takes the outermost line of print with it — the
+        // totals block and the last column are what sit closest to an edge. Insetting the
+        // destination extends the same homography beyond the quad instead of clipping at it, so the
+        // border is real photographed pixels, at the same scale, and only runs to black where the
+        // photograph itself ended. Recovering a lost line costs far less than the strip of desk this
+        // brings with it, which OCR reads as nothing at all.
+        val marginX = width * EDGE_MARGIN_FRACTION
+        val marginY = height * EDGE_MARGIN_FRACTION
         val src = MatOfPoint2f(topLeft, topRight, bottomRight, bottomLeft)
         val dst = MatOfPoint2f(
-            Point(0.0, 0.0), Point(width, 0.0), Point(width, height), Point(0.0, height)
+            Point(marginX, marginY),
+            Point(marginX + width, marginY),
+            Point(marginX + width, marginY + height),
+            Point(marginX, marginY + height)
         )
         val transform = Geometry.getPerspectiveTransform(src, dst)
         val warped = Mat()
         try {
-            Imgproc.warpPerspective(rgba, warped, transform, Size(width, height))
+            Imgproc.warpPerspective(rgba, warped, transform, Size(width + 2 * marginX, height + 2 * marginY))
             val result = Bitmap.createBitmap(warped.cols(), warped.rows(), Bitmap.Config.ARGB_8888)
             Utils.matToBitmap(warped, result)
             return result
