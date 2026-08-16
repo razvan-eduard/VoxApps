@@ -620,14 +620,48 @@ class ExpensesRepository(
     suspend fun addCategory(name: String, colorArgb: Long, position: Int, createdAt: Long): Long {
         val clean = name.trim()
         if (clean.isEmpty()) return -1
+        // The very first category becomes the fallback, so an install always has one without anybody
+        // being asked to choose. See [Category.isDefault].
+        val isFirst = categoryDao.getAll().isEmpty()
         return categoryDao.insert(
-            Category(name = clean, colorArgb = colorArgb, position = position, createdAt = createdAt)
+            Category(
+                name = clean,
+                colorArgb = colorArgb,
+                position = position,
+                createdAt = createdAt,
+                isDefault = isFirst
+            )
         )
+    }
+
+    /** The category a record falls back to, or null on an install with no categories at all. */
+    suspend fun defaultCategory(): Category? =
+        categoryDao.getAll().let { all -> all.firstOrNull { it.isDefault } ?: all.minByOrNull { it.position } }
+
+    /**
+     * Moves the fallback, keeping exactly one.
+     *
+     * The invariant lives here rather than in the schema, as the calendar's does: a unique index
+     * would make the intermediate state of any move illegal, and there is no moment at which having
+     * none is acceptable either.
+     */
+    suspend fun setDefaultCategory(categoryId: Long) {
+        val all = categoryDao.getAll()
+        if (all.none { it.id == categoryId }) return
+        for (category in all) {
+            val shouldBeDefault = category.id == categoryId
+            if (category.isDefault != shouldBeDefault) {
+                categoryDao.update(category.copy(isDefault = shouldBeDefault))
+            }
+        }
     }
 
     suspend fun updateCategory(category: Category) = categoryDao.update(category)
 
     suspend fun deleteCategory(category: Category) {
+        // The fallback is never deleted — there has to be somewhere for a record with no opinion to
+        // land, and silently choosing a new one would move every future record without saying so.
+        if (category.isDefault) return
         expenseDao.clearCategory(category.id)
         spendingLimitDao.clearCategory(category.id)
         // Referential cleanup mirroring the old memory's clearCategory: rules lose the set-entry

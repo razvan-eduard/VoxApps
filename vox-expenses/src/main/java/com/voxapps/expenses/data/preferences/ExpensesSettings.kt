@@ -76,6 +76,15 @@ data class ExpensesSettings(
     val defaultVoiceCategoryId: Long? = null,
     val voiceSaveToastEnabled: Boolean = false,
     val autoCreateVoiceCategory: Boolean = false,
+    /**
+     * How much of a scan the model is asked to do — see [SCAN_MODEL_FULL] and its siblings.
+     *
+     * Defaults to asking for everything, which is what installs already do. The point of the lower
+     * settings is that the deterministic reader now extracts line items, totals and a vendor on its
+     * own, so a person who would rather not send a receipt anywhere can have the scan work without
+     * a model at all rather than losing the feature.
+     */
+    val scanModelUse: String = SCAN_MODEL_FULL,
     val scheduledMergeInterval: String = INTERVAL_OFF,
     val scheduledExpenseDedupInterval: String = INTERVAL_OFF,
     val homeCurrency: String = DEFAULT_CURRENCY,
@@ -229,6 +238,23 @@ data class ExpensesSettings(
         const val DEFAULT_CURRENCY = "RON"
 
         const val INTERVAL_OFF = "OFF"
+
+        /** The model reads everything: it may correct recognition, infer a category, name the vendor. */
+        const val SCAN_MODEL_FULL = "FULL"
+
+        /** Items and totals come from the deterministic reader; the model is asked only for the
+         *  fields no arithmetic can confirm — vendor, title, category — and its answer is applied. */
+        const val SCAN_MODEL_HEADER_FOOTER_AUTO = "HEADER_FOOTER_AUTO"
+
+        /** The same, surfaced as suggestions to accept rather than applied. */
+        const val SCAN_MODEL_HEADER_FOOTER_SUGGEST = "HEADER_FOOTER_SUGGEST"
+
+        /** Nothing leaves the device: the scan is read entirely by the deterministic path. */
+        const val SCAN_MODEL_NONE = "NONE"
+
+        val SCAN_MODEL_CHOICES = listOf(
+            SCAN_MODEL_FULL, SCAN_MODEL_HEADER_FOOTER_AUTO, SCAN_MODEL_HEADER_FOOTER_SUGGEST, SCAN_MODEL_NONE
+        )
         const val INTERVAL_HOURLY = "HOURLY"
         const val INTERVAL_DAILY = "DAILY"
         const val INTERVAL_WEEKLY = "WEEKLY"

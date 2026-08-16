@@ -24,6 +24,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.StarBorder
+import com.voxapps.design.color.VoxSwatchShapes
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -101,15 +103,32 @@ fun CategoriesSettingsTab(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // The fallback wears a star instead of a dot and reads "(main)", the same way
+                    // the calendar marks the layer entries fall back to.
                     Box(
                         modifier = Modifier
-                            .size(14.dp)
-                            .clip(CircleShape)
+                            .size(if (cat.isDefault) 17.dp else 14.dp)
+                            .clip(if (cat.isDefault) VoxSwatchShapes.Star else CircleShape)
                             .background(CategoryColors.fromStored(cat.colorArgb))
                     )
-                    Text(cat.name, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                    IconButton(onClick = { pendingDeleteCategory = cat }) {
-                        Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
+                    Text(
+                        if (cat.isDefault) {
+                            "${cat.name} (${languageManager.getString("default_category_suffix")})"
+                        } else {
+                            cat.name
+                        },
+                        modifier = Modifier.weight(1f).padding(start = 8.dp)
+                    )
+                    if (!cat.isDefault) {
+                        IconButton(onClick = { stateManager.setDefaultCategory(cat.id) }) {
+                            Icon(
+                                Icons.Filled.StarBorder,
+                                contentDescription = languageManager.getString("set_default_category")
+                            )
+                        }
+                        IconButton(onClick = { pendingDeleteCategory = cat }) {
+                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
+                        }
                     }
                 }
             }

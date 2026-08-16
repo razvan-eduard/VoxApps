@@ -21,7 +21,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         ExpenseTombstone::class, PendingLlmRequestEntity::class,
         AttachmentEntity::class, DuplicateRuleEntity::class, PendingFieldSuggestion::class,
         LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class],
-    version = 23,
+    version = 24,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -337,6 +337,21 @@ abstract class ExpensesDatabase : RoomDatabase() {
         // (SQLite can't drop a column here), also shedding the v21 DEFAULT clause so the table
         // matches the entity declaration exactly.
         // Invoice-only extra totals (see Expense.previousBalanceAmount/totalToPayAmount).
+        /**
+         * The fallback category. Existing installs get the flag on the lowest-positioned category
+         * rather than on none: a fallback that is null until somebody visits Settings would make a
+         * model-free scan fail on exactly the installs that upgraded into the feature.
+         */
+        private val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE categories ADD COLUMN isDefault INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "UPDATE categories SET isDefault = 1 WHERE id = " +
+                        "(SELECT id FROM categories ORDER BY position ASC, id ASC LIMIT 1)"
+                )
+            }
+        }
+
         private val MIGRATION_22_23 = object : Migration(22, 23) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE expenses ADD COLUMN previousBalanceAmount REAL")
@@ -390,7 +405,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate

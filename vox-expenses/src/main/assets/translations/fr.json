@@ -483,5 +483,18 @@
   "remap_fuzz_level_1": "Proche",
   "remap_fuzz_level_2": "Moyen",
   "remap_fuzz_contained_example": "SC %s SRL",
-  "remap_fuzz_level_3": "Large"
+  "remap_fuzz_level_3": "Large",
+  "scan_model_use": "Ce que l'IA lit d'un scan",
+  "scan_model_use_desc": "Les chiffres sont lus sur l'appareil dans tous les cas. Ceci décide de ce qui part vers un modèle.",
+  "scan_model_full": "Tout",
+  "scan_model_full_desc": "Le modèle peut corriger la reconnaissance, nommer le fournisseur et choisir une catégorie.",
+  "scan_model_header_footer_auto": "Fournisseur et catégorie seulement",
+  "scan_model_header_footer_auto_desc": "Les lignes et les totaux restent sur l'appareil ; le modèle répond pour le reste et sa réponse est appliquée.",
+  "scan_model_header_footer_suggest": "Fournisseur et catégorie en suggestions",
+  "scan_model_header_footer_suggest_desc": "Idem, proposé à votre acceptation plutôt qu'appliqué.",
+  "scan_model_none": "Rien",
+  "scan_model_none_desc": "Aucun texte ne quitte l'appareil. Le fournisseur est lu sur l'en-tête et la catégorie étoilée est utilisée.",
+  "default_category_suffix": "principale",
+  "set_default_category": "En faire la catégorie principale",
+  "default_category_cannot_delete": "La catégorie principale ne peut pas être supprimée"
 }

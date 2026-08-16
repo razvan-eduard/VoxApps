@@ -13,5 +13,12 @@ data class Category(
     val name: String,
     val colorArgb: Long,
     val position: Int = 0,
-    val createdAt: Long
+    val createdAt: Long,
+    /**
+     * The category a record falls back to when nothing chose one — a scan read without a model, or
+     * any other creation that has no opinion. Exactly one category carries it at a time, enforced by
+     * [com.voxapps.expenses.data.ExpensesRepository] rather than by the schema, and that one cannot
+     * be deleted. Mirrors the calendar's main layer, down to the star and the suffix.
+     */
+    val isDefault: Boolean = false
 )

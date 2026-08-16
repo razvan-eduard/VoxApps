@@ -483,5 +483,18 @@
   "remap_fuzz_level_1": "Apropiat",
   "remap_fuzz_level_2": "Mediu",
   "remap_fuzz_contained_example": "SC %s SRL",
-  "remap_fuzz_level_3": "Larg"
+  "remap_fuzz_level_3": "Larg",
+  "scan_model_use": "Cât citește IA dintr-o scanare",
+  "scan_model_use_desc": "Cifrele se citesc pe telefon oricum. Asta decide cât se trimite unui model.",
+  "scan_model_full": "Tot",
+  "scan_model_full_desc": "Modelul poate corecta recunoașterea, poate numi furnizorul și alege categoria.",
+  "scan_model_header_footer_auto": "Doar furnizor și categorie",
+  "scan_model_header_footer_auto_desc": "Pozițiile și totalurile rămân pe telefon; modelul răspunde pentru rest, iar răspunsul se aplică.",
+  "scan_model_header_footer_suggest": "Furnizor și categorie ca sugestii",
+  "scan_model_header_footer_suggest_desc": "La fel, dar propuse ție spre acceptare, nu aplicate.",
+  "scan_model_none": "Nimic",
+  "scan_model_none_desc": "Niciun text nu pleacă de pe telefon. Furnizorul se citește din antet, iar categoria e cea cu stea.",
+  "default_category_suffix": "principală",
+  "set_default_category": "Fă-o categoria principală",
+  "default_category_cannot_delete": "Categoria principală nu poate fi ștearsă"
 }

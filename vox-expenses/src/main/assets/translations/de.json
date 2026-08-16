@@ -483,5 +483,18 @@
   "remap_fuzz_level_1": "Nah",
   "remap_fuzz_level_2": "Mittel",
   "remap_fuzz_contained_example": "SC %s SRL",
-  "remap_fuzz_level_3": "Locker"
+  "remap_fuzz_level_3": "Locker",
+  "scan_model_use": "Wie viel die KI von einem Scan liest",
+  "scan_model_use_desc": "Die Zahlen werden ohnehin auf dem Gerät gelesen. Dies entscheidet, wie viel an ein Modell geht.",
+  "scan_model_full": "Alles",
+  "scan_model_full_desc": "Das Modell darf die Erkennung korrigieren, den Lieferanten benennen und eine Kategorie wählen.",
+  "scan_model_header_footer_auto": "Nur Lieferant und Kategorie",
+  "scan_model_header_footer_auto_desc": "Positionen und Summen bleiben auf dem Gerät; das Modell antwortet für den Rest, und die Antwort wird übernommen.",
+  "scan_model_header_footer_suggest": "Lieferant und Kategorie als Vorschlag",
+  "scan_model_header_footer_suggest_desc": "Dasselbe, aber zur Annahme angeboten statt übernommen.",
+  "scan_model_none": "Nichts",
+  "scan_model_none_desc": "Kein Text verlässt das Gerät. Der Lieferant wird aus dem Briefkopf gelesen, die markierte Kategorie wird verwendet.",
+  "default_category_suffix": "Haupt",
+  "set_default_category": "Zur Hauptkategorie machen",
+  "default_category_cannot_delete": "Die Hauptkategorie kann nicht gelöscht werden"
 }
