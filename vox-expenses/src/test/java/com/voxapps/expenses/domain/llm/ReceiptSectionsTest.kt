@@ -72,6 +72,24 @@ class ReceiptSectionsTest {
         assertEquals(2, s.footer.lines().count { it.contains("Total Factura") })
     }
 
+    /**
+     * Stitch capture is the workflow that reads a dense page best — each shot is a close-up, so the
+     * OCR gets far more pixels per character than one wide frame of the whole document. Every shot
+     * contributes its own plain reading order, and taking only the first threw the rest away.
+     */
+    @Test
+    fun `every shot of a stitched capture contributes its plain text`() {
+        val seam = "--- [photo stitch seam — two overlapping close-up shots were joined here ---"
+        val twoShots = sectioned + "\n" + seam + "\n" +
+            sectioned.replace("plain reading order", "second shot rows")
+        val s = ReceiptSections.split(twoShots)
+
+        assertTrue("the first shot's plain text is missing", s.plain.contains("plain reading order"))
+        assertTrue("the second shot's plain text is missing", s.plain.contains("second shot rows"))
+        // Still kept out of the sections, so nothing is counted twice.
+        assertFalse(s.items.contains("second shot rows"))
+    }
+
     /** A document Vision could not reconstruct carries no markers, and every caller must keep
      *  working exactly as it did before sections existed. */
     @Test
@@ -93,5 +111,7 @@ class ReceiptSectionsTest {
         listOf(s.header, s.items, s.footer).forEach {
             assertFalse(it.contains("plain reading order"))
         }
+        // It is not discarded either — it is the corpus the patterns read best.
+        assertTrue(s.plain.contains("plain reading order"))
     }
 }

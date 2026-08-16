@@ -58,7 +58,7 @@ object ScanItemsReader {
         // "… pers 2 2.35 4.70 0.99", exactly what the strict pattern wants. A reconstruction that
         // fragmented a row can leave the plain text the better of the two, so both are offered and
         // the arithmetic decides.
-        val candidates = listOf(flattenColumns(sections.items), TableItemsPreParse.plainText(rawText))
+        val candidates = listOf(flattenColumns(sections.items), sections.plain)
             .filter { it.isNotBlank() }
 
         val reading = candidates.firstNotNullOfOrNull { text ->
