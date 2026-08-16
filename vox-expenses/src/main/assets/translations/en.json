@@ -508,5 +508,10 @@
   "scan_settings_title": "Scanning",
   "scan_zone_sent": "What leaves the device",
   "scan_zone_read": "What is read from the document",
-  "scan_zone_after": "After a scan"
+  "scan_zone_after": "After a scan",
+  "zone_security": "Security",
+  "zone_money": "Money and formats",
+  "zone_browsing": "Browsing and widgets",
+  "zone_places": "Places",
+  "zone_danger": "Danger zone"
 }

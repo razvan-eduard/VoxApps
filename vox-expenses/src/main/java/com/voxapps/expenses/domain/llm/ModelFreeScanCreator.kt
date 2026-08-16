@@ -2,6 +2,8 @@ package com.voxapps.expenses.domain.llm
 
 import android.content.Context
 import com.voxapps.docread.ScanReading
+import com.voxapps.docread.InvoiceTotalsReconciler
+import com.voxapps.docread.TaxBreakdown
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.logging.Logger
@@ -43,6 +45,16 @@ object ModelFreeScanCreator {
             return null
         }
 
+        // What the rows come to, checked against what the document says they come to. A figure the
+        // page stated only once is usable but unvouched for; one the restatements contradict is
+        // reported rather than stored as fact. See [TaxBreakdown].
+        val items = reading.items.orEmpty()
+        val breakdown = TaxBreakdown.resolve(
+            itemNets = items.map { it.quantity * it.unitPrice },
+            itemVats = items.map { it.vatAmount },
+            printedGross = reading.totals.invoiceTotal ?: reading.totals.total
+        )
+
         val category = container.expensesRepository.defaultCategory()
         val vendor = reading.header.vendor
         val dateTime = DateTimeRegexParser.parse(plainText)
@@ -62,7 +74,7 @@ object ModelFreeScanCreator {
             // Written only where the table printed a tax column that proved itself; a row the
             // document was silent about stays silent here, rather than carrying a share of a total
             // that rounding would not distribute exactly.
-            items = reading.items.orEmpty().map {
+            items = items.map {
                 ExpenseParseResultParser.ParsedItem(
                     name = it.name,
                     quantity = it.quantity,
@@ -77,15 +89,32 @@ object ModelFreeScanCreator {
         Logger.d(
             TAG,
             "Created without a model: total $total, ${parsed.items.size} item(s), " +
-                "vendor ${vendor ?: "—"}, category ${category?.name ?: "—"}"
+                "vendor ${vendor ?: "—"}, category ${category?.name ?: "—"}; " +
+                "net ${breakdown.net ?: "—"}, tax ${breakdown.vat ?: "—"} (${breakdown.verdict})"
         )
-        return com.voxapps.expenses.receiver.LlmResultReceiver().createExpenseFromParsed(
+        val newId = com.voxapps.expenses.receiver.LlmResultReceiver().createExpenseFromParsed(
             appContext = context.applicationContext,
             container = container,
             parsed = parsed,
             imageName = imageName,
             preParse = null
         )
+
+        // The two figures the creation path has no field for. Written only where the reading
+        // produced them, and never where the restatements disagreed — a contradicted breakdown is
+        // one of the readings being wrong, and storing it would put the wrong one on the record.
+        if (breakdown.verdict != InvoiceTotalsReconciler.Verdict.CONTRADICTED &&
+            (breakdown.net != null || breakdown.vat != null)
+        ) {
+            val stored = container.expensesRepository.getExpenseById(newId)
+            if (stored != null) {
+                container.expensesRepository.updateExpense(
+                    stored.expense.copy(netAmount = breakdown.net, vatAmount = breakdown.vat),
+                    stored.items
+                )
+            }
+        }
+        return newId
     }
 
     /**
