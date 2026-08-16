@@ -26,6 +26,7 @@ import com.voxapps.services.RemoteSchema
 data class ReceiptTemplateSchema(
     @SerializedName("amount") val amount: String = "",
     @SerializedName("columns") val columns: ColumnTemplateEntry? = null,
+    @SerializedName("captions") val captions: CaptionTemplateEntry? = null,
     @SerializedName("header") val header: List<HeaderTemplateEntry> = emptyList(),
     @SerializedName("items") val items: List<ItemTemplateEntry> = emptyList(),
     @SerializedName("footer") val footer: List<FooterTemplateEntry> = emptyList()
@@ -49,6 +50,26 @@ data class ColumnTemplateEntry(
     @SerializedName("relation") val relation: String? = null,
     /** Language to role to the words that head that column. */
     @SerializedName("vocabularies") val vocabularies: Map<String, Map<String, List<String>>> = emptyMap()
+)
+
+/**
+ * The words that introduce a party or a date in a letterhead, per language.
+ *
+ * The buyer's words are here for the same reason the seller's are, and matter more: an invoice names
+ * both parties, in the same shape, often within a line of each other, so a reading that only knows
+ * what a seller is called will take whichever came first. Naming the buyer is what makes it possible
+ * to rule that line out rather than hope.
+ */
+data class CaptionTemplateEntry(
+    @SerializedName("describes") val describes: String = "",
+    /** Language to role (`seller`, `buyer`, `issue_date`, `due_date`) to the words that introduce it. */
+    @SerializedName("vocabularies") val vocabularies: Map<String, Map<String, List<String>>> = emptyMap()
+)
+
+/** A caption vocabulary compiled for the shared classifier. */
+data class CompiledCaptions(
+    val language: String,
+    val roles: Map<String, com.voxapps.textmatch.extract.VocabularyClassifier.Vocabulary>
 )
 
 data class HeaderTemplateEntry(
@@ -161,6 +182,7 @@ object ReceiptTemplates {
      *  put through a real document in a unit test, which is the only way its patterns are proven. */
     fun compiled(value: ReceiptTemplateSchema) = Compiled(
         columns = value.columns?.compileAll().orEmpty(),
+        captions = value.captions?.compileAll().orEmpty(),
         headers = value.header.mapNotNull { it.compile() },
         items = value.items.mapNotNull { it.compile() },
         footers = value.footer.mapNotNull { it.compile() }
@@ -168,6 +190,7 @@ object ReceiptTemplates {
 
     data class Compiled(
         val columns: List<CompiledColumns>,
+        val captions: List<CompiledCaptions>,
         val headers: List<CompiledHeader>,
         val items: List<LineItemBattery.Template>,
         val footers: List<CompiledFooter>
@@ -206,6 +229,17 @@ object ReceiptTemplates {
      * everything else here. An invoice may well head one column in English and another in the local
      * language, which is a case no single-language reading covers.
      */
+    fun captions(context: Context): List<CompiledCaptions> =
+        value(context)?.let { compiled(it).captions } ?: emptyList()
+
+    private fun CaptionTemplateEntry.compileAll(): List<CompiledCaptions> =
+        vocabularies.mapNotNull { (language, roles) ->
+            val compiled = roles.filterValues { it.isNotEmpty() }.mapValues { (role, terms) ->
+                com.voxapps.textmatch.extract.VocabularyClassifier.Vocabulary(role, terms)
+            }
+            if (compiled.isEmpty()) null else CompiledCaptions(language, compiled)
+        }
+
     private fun ColumnTemplateEntry.compileAll(): List<CompiledColumns> =
         vocabularies.mapNotNull { (language, roles) ->
             val headings = roles

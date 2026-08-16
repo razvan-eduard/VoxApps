@@ -39,15 +39,20 @@ object ScanReading {
         plainText: String,
         itemTemplates: List<LineItemBattery.Template> = LineItemBattery.BUILT_IN,
         footerTemplates: List<CompiledFooter> = emptyList(),
-        headerTemplates: List<CompiledHeader> = emptyList()
+        headerTemplates: List<CompiledHeader> = emptyList(),
+        captionTemplates: List<CompiledCaptions> = emptyList(),
+        /** Company designators, from the list the app already keeps for classifying fields. */
+        legalForms: List<String> = emptyList()
     ): Result {
         val sections = ReceiptSections.split(rawText)
         val footerText = sections.footerOrAll(plainText)
         // Read from the letterhead where the document named one, and from the whole text otherwise;
         // it has no arithmetic to prove it either way, so it is read once and kept aside.
         val header = HeaderReader.read(
-            if (sections.marked && sections.header.isNotBlank()) sections.header else plainText,
-            headerTemplates
+            headerText = if (sections.marked && sections.header.isNotBlank()) sections.header else plainText,
+            templates = headerTemplates,
+            captions = captionTemplates,
+            legalForms = legalForms
         )
 
         // The compiled-in parser is the last candidate rather than the first: it is one more opinion

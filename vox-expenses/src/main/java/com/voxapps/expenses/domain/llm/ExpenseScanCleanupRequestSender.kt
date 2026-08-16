@@ -51,7 +51,14 @@ object ExpenseScanCleanupRequestSender {
             plainText,
             itemTemplates = ReceiptTemplates.items(context),
             footerTemplates = ReceiptTemplates.footers(context),
-            headerTemplates = ReceiptTemplates.headers(context)
+            headerTemplates = ReceiptTemplates.headers(context),
+            captionTemplates = ReceiptTemplates.captions(context),
+            // The designators that mark a company's own line, from the list this app already keeps
+            // for classifying fields — one list, not a second copy that drifts from it.
+            legalForms = com.voxapps.expenses.data.FieldVocabularies
+                .vocabularies(context)
+                .firstOrNull { it.name == com.voxapps.expenses.data.FieldVocabularies.VOCAB_LEGAL_FORM }
+                ?.terms?.toList().orEmpty()
         )
         val totals = reading.totals
         val preParsedTotal = totals.total

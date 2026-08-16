@@ -4,6 +4,7 @@
 # module that decides what it parses.
 -keep class com.voxapps.docread.ReceiptTemplateSchema { *; }
 -keep class com.voxapps.docread.ColumnTemplateEntry { *; }
+-keep class com.voxapps.docread.CaptionTemplateEntry { *; }
 -keep class com.voxapps.docread.HeaderTemplateEntry { *; }
 -keep class com.voxapps.docread.ItemTemplateEntry { *; }
 -keep class com.voxapps.docread.FooterTemplateEntry { *; }
