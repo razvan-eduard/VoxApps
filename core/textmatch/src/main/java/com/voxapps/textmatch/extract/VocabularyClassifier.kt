@@ -96,6 +96,55 @@ object VocabularyClassifier {
      */
     fun termKey(term: String): String = tokenize(term).joinToString(" ")
 
+    /**
+     * Where a term sits, for callers to whom order is the meaning.
+     *
+     * [tokenIndex] counts tokens under this object's own tokenization, not characters, because that
+     * is the only counting consistent with how a term is matched: "U.M." is one token here and four
+     * characters on the page. A caller ordering table columns by their headings needs exactly this —
+     * which heading came before which — and getting it from here rather than from a second scan of
+     * the text is what keeps one tokenizer authoritative.
+     */
+    data class LocatedTerm(
+        val vocabulary: String,
+        val term: String,
+        val tokenIndex: Int,
+        /** How many tokens the term spans, so a caller can prefer the fuller reading of a place
+         *  where two vocabularies both match — "unit price" over "unit", "valoare tva" over
+         *  "valoare". Both are genuinely there; only the longer is what is printed. */
+        val tokenCount: Int
+    )
+
+    /**
+     * The first occurrence of each vocabulary's terms, with position.
+     *
+     * Where several of a vocabulary's terms match, the longest wins: a list holding both "value" and
+     * "value added tax" should report the longer reading of a heading that contains it, since the
+     * shorter one is a fragment of the same words rather than a second heading.
+     */
+    fun locate(text: String, vocabularies: List<Vocabulary>): List<LocatedTerm> {
+        val tokens = tokenize(text)
+        if (tokens.isEmpty()) return emptyList()
+        return vocabularies.mapNotNull { vocabulary ->
+            vocabulary.terms
+                .mapNotNull { term ->
+                    val termTokens = tokenize(term)
+                    if (termTokens.isEmpty()) return@mapNotNull null
+                    indexOfSequence(tokens, termTokens)?.let { at -> Triple(term, at, termTokens.size) }
+                }
+                .minWithOrNull(compareBy({ it.second }, { -it.third }))
+                ?.let { LocatedTerm(vocabulary.name, it.first, it.second, it.third) }
+        }.sortedBy { it.tokenIndex }
+    }
+
+    private fun indexOfSequence(haystack: List<String>, needle: List<String>): Int? {
+        if (needle.size > haystack.size) return null
+        for (start in 0..haystack.size - needle.size) {
+            if ((needle.indices).all { haystack[start + it] == needle[it] }) return start
+        }
+        return null
+    }
+
     private fun containsSequence(haystack: List<String>, needle: List<String>): Boolean {
         if (needle.size > haystack.size) return false
         for (start in 0..haystack.size - needle.size) {
