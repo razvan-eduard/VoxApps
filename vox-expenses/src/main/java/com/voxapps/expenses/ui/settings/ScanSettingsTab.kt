@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -59,8 +58,6 @@ fun ScanSettingsTab(
             )
         }
 
-        HorizontalDivider()
-
         SettingsSectionHeader(languageManager.getString("scan_zone_read"))
         // --- How much of a scan the model is asked to read. Placed beside the photo toggles because
         // it answers the same question they do — what leaves the device — and its lowest setting is
@@ -101,8 +98,6 @@ fun ScanSettingsTab(
             }
         }
 
-        HorizontalDivider()
-
         // --- The tax breakdown: never, when the document carries one, or always. Three settings
         // rather than a switch because the honest answer depends on the document — see VatDisplay. ---
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -138,8 +133,6 @@ fun ScanSettingsTab(
             }
         }
 
-        HorizontalDivider()
-
         // --- Attach photo to AI on retry (separate from scan-time — retry re-sends already-staged
         // OCR text after a failed parse, a distinct and less frequent code path). ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -156,8 +149,6 @@ fun ScanSettingsTab(
                 onCheckedChange = { stateManager.setAttachPhotoOnRetry(it) }
             )
         }
-
-        HorizontalDivider()
 
         SettingsSectionHeader(languageManager.getString("scan_zone_after"))
         // --- Auto-trigger a line-items rescan the moment an expense gets its FIRST photo attached
@@ -177,8 +168,6 @@ fun ScanSettingsTab(
                 onCheckedChange = { stateManager.setAutoRescanOnFirstAttachment(it) }
             )
         }
-
-        HorizontalDivider()
 
         // --- Auto-open a scanned receipt's expense once it's actually created (LLM cleanup is
         // async, so this can't happen at scan time itself — see LlmResultReceiver). ---
