@@ -10,7 +10,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.foundation.clickable
@@ -31,7 +30,7 @@ import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.location.ExpensesLocationStore
-import com.voxapps.design.settings.SettingsSectionHeader
+import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.location.LocationSource
@@ -92,232 +91,220 @@ fun GeneralSettingsTab(
             onUseRemoteChange = { scope.launch { settingsRepo.setUseRemoteSchemas(it) } }
         )
 
-        HorizontalDivider()
-
-        SettingsSectionHeader(languageManager.getString("zone_security"))
-        // --- Require fingerprint ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("require_fingerprint"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("require_fingerprint_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.isBiometricRequired,
-                onCheckedChange = { stateManager.setBiometricRequired(it) }
-            )
-        }
-
-        HorizontalDivider()
-
-        // --- Session timeout ---
-        Text(languageManager.getString("session_timeout"), style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                ExpensesSettings.TIMEOUT_30M to "timeout_30m",
-                ExpensesSettings.TIMEOUT_1H to "timeout_1h",
-                ExpensesSettings.TIMEOUT_1D to "timeout_1d",
-                ExpensesSettings.TIMEOUT_UNLIMITED to "timeout_unlimited"
-            )
-            options.forEach { (minutes, labelKey) ->
-                FilterChip(
-                    selected = settings.sessionTimeoutMinutes == minutes,
-                    onClick = { stateManager.setSessionTimeoutMinutes(minutes) },
-                    label = { Text(languageManager.getString(labelKey)) }
-                )
-            }
-        }
-
-        HorizontalDivider()
-
-        SettingsSectionHeader(languageManager.getString("zone_money"))
-        // --- Default currency ---
-        Text(languageManager.getString("default_currency_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("default_currency_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Picklist(
-            items = COMMON_CURRENCIES,
-            selected = settings.defaultCurrency,
-            itemLabel = { it },
-            onSelect = { stateManager.setDefaultCurrency(it) }
-        )
-
-        HorizontalDivider()
-
-        // --- Decimal separator (which character amount/quantity/price fields use and expect on the
-        // edit screen — independent of the device's locale, see ExpensesSettings.decimalSeparator) ---
-        Text(languageManager.getString("decimal_separator_label"), style = MaterialTheme.typography.labelLarge)
-        Text(
-            languageManager.getString("decimal_separator_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val options = listOf(
-                ExpensesSettings.DECIMAL_PERIOD to "decimal_separator_period",
-                ExpensesSettings.DECIMAL_COMMA to "decimal_separator_comma"
-            )
-            options.forEach { (value, labelKey) ->
-                FilterChip(
-                    selected = settings.decimalSeparator == value,
-                    onClick = { stateManager.setDecimalSeparator(value) },
-                    label = { Text(languageManager.getString(labelKey)) }
-                )
-            }
-        }
-
-        HorizontalDivider()
-
-        SettingsSectionHeader(languageManager.getString("zone_browsing"))
-        // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("calendar_view"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("calendar_view_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.calendarViewEnabled,
-                onCheckedChange = { stateManager.setCalendarViewEnabled(it) }
-            )
-        }
-
-        HorizontalDivider()
-
-        // --- Widget day-card border (on/off, thickness, color) ---
-        Text(languageManager.getString("widget_border_section"), style = MaterialTheme.typography.labelLarge)
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("widget_border_enabled"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("widget_border_enabled_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.widgetBorderEnabled,
-                onCheckedChange = { stateManager.setWidgetBorderEnabled(it) }
-            )
-        }
-        Text(languageManager.getString("widget_border_thickness"), style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            val thicknessOptions = listOf(
-                ExpensesSettings.THICKNESS_THIN to "widget_border_thickness_thin",
-                ExpensesSettings.THICKNESS_MEDIUM to "widget_border_thickness_medium",
-                ExpensesSettings.THICKNESS_THICK to "widget_border_thickness_thick"
-            )
-            thicknessOptions.forEach { (thicknessDp, labelKey) ->
-                FilterChip(
-                    enabled = settings.widgetBorderEnabled,
-                    selected = settings.widgetBorderThicknessDp == thicknessDp,
-                    onClick = { stateManager.setWidgetBorderThicknessDp(thicknessDp) },
-                    label = { Text(languageManager.getString(labelKey)) }
-                )
-            }
-        }
-        Text(languageManager.getString("widget_border_color"), style = MaterialTheme.typography.bodyMedium)
-        VoxColorSwatchPicker(
-            selectedColor = settings.widgetBorderColorArgb,
-            onColorSelected = { stateManager.setWidgetBorderColorArgb(it) },
-            modifier = Modifier.padding(top = 4.dp),
-            customColorDialogTitle = languageManager.getString("custom_color_title"),
-            customColorUseLabel = languageManager.getString("use_color_button"),
-            customColorCancelLabel = languageManager.getString("cancel"),
-            customColorHueLabel = languageManager.getString("hue_label"),
-            customColorSaturationLabel = languageManager.getString("saturation_label"),
-            customColorBrightnessLabel = languageManager.getString("brightness_label")
-        )
-
-        HorizontalDivider()
-
-        SettingsSectionHeader(languageManager.getString("zone_places"))
-        // --- Location prefill: one switch governing every place an expense's location field can
-        // get auto-filled from GPS (scan, voice, manual entry). Independent of the OS location
-        // permission granted in onboarding — that only makes the feature possible, this is whether
-        // the user actually wants it. ---
-        Text(languageManager.getString("location_section"), style = MaterialTheme.typography.labelLarge)
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("location_prefill_label"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("location_prefill_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.locationPrefillEnabled,
-                onCheckedChange = { stateManager.setLocationPrefillEnabled(it) }
-            )
-        }
-
-        if (settings.locationPrefillEnabled) {
-            ExpensesLocationSettingsSection(settingsRepo = settingsRepo)
-        }
-
-        HorizontalDivider()
-
-        SettingsSectionHeader(languageManager.getString("zone_danger"))
-        // --- Danger Zone: Delete All ---
-        var showDeleteAllConfirm by remember { mutableStateOf(false) }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(languageManager.getString("delete_all_expenses"), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
-                Text(
-                    languageManager.getString("delete_all_expenses_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            androidx.compose.material3.Button(
-                onClick = { showDeleteAllConfirm = true },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text(languageManager.getString("delete"))
-            }
-        }
-
-        if (showDeleteAllConfirm) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showDeleteAllConfirm = false },
-                title = { Text(languageManager.getString("delete_all_confirm_title")) },
-                text = { Text(languageManager.getString("delete_all_confirm_message")) },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            stateManager.deleteAllExpenses()
-                            showDeleteAllConfirm = false
-                        }
-                    ) {
-                        Text(languageManager.getString("delete"), color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { showDeleteAllConfirm = false }) {
-                        Text(languageManager.getString("cancel"))
-                    }
+        SettingsSectionCard(languageManager.getString("zone_security")) {
+            // --- Require fingerprint ---
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("require_fingerprint"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("require_fingerprint_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            )
-        }
+                Switch(
+                    checked = settings.isBiometricRequired,
+                    onCheckedChange = { stateManager.setBiometricRequired(it) }
+                )
+            }
 
-        if (com.voxapps.expenses.BuildConfig.DEBUG) {
-            HorizontalDivider()
-            Text(languageManager.getString("debug_section"), style = MaterialTheme.typography.labelLarge)
-            androidx.compose.material3.OutlinedButton(
-                onClick = { stateManager.seedDebugTestData() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString("add_test_data"))
+            // --- Session timeout ---
+            Text(languageManager.getString("session_timeout"), style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val options = listOf(
+                    ExpensesSettings.TIMEOUT_30M to "timeout_30m",
+                    ExpensesSettings.TIMEOUT_1H to "timeout_1h",
+                    ExpensesSettings.TIMEOUT_1D to "timeout_1d",
+                    ExpensesSettings.TIMEOUT_UNLIMITED to "timeout_unlimited"
+                )
+                options.forEach { (minutes, labelKey) ->
+                    FilterChip(
+                        selected = settings.sessionTimeoutMinutes == minutes,
+                        onClick = { stateManager.setSessionTimeoutMinutes(minutes) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
+            }
+
+        }
+        SettingsSectionCard(languageManager.getString("zone_money")) {
+            // --- Default currency ---
+            Text(languageManager.getString("default_currency_label"), style = MaterialTheme.typography.labelLarge)
+            Text(
+                languageManager.getString("default_currency_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Picklist(
+                items = COMMON_CURRENCIES,
+                selected = settings.defaultCurrency,
+                itemLabel = { it },
+                onSelect = { stateManager.setDefaultCurrency(it) }
+            )
+
+            // --- Decimal separator (which character amount/quantity/price fields use and expect on the
+            // edit screen — independent of the device's locale, see ExpensesSettings.decimalSeparator) ---
+            Text(languageManager.getString("decimal_separator_label"), style = MaterialTheme.typography.labelLarge)
+            Text(
+                languageManager.getString("decimal_separator_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val options = listOf(
+                    ExpensesSettings.DECIMAL_PERIOD to "decimal_separator_period",
+                    ExpensesSettings.DECIMAL_COMMA to "decimal_separator_comma"
+                )
+                options.forEach { (value, labelKey) ->
+                    FilterChip(
+                        selected = settings.decimalSeparator == value,
+                        onClick = { stateManager.setDecimalSeparator(value) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
+            }
+
+        }
+        SettingsSectionCard(languageManager.getString("zone_browsing")) {
+            // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("calendar_view"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("calendar_view_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.calendarViewEnabled,
+                    onCheckedChange = { stateManager.setCalendarViewEnabled(it) }
+                )
+            }
+
+            // --- Widget day-card border (on/off, thickness, color) ---
+            Text(languageManager.getString("widget_border_section"), style = MaterialTheme.typography.labelLarge)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("widget_border_enabled"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("widget_border_enabled_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.widgetBorderEnabled,
+                    onCheckedChange = { stateManager.setWidgetBorderEnabled(it) }
+                )
+            }
+            Text(languageManager.getString("widget_border_thickness"), style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                val thicknessOptions = listOf(
+                    ExpensesSettings.THICKNESS_THIN to "widget_border_thickness_thin",
+                    ExpensesSettings.THICKNESS_MEDIUM to "widget_border_thickness_medium",
+                    ExpensesSettings.THICKNESS_THICK to "widget_border_thickness_thick"
+                )
+                thicknessOptions.forEach { (thicknessDp, labelKey) ->
+                    FilterChip(
+                        enabled = settings.widgetBorderEnabled,
+                        selected = settings.widgetBorderThicknessDp == thicknessDp,
+                        onClick = { stateManager.setWidgetBorderThicknessDp(thicknessDp) },
+                        label = { Text(languageManager.getString(labelKey)) }
+                    )
+                }
+            }
+            Text(languageManager.getString("widget_border_color"), style = MaterialTheme.typography.bodyMedium)
+            VoxColorSwatchPicker(
+                selectedColor = settings.widgetBorderColorArgb,
+                onColorSelected = { stateManager.setWidgetBorderColorArgb(it) },
+                modifier = Modifier.padding(top = 4.dp),
+                customColorDialogTitle = languageManager.getString("custom_color_title"),
+                customColorUseLabel = languageManager.getString("use_color_button"),
+                customColorCancelLabel = languageManager.getString("cancel"),
+                customColorHueLabel = languageManager.getString("hue_label"),
+                customColorSaturationLabel = languageManager.getString("saturation_label"),
+                customColorBrightnessLabel = languageManager.getString("brightness_label")
+            )
+
+        }
+        SettingsSectionCard(languageManager.getString("zone_places")) {
+            // --- Location prefill: one switch governing every place an expense's location field can
+            // get auto-filled from GPS (scan, voice, manual entry). Independent of the OS location
+            // permission granted in onboarding — that only makes the feature possible, this is whether
+            // the user actually wants it. ---
+            Text(languageManager.getString("location_section"), style = MaterialTheme.typography.labelLarge)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("location_prefill_label"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        languageManager.getString("location_prefill_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.locationPrefillEnabled,
+                    onCheckedChange = { stateManager.setLocationPrefillEnabled(it) }
+                )
+            }
+
+            if (settings.locationPrefillEnabled) {
+                ExpensesLocationSettingsSection(settingsRepo = settingsRepo)
+            }
+
+        }
+        SettingsSectionCard(languageManager.getString("zone_danger")) {
+            // --- Danger Zone: Delete All ---
+            var showDeleteAllConfirm by remember { mutableStateOf(false) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(languageManager.getString("delete_all_expenses"), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        languageManager.getString("delete_all_expenses_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                androidx.compose.material3.Button(
+                    onClick = { showDeleteAllConfirm = true },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(languageManager.getString("delete"))
+                }
+            }
+
+            if (showDeleteAllConfirm) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showDeleteAllConfirm = false },
+                    title = { Text(languageManager.getString("delete_all_confirm_title")) },
+                    text = { Text(languageManager.getString("delete_all_confirm_message")) },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                stateManager.deleteAllExpenses()
+                                showDeleteAllConfirm = false
+                            }
+                        ) {
+                            Text(languageManager.getString("delete"), color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { showDeleteAllConfirm = false }) {
+                            Text(languageManager.getString("cancel"))
+                        }
+                    }
+                )
+            }
+
+            if (com.voxapps.expenses.BuildConfig.DEBUG) {
+                    Text(languageManager.getString("debug_section"), style = MaterialTheme.typography.labelLarge)
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { stateManager.seedDebugTestData() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("add_test_data"))
+                }
             }
         }
     }
