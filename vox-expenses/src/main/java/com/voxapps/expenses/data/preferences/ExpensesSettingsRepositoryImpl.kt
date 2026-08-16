@@ -34,6 +34,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val DEFAULT_VOICE_CATEGORY_ID = longPreferencesKey("default_voice_category_id")
         val VOICE_SAVE_TOAST_ENABLED = booleanPreferencesKey("voice_save_toast_enabled")
         val AUTO_CREATE_VOICE_CATEGORY = booleanPreferencesKey("auto_create_voice_category")
+        val SCAN_MODEL_USE = stringPreferencesKey("scan_model_use")
         val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
         val SCHEDULED_EXPENSE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_expense_dedup_interval")
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
@@ -108,6 +109,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             defaultVoiceCategoryId = prefs[Keys.DEFAULT_VOICE_CATEGORY_ID],
             voiceSaveToastEnabled = prefs[Keys.VOICE_SAVE_TOAST_ENABLED] ?: false,
             autoCreateVoiceCategory = prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] ?: false,
+            scanModelUse = prefs[Keys.SCAN_MODEL_USE]
+                ?.takeIf { it in ExpensesSettings.SCAN_MODEL_CHOICES }
+                ?: ExpensesSettings.SCAN_MODEL_FULL,
             scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
@@ -219,6 +223,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setScheduledMergeInterval(interval: String) {
         dataStore.edit { it[Keys.SCHEDULED_MERGE_INTERVAL] = interval }
+    }
+
+    override suspend fun setScanModelUse(mode: String) {
+        if (mode !in ExpensesSettings.SCAN_MODEL_CHOICES) return
+        dataStore.edit { it[Keys.SCAN_MODEL_USE] = mode }
     }
 
     override suspend fun setScheduledExpenseDedupInterval(interval: String) {
@@ -484,6 +493,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             }
             prefs[Keys.VOICE_SAVE_TOAST_ENABLED] = settings.voiceSaveToastEnabled
             prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] = settings.autoCreateVoiceCategory
+            prefs[Keys.SCAN_MODEL_USE] = settings.scanModelUse
             prefs[Keys.SCHEDULED_MERGE_INTERVAL] = settings.scheduledMergeInterval
             prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] = settings.scheduledExpenseDedupInterval
             prefs[Keys.HOME_CURRENCY] = settings.homeCurrency

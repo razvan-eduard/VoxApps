@@ -40,6 +40,8 @@ interface ExpensesSettingsRepository {
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
+    /** See [ExpensesSettings.scanModelUse]; unknown values are ignored rather than stored. */
+    suspend fun setScanModelUse(mode: String)
     suspend fun setAttachPhotoOnRetry(enabled: Boolean)
     suspend fun setAutoRescanOnFirstAttachment(enabled: Boolean)
     suspend fun setAutoOpenScannedExpense(enabled: Boolean)

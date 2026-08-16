@@ -28,17 +28,27 @@ object ScanReading {
         /** Which items pattern answered — kept so a vendor's winner can be tried first. */
         val templateId: String?,
         /** Which footer pattern produced the totals the items proved themselves against. */
-        val footerTemplateId: String? = null
+        val footerTemplateId: String? = null,
+        /** Who issued the document, when, under what number — read separately, and never allowed to
+         *  affect whether the figures were accepted. */
+        val header: HeaderReader.Fields = HeaderReader.Fields()
     )
 
     fun of(
         rawText: String,
         plainText: String,
         itemTemplates: List<LineItemBattery.Template> = LineItemBattery.BUILT_IN,
-        footerTemplates: List<CompiledFooter> = emptyList()
+        footerTemplates: List<CompiledFooter> = emptyList(),
+        headerTemplates: List<CompiledHeader> = emptyList()
     ): Result {
         val sections = ReceiptSections.split(rawText)
         val footerText = sections.footerOrAll(plainText)
+        // Read from the letterhead where the document named one, and from the whole text otherwise;
+        // it has no arithmetic to prove it either way, so it is read once and kept aside.
+        val header = HeaderReader.read(
+            if (sections.marked && sections.header.isNotBlank()) sections.header else plainText,
+            headerTemplates
+        )
 
         // The compiled-in parser is the last candidate rather than the first: it is one more opinion
         // about what the totals are, and it is the one that cannot fail loudly, so anything a
@@ -76,7 +86,7 @@ object ScanReading {
                     "${reading.items.size} row(s); own ${totals.invoiceTotal}, " +
                     "previous ${totals.previousBalance}, due ${totals.total}"
             )
-            return Result(totals, reading.items, reading.templateId, candidate.templateId)
+            return Result(totals, reading.items, reading.templateId, candidate.templateId, header)
         }
 
         // Nothing closed. The totals still have to come from somewhere, so the strongest candidate
@@ -87,7 +97,7 @@ object ScanReading {
             "No footer+items combination reconciles (${candidates.size} footer candidate(s), " +
                 "${itemTemplates.size} item pattern(s)) — totals only, no items"
         )
-        return Result(repaired(totals, rawText, null), null, null, null)
+        return Result(repaired(totals, rawText, null), null, null, null, header)
     }
 
     private fun repaired(

@@ -178,6 +178,7 @@ class ExpensesStateManager(
     fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
     fun setDebugToastsEnabled(enabled: Boolean) { scope.launch { settingsRepo.setDebugToastsEnabled(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
+    fun setScanModelUse(mode: String) { scope.launch { settingsRepo.setScanModelUse(mode) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
     fun setAutoRescanOnFirstAttachment(enabled: Boolean) { scope.launch { settingsRepo.setAutoRescanOnFirstAttachment(enabled) } }
     fun setAutoOpenScannedExpense(enabled: Boolean) { scope.launch { settingsRepo.setAutoOpenScannedExpense(enabled) } }
@@ -422,6 +423,9 @@ class ExpensesStateManager(
     }
 
     fun updateCategory(category: Category) { scope.launch { expensesRepo.updateCategory(category) } }
+
+    /** Moves the star; the repository keeps exactly one. See [Category.isDefault]. */
+    fun setDefaultCategory(categoryId: Long) { scope.launch { expensesRepo.setDefaultCategory(categoryId) } }
 
     fun removeCategory(category: Category) {
         scope.launch {

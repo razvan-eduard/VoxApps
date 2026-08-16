@@ -488,7 +488,7 @@ class LlmResultReceiver : BroadcastReceiver() {
      *  failure sentinel — see [com.voxapps.expenses.data.ExpensesRepository.addExpense]'s doc
      *  comment) so callers can decide whether to navigate to it (see the scan-specific auto-open
      *  branch where this is called). */
-    private suspend fun createExpenseFromParsed(
+    internal suspend fun createExpenseFromParsed(
         appContext: Context,
         container: ExpensesContainer,
         parsed: ExpenseParseResultParser.Parsed,

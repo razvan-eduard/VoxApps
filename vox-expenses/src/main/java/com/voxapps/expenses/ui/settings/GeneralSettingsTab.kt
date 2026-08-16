@@ -12,6 +12,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -249,6 +251,47 @@ fun GeneralSettingsTab(
                 checked = settings.attachPhotoOnScan,
                 onCheckedChange = { stateManager.setAttachPhotoOnScan(it) }
             )
+        }
+
+        HorizontalDivider()
+
+        // --- How much of a scan the model is asked to read. Placed beside the photo toggles because
+        // it answers the same question they do — what leaves the device — and its lowest setting is
+        // the only one that answers "nothing". ---
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(languageManager.getString("scan_model_use"), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                languageManager.getString("scan_model_use_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val scanModes = listOf(
+                ExpensesSettings.SCAN_MODEL_FULL to "scan_model_full",
+                ExpensesSettings.SCAN_MODEL_HEADER_FOOTER_AUTO to "scan_model_header_footer_auto",
+                ExpensesSettings.SCAN_MODEL_HEADER_FOOTER_SUGGEST to "scan_model_header_footer_suggest",
+                ExpensesSettings.SCAN_MODEL_NONE to "scan_model_none"
+            )
+            for ((mode, key) in scanModes) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { stateManager.setScanModelUse(mode) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = settings.scanModelUse == mode,
+                        onClick = { stateManager.setScanModelUse(mode) }
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            languageManager.getString(key + "_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
 
         HorizontalDivider()

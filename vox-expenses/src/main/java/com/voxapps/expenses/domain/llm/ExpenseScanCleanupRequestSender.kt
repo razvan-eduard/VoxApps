@@ -50,12 +50,21 @@ object ExpenseScanCleanupRequestSender {
             rawText,
             plainText,
             itemTemplates = ReceiptTemplates.items(context),
-            footerTemplates = ReceiptTemplates.footers(context)
+            footerTemplates = ReceiptTemplates.footers(context),
+            headerTemplates = ReceiptTemplates.headers(context)
         )
         val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
         val preParsedItems = reading.items
+
+        // Dialled out entirely: the record is written from what was read and nothing is sent. This
+        // is checked before the request is built rather than inside it, because the point of the
+        // setting is that no text leaves the device — not that a request is built and discarded.
+        if (ModelFreeScanCreator.isEnabled(settings)) {
+            ModelFreeScanCreator.create(context, container, reading, plainText, imageName)
+            return
+        }
 
         val taskWithMeta = when {
             imageName != null && retryOfExpenseId != null -> "${LlmTasks.EXPENSE_SCAN_CLEANUP}:$imageName:$retryOfExpenseId"

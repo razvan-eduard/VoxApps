@@ -483,5 +483,18 @@
   "remap_fuzz_level_1": "Close",
   "remap_fuzz_level_2": "Medium",
   "remap_fuzz_contained_example": "SC %s SRL",
-  "remap_fuzz_level_3": "Loose"
+  "remap_fuzz_level_3": "Loose",
+  "scan_model_use": "How much AI reads a scan",
+  "scan_model_use_desc": "The figures are read on the device either way. This decides how much is sent to a model.",
+  "scan_model_full": "Everything",
+  "scan_model_full_desc": "The model may correct recognition, name the vendor and choose a category.",
+  "scan_model_header_footer_auto": "Vendor and category only",
+  "scan_model_header_footer_auto_desc": "Items and totals stay on the device; the model answers for the rest and its answer is applied.",
+  "scan_model_header_footer_suggest": "Vendor and category as suggestions",
+  "scan_model_header_footer_suggest_desc": "The same, offered for you to accept rather than applied.",
+  "scan_model_none": "Nothing",
+  "scan_model_none_desc": "No text leaves the device. The vendor is read from the letterhead and the starred category is used.",
+  "default_category_suffix": "main",
+  "set_default_category": "Make this the main category",
+  "default_category_cannot_delete": "The main category cannot be deleted"
 }
