@@ -34,6 +34,12 @@ object ReceiptSections {
         val header: String,
         val items: String,
         val footer: String,
+        /**
+         * The reading-order text that precedes each reconstruction — every shot's, not just the
+         * first. On a well-photographed page this is where the printed rows read most cleanly, and
+         * on a stitched capture there is one of these per photo.
+         */
+        val plain: String,
         /** False when the text carried no markers and the fallbacks are in force. */
         val marked: Boolean
     )
@@ -42,22 +48,31 @@ object ReceiptSections {
         val lines = rawText.lines()
         if (lines.none { it.trim() in MARKERS }) {
             // Unsectioned: hand every caller the whole text, which is what they read before.
-            return Sections(header = rawText, items = rawText, footer = rawText, marked = false)
+            return Sections(
+                header = rawText, items = rawText, footer = rawText, plain = rawText, marked = false
+            )
         }
 
         val header = StringBuilder()
         val items = StringBuilder()
         val footer = StringBuilder()
-        // Lines before any marker belong to no section — that is the plain reading-order text the
-        // reconstruction is appended to, and it is deliberately left out of all three.
-        var current: StringBuilder? = null
+        val plain = StringBuilder()
+        // Lines before any marker are the plain reading-order text the reconstruction is appended
+        // to. They are kept apart from the three sections — counting the same content twice would
+        // double every amount a caller sums — but they are kept: a stitched capture carries one such
+        // run per photo, and reading only the first threw away every shot after it.
+        var current: StringBuilder? = plain
 
         for (line in lines) {
-            when (line.trim()) {
-                HEADER_MARKER -> current = header
-                ITEMS_MARKER -> current = items
-                FOOTER_MARKER -> current = footer
-                TABLE_SECTION_MARKER -> current = null
+            val trimmed = line.trim()
+            when {
+                trimmed == HEADER_MARKER -> current = header
+                trimmed == ITEMS_MARKER -> current = items
+                trimmed == FOOTER_MARKER -> current = footer
+                trimmed == TABLE_SECTION_MARKER -> current = null
+                // Prefixed rather than equal: the seam carries a long sentence for the model to
+                // read, which may be reworded without this having to know.
+                trimmed.startsWith(STITCH_SEAM_HINT) -> current = plain
                 else -> current?.appendLine(line)
             }
         }
@@ -66,9 +81,15 @@ object ReceiptSections {
             header = header.toString().trimEnd(),
             items = items.toString().trimEnd(),
             footer = footer.toString().trimEnd(),
+            plain = plain.toString().trimEnd(),
             marked = true
         )
     }
+
+    /** A stitched capture joins its shots with this; the text after it is the next photo's plain
+     *  reading order, so collection resumes there. Matched on its opening words because the marker
+     *  carries a long human-readable body that OCR never touches but which may be reworded. */
+    private const val STITCH_SEAM_HINT = "--- [photo stitch seam"
 
     private val MARKERS = setOf(HEADER_MARKER, ITEMS_MARKER, FOOTER_MARKER)
 }
