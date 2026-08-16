@@ -200,7 +200,12 @@ fun ExpenseEditScreen(
     existing: ExpenseWithDetails?,
     categories: List<Category>,
     defaultCurrency: String,
+    /** Resolved by [com.voxapps.expenses.domain.llm.VatDisplay] — the setting alone cannot answer
+     *  it, since the middle setting asks the record rather than the user. */
     vatDisplayEnabled: Boolean,
+    /** True only where the columns are switched off and this record turned out to carry a
+     *  breakdown: the one combination that would otherwise discard something silently. */
+    vatFoundButHidden: Boolean = false,
     decimalSeparator: String,
     locationPrefillEnabled: Boolean,
     settingsRepository: ExpensesSettingsRepository,
@@ -798,6 +803,26 @@ fun ExpenseEditScreen(
 
                     if (items.isNotEmpty()) {
                         LineItemHeaderRow(vatDisplayEnabled, languageManager)
+                    }
+
+                    // The one case the setting would otherwise lose quietly: the columns are off,
+                    // and this document turned out to carry a breakdown. Said once, here, rather
+                    // than discarded — accepting it switches the columns on for good.
+                    if (vatFoundButHidden) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                languageManager.getString("vat_found_hidden"),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(onClick = { stateManager.setVatDisplay(ExpensesSettings.VAT_ON) }) {
+                                Text(languageManager.getString("vat_found_hidden_add"))
+                            }
+                        }
                     }
 
                     items.forEachIndexed { index, draftItem ->

@@ -113,11 +113,27 @@ fun ExpensesRoot(
                             // record's fields onto another. Switching targets now builds a new
                             // editor seeded from the tapped record; the abandoned one's unsaved
                             // keystrokes are discarded, never cross-written.
-                            target != null -> androidx.compose.runtime.key((target as? EditTarget.Existing)?.expense?.expense?.id ?: -1L) { ExpenseEditScreen(
+                            target != null -> androidx.compose.runtime.key((target as? EditTarget.Existing)?.expense?.expense?.id ?: -1L) {
+                                // Whether this particular record has a breakdown at all — presence
+                                // only, never derived. See VatDisplay.
+                                val edited = (target as? EditTarget.Existing)?.expense
+                                val recordCarriesVat = com.voxapps.expenses.domain.llm.VatDisplay.carriesVat(
+                                    netAmount = edited?.expense?.netAmount,
+                                    vatAmount = edited?.expense?.vatAmount,
+                                    itemVatAmounts = edited?.items.orEmpty().map { it.vatAmount }
+                                )
+                                ExpenseEditScreen(
                                 existing = (target as? EditTarget.Existing)?.expense,
                                 categories = state.categories,
                                 defaultCurrency = container.settingsRepository.getSnapshot().defaultCurrency,
-                                vatDisplayEnabled = container.settingsRepository.getSnapshot().vatDisplayEnabled,
+                                vatDisplayEnabled = com.voxapps.expenses.domain.llm.VatDisplay.shows(
+                                    container.settingsRepository.getSnapshot().vatDisplay,
+                                    recordCarriesVat
+                                ),
+                                vatFoundButHidden = com.voxapps.expenses.domain.llm.VatDisplay.offersToShow(
+                                    container.settingsRepository.getSnapshot().vatDisplay,
+                                    recordCarriesVat
+                                ),
                                 decimalSeparator = container.settingsRepository.getSnapshot().decimalSeparator,
                                 locationPrefillEnabled = container.settingsRepository.getSnapshot().locationPrefillEnabled,
                                 settingsRepository = container.settingsRepository,

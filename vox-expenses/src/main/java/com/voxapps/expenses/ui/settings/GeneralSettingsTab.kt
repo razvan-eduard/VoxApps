@@ -296,6 +296,43 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
+        // --- The tax breakdown: never, when the document carries one, or always. Three settings
+        // rather than a switch because the honest answer depends on the document — see VatDisplay. ---
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(languageManager.getString("vat_display"), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                languageManager.getString("vat_display_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val vatModes = listOf(
+                ExpensesSettings.VAT_OFF to "vat_display_off",
+                ExpensesSettings.VAT_AUTO to "vat_display_auto",
+                ExpensesSettings.VAT_ON to "vat_display_on"
+            )
+            for ((mode, key) in vatModes) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { stateManager.setVatDisplay(mode) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = settings.vatDisplay == mode,
+                        onClick = { stateManager.setVatDisplay(mode) }
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            languageManager.getString(key + "_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider()
+
         // --- Attach photo to AI on retry (separate from scan-time — retry re-sends already-staged
         // OCR text after a failed parse, a distinct and less frequent code path). ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

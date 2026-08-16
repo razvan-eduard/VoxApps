@@ -496,5 +496,13 @@
   "scan_model_none_desc": "Niciun text nu pleacă de pe telefon. Furnizorul se citește din antet, iar categoria e cea cu stea.",
   "default_category_suffix": "principală",
   "set_default_category": "Fă-o categoria principală",
-  "default_category_cannot_delete": "Categoria principală nu poate fi ștearsă"
+  "default_category_cannot_delete": "Categoria principală nu poate fi ștearsă",
+  "vat_display_off": "Niciodată",
+  "vat_display_off_desc": "Ascunse. O scanare care găsește defalcarea o propune o dată, pe înregistrare.",
+  "vat_display_auto": "Când documentul o are",
+  "vat_display_auto_desc": "Afișate pentru înregistrările care poartă defalcarea, ascunse pentru restul.",
+  "vat_display_on": "Întotdeauna",
+  "vat_display_on_desc": "Afișate pe orice înregistrare, goale sau nu.",
+  "vat_found_hidden": "Documentul are defalcare de TVA. O adaugi?",
+  "vat_found_hidden_add": "Adaugă"
 }

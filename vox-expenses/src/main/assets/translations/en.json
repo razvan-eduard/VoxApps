@@ -496,5 +496,13 @@
   "scan_model_none_desc": "No text leaves the device. The vendor is read from the letterhead and the starred category is used.",
   "default_category_suffix": "main",
   "set_default_category": "Make this the main category",
-  "default_category_cannot_delete": "The main category cannot be deleted"
+  "default_category_cannot_delete": "The main category cannot be deleted",
+  "vat_display_off": "Never",
+  "vat_display_off_desc": "Hidden. A scan that finds a breakdown will offer it once, on the record.",
+  "vat_display_auto": "When the document has it",
+  "vat_display_auto_desc": "Shown for records that carry a breakdown, hidden for the rest.",
+  "vat_display_on": "Always",
+  "vat_display_on_desc": "Shown on every record, empty or not.",
+  "vat_found_hidden": "This document has a VAT breakdown. Add it?",
+  "vat_found_hidden_add": "Add"
 }
