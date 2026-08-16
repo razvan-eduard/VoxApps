@@ -39,14 +39,25 @@ object LineItemBattery {
      */
     data class Reading(val templateId: String, val rows: List<Row>, val matchedTarget: Double)
 
-    /** The figures a correct item list is allowed to sum to, from the document's own totals. */
+    /**
+     * The figures a correct item list is allowed to sum to.
+     *
+     * [labelledOther] are amounts printed in the document's foot that carry no label this app
+     * recognises — a subtotal above a totals block, a figure whose caption was lost to OCR. They are
+     * admitted as candidates because the check they face is not "is this number plausible" but "do
+     * twelve rows, each reconstructing its own printed amount, sum to it exactly" — which a number
+     * that means something else does not survive. Requiring a caption instead would throw away
+     * correct readings for want of a word: a real invoice printed its subtotal, its rows added up to
+     * it precisely, and the only thing missing was the label beside it.
+     */
     data class Targets(
         val invoiceTotal: Double?,
         val netSubtotal: Double? = null,
-        val vatTotal: Double? = null
+        val vatTotal: Double? = null,
+        val labelledOther: List<Double> = emptyList()
     ) {
         internal fun accepted(): List<Double> =
-            InvoiceTotalsReconciler.acceptedTargets(invoiceTotal, netSubtotal, vatTotal)
+            InvoiceTotalsReconciler.acceptedTargets(invoiceTotal, netSubtotal, vatTotal) + labelledOther
     }
 
     /**

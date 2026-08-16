@@ -34,7 +34,13 @@ object ScanItemsReader {
             // the pre-tax subtotal its rows add up to; where it does not, these stay null and the
             // invoice total carries the check alone.
             netSubtotal = null,
-            vatTotal = null
+            vatTotal = null,
+            // Every amount printed in the foot, labelled or not. A subtotal is routinely printed
+            // above its totals block with the caption to one side, and OCR loses captions far more
+            // readily than it loses figures — a real invoice arrived with "18.36" intact and the
+            // words beside it gone. Admitting the bare figures costs nothing, because a candidate
+            // still has to reconstruct every row's own amount and sum to one of them exactly.
+            labelledOther = footerAmounts(sections.footer)
         )
 
         // The column reconstruction still reads the table its own way — it resolves which column is
@@ -65,4 +71,24 @@ object ScanItemsReader {
             templateId = reading.templateId
         )
     }
+
+    /**
+     * Every amount printed in the document's foot.
+     *
+     * Deliberately unfussy: a figure only becomes a target by having a correct-looking item list sum
+     * to it exactly, so there is no need to decide here which of them is a total. Bounded so a long
+     * footer cannot turn into a lottery of candidates.
+     */
+    private fun footerAmounts(footer: String): List<Double> =
+        AMOUNT.findAll(footer)
+            .mapNotNull { com.voxapps.textmatch.extract.AmountText.normalize(it.value) }
+            .filter { it > 0.0 }
+            .distinct()
+            .take(MAX_FOOTER_CANDIDATES)
+            .toList()
+
+    private val AMOUNT = Regex("""\d{1,3}(?:[ .,]\d{3})*[.,]\d{1,2}|\d+[.,]\d{1,2}""")
+
+    /** A foot holds a handful of figures; anything past that is not a totals block. */
+    private const val MAX_FOOTER_CANDIDATES = 12
 }

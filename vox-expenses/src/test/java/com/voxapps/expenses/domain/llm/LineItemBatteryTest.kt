@@ -166,6 +166,62 @@ class LineItemBatteryTest {
         assertEquals("numeric-tail", reading.templateId)
     }
 
+    /**
+     * The document that forced this: a clean scan produced all twelve rows and the subtotal 18.36,
+     * but the words "Total Factura" landed without their amount, so nothing carried a label. The
+     * figure was on the page; only its caption was missing.
+     */
+    @Test
+    fun `an unlabelled figure printed in the foot can still prove a reading`() {
+        val reading = LineItemBattery.read(
+            wrappedInvoice,
+            LineItemBattery.Targets(invoiceTotal = null, labelledOther = listOf(0.0, 18.36))
+        )!!
+
+        assertEquals("numeric-tail", reading.templateId)
+        assertEquals(12, reading.rows.size)
+        assertEquals(18.36, reading.matchedTarget, 0.001)
+    }
+
+    /** An unlabelled figure is a candidate, not a licence: rows that do not sum to it still lose. */
+    @Test
+    fun `an unlabelled figure proves nothing on its own`() {
+        assertNull(
+            LineItemBattery.read(
+                wrappedInvoice,
+                LineItemBattery.Targets(invoiceTotal = null, labelledOther = listOf(99.99, 55.55))
+            )
+        )
+    }
+
+    /**
+     * The hazard admitting bare figures creates, stated so it cannot be forgotten: this invoice's
+     * VAT column sums to 3.85, which the document also prints, so a reading that took each row's VAT
+     * for its amount reconciles perfectly. It is arithmetically true and semantically wrong.
+     *
+     * What keeps it from winning in practice is the order: the strict pattern is tried against every
+     * candidate before a loose one is tried against any, so as long as the rows' real total is among
+     * the candidates — as 18.36 was on the real scan — the honest reading answers first. This test
+     * pins the failure mode for the day someone reorders the list.
+     */
+    @Test
+    fun `a VAT column can reconcile against a VAT total when nothing better is offered`() {
+        val vatOnly = LineItemBattery.read(
+            wrappedInvoice,
+            LineItemBattery.Targets(invoiceTotal = null, labelledOther = listOf(3.85))
+        )
+        assertEquals(3.85, vatOnly!!.matchedTarget, 0.001)
+
+        // Offer the rows' real total as well and the honest reading takes precedence.
+        val both = LineItemBattery.read(
+            wrappedInvoice,
+            LineItemBattery.Targets(invoiceTotal = null, labelledOther = listOf(3.85, 18.36))
+        )!!
+        assertEquals("numeric-tail", both.templateId)
+        assertEquals(18.36, both.matchedTarget, 0.001)
+        assertEquals(12, both.rows.size)
+    }
+
     @Test
     fun `without a printed figure to check against, nothing is read`() {
         assertNull(LineItemBattery.read(wrappedInvoice, LineItemBattery.Targets(invoiceTotal = null)))
