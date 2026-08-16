@@ -68,7 +68,7 @@ object HeaderReader {
     ): Fields {
         if (headerText.isBlank()) return Fields()
         val lines = headerText.lines()
-        val buyerLines = linesNaming(lines, captions, ROLE_BUYER)
+        val buyerLines = buyerOwnedLines(lines, captions, legalForms)
 
         val fromCaption = vendorByCaption(lines, captions, buyerLines)
         val fromLegalForm = fromCaption ?: vendorByLegalForm(lines, buyerLines, legalForms, captions)
@@ -76,7 +76,8 @@ object HeaderReader {
 
         val vendor = fromCaption ?: fromLegalForm ?: patterns.second[FIELD_VENDOR]?.let(::tidyVendor)
         return Fields(
-            vendor = vendor,
+            vendor = vendor?.let { untilOtherParty(it, captions) }?.let(::tidyVendor)
+                ?.takeIf { it.length >= MIN_VENDOR_LENGTH },
             invoiceNumber = patterns.second[FIELD_INVOICE_NUMBER],
             date = dateOf(lines, captions, buyerLines) ?: patterns.second[FIELD_DATE],
             taxId = patterns.second[FIELD_TAX_ID],
@@ -88,6 +89,35 @@ object HeaderReader {
             },
             templateId = patterns.first
         )
+    }
+
+    /**
+     * Lines that belong to the party being billed rather than the one billing.
+     *
+     * A line is theirs only when their word comes *first* on it. Excluding every line that mentions
+     * a buyer is what a compact letterhead defeats: "BIOSCEM S.R.L. Cumparator: Madi Petrareanu"
+     * names both on one line, so throwing the line away loses the seller — and with the strong
+     * routes silenced, a pattern that knows nothing of either answers with the whole of it.
+     */
+    private fun buyerOwnedLines(
+        lines: List<String>,
+        captions: List<CompiledCaptions>,
+        legalForms: List<String>
+    ): Set<Int> {
+        val buyerVocabularies = captions.mapNotNull { it.roles[ROLE_BUYER] }
+        if (buyerVocabularies.isEmpty()) return emptySet()
+        val sellerVocabularies = captions.mapNotNull { it.roles[ROLE_SELLER] } +
+            if (legalForms.isEmpty()) emptyList()
+            else listOf(VocabularyClassifier.Vocabulary("legalForm", legalForms))
+
+        return lines.indices.filter { index ->
+            val line = lines[index]
+            val buyerAt = VocabularyClassifier.locate(line, buyerVocabularies)
+                .minOfOrNull { it.tokenIndex } ?: return@filter false
+            val sellerAt = VocabularyClassifier.locate(line, sellerVocabularies)
+                .minOfOrNull { it.tokenIndex }
+            sellerAt == null || buyerAt < sellerAt
+        }.toSet()
     }
 
     /** Line indices introduced by one of [role]'s words, in any language offered. */
@@ -121,7 +151,9 @@ object HeaderReader {
             if (index in buyerLines) continue
             val hit = VocabularyClassifier.locate(line, vocabularies).firstOrNull() ?: continue
             val after = afterTerm(line, hit.term) ?: continue
-            tidyVendor(after).takeIf { it.length >= MIN_VENDOR_LENGTH }?.let { return it }
+            tidyVendor(untilOtherParty(after, captions))
+                .takeIf { it.length >= MIN_VENDOR_LENGTH }
+                ?.let { return it }
         }
         return null
     }
@@ -143,12 +175,39 @@ object HeaderReader {
         for ((index, line) in lines.withIndex()) {
             if (index in buyerLines) continue
             if (VocabularyClassifier.locate(line, vocabulary).isEmpty()) continue
-            tidyVendor(withoutMangledCaption(line, captions))
+            tidyVendor(untilOtherParty(withoutMangledCaption(line, captions), captions))
                 .takeIf { it.length >= MIN_VENDOR_LENGTH }
                 ?.let { return it }
         }
         return null
     }
+
+    /**
+     * Stops the name where the other party is introduced.
+     *
+     * Ruling out the buyer's *line* is not enough, because a compact letterhead prints both parties
+     * on one — a real scan produced "BIOSCEM S.R.L. Cumparator: Madi Petrareanu", where skipping the
+     * line would have lost the seller and keeping it whole made the record name both. The line is
+     * the seller's; it simply ends where the buyer is announced.
+     */
+    private fun untilOtherParty(text: String, captions: List<CompiledCaptions>): String {
+        val vocabularies = captions.mapNotNull { it.roles[ROLE_BUYER] }
+        if (vocabularies.isEmpty()) return text
+        val cut = vocabularies.asSequence()
+            .flatMap { it.terms.asSequence() }
+            .mapNotNull { term ->
+                val at = text.indexOf(term, ignoreCase = true)
+                // Only past the start: a line that opens with the buyer's word is the buyer's, and
+                // is already excluded — cutting at nothing would leave an empty name.
+                if (at > 0 && precededByBoundary(text, at)) at else null
+            }
+            .minOrNull() ?: return text
+        return text.substring(0, cut)
+    }
+
+    /** A term only announces a party where a word actually begins, not inside a longer one. */
+    private fun precededByBoundary(text: String, at: Int): Boolean =
+        at == 0 || !text[at - 1].isLetterOrDigit()
 
     /**
      * Drops a leading word that is a caption recognition got wrong.
@@ -228,7 +287,9 @@ object HeaderReader {
         val cut = TRAILING_DETAIL.find(raw)?.range?.first ?: raw.length
         return raw.substring(0, cut)
             .trim()
-            .trim(',', ';', '-', ':', '.')
+            // A full stop is left alone: it is the last character of "S.R.L." far more often than
+            // it is punctuation somebody put after a company's name.
+            .trim(',', ';', '-', ':')
             .take(MAX_FIELD_LENGTH)
             .trim()
     }

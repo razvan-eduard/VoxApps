@@ -182,4 +182,37 @@ class HeaderReaderTest {
         )
         assertEquals("Exemple Commerce SAS", french.vendor)
     }
+
+    /**
+     * Both parties on one line — a compact letterhead, and what a real scan produced. Skipping the
+     * line would lose the seller; keeping it whole names both in a field meant for one.
+     */
+    @Test
+    fun `a line naming both parties yields only the seller`() {
+        val library = shipped()
+
+        val fields = HeaderReader.read(
+            headerText = "BIOSCEM S.R.L. Cumparator: Madi Petrareanu",
+            templates = library.headers,
+            captions = library.captions,
+            legalForms = legalForms
+        )
+
+        assertEquals("BIOSCEM S.R.L.", fields.vendor)
+    }
+
+    /** The same where a caption introduced the seller and the buyer followed on its line. */
+    @Test
+    fun `a captioned seller stops where the buyer begins`() {
+        val library = shipped()
+
+        val fields = HeaderReader.read(
+            headerText = "Furnizor: ACME TRADING LTD Client: Ion Popescu",
+            templates = library.headers,
+            captions = library.captions,
+            legalForms = legalForms
+        )
+
+        assertEquals("ACME TRADING LTD", fields.vendor)
+    }
 }
