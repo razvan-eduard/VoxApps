@@ -31,6 +31,7 @@ import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.location.ExpensesLocationStore
+import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.location.LocationSource
@@ -93,7 +94,7 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        ZoneLabel(languageManager.getString("zone_security"))
+        SettingsSectionHeader(languageManager.getString("zone_security"))
         // --- Require fingerprint ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -132,7 +133,7 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        ZoneLabel(languageManager.getString("zone_money"))
+        SettingsSectionHeader(languageManager.getString("zone_money"))
         // --- Default currency ---
         Text(languageManager.getString("default_currency_label"), style = MaterialTheme.typography.labelLarge)
         Text(
@@ -173,7 +174,7 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        ZoneLabel(languageManager.getString("zone_browsing"))
+        SettingsSectionHeader(languageManager.getString("zone_browsing"))
         // --- Calendar view (opt-in; changes the primary browsing paradigm) ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -239,7 +240,7 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        ZoneLabel(languageManager.getString("zone_places"))
+        SettingsSectionHeader(languageManager.getString("zone_places"))
         // --- Location prefill: one switch governing every place an expense's location field can
         // get auto-filled from GPS (scan, voice, manual entry). Independent of the OS location
         // permission granted in onboarding — that only makes the feature possible, this is whether
@@ -266,7 +267,7 @@ fun GeneralSettingsTab(
 
         HorizontalDivider()
 
-        ZoneLabel(languageManager.getString("zone_danger"))
+        SettingsSectionHeader(languageManager.getString("zone_danger"))
         // --- Danger Zone: Delete All ---
         var showDeleteAllConfirm by remember { mutableStateOf(false) }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -372,12 +373,3 @@ private fun ExpensesLocationSettingsSection(settingsRepo: ExpensesSettingsReposi
     )
 }
 
-/** A band's name, so a run of related settings reads as one decision rather than a list. */
-@Composable
-private fun ZoneLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary
-    )
-}

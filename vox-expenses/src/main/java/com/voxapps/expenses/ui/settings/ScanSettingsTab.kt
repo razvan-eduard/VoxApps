@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 
@@ -40,7 +41,7 @@ fun ScanSettingsTab(
         modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ZoneLabel(languageManager.getString("scan_zone_sent"))
+        SettingsSectionHeader(languageManager.getString("scan_zone_sent"))
         // --- Attach photo to AI on scan (opt-in; costs real LLM tokens on top of free OCR text,
         // and only takes effect when Vision's own "send photo to AI" setting also provided one). ---
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -60,7 +61,7 @@ fun ScanSettingsTab(
 
         HorizontalDivider()
 
-        ZoneLabel(languageManager.getString("scan_zone_read"))
+        SettingsSectionHeader(languageManager.getString("scan_zone_read"))
         // --- How much of a scan the model is asked to read. Placed beside the photo toggles because
         // it answers the same question they do — what leaves the device — and its lowest setting is
         // the only one that answers "nothing". ---
@@ -158,7 +159,7 @@ fun ScanSettingsTab(
 
         HorizontalDivider()
 
-        ZoneLabel(languageManager.getString("scan_zone_after"))
+        SettingsSectionHeader(languageManager.getString("scan_zone_after"))
         // --- Auto-trigger a line-items rescan the moment an expense gets its FIRST photo attached
         // after being saved (see ExpensesSettings.autoRescanOnFirstAttachment's doc comment for the
         // zero-to-one eligibility rule). ---
@@ -198,12 +199,3 @@ fun ScanSettingsTab(
     }
 }
 
-/** A band's name, so a run of related switches reads as one decision rather than a list. */
-@Composable
-private fun ZoneLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary
-    )
-}
