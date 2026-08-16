@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Shield
@@ -68,7 +69,7 @@ import com.voxapps.logging.ui.LogsSettingsTab
 import com.voxapps.logging.ui.LogsTabStrings
 
 private enum class SettingsPage {
-    MENU, GENERAL, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP,
+    MENU, GENERAL, SCANNING, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP,
     CLEANUP_DUPLICATES, CLEANUP_CORRECTIONS, CLEANUP_REMAP, CLEANUP_TEMPLATES,
     CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, BACKUP, LOGS
 }
@@ -127,6 +128,7 @@ fun SettingsScreen(
     val title = when (page) {
         SettingsPage.MENU -> languageManager.getString("settings")
         SettingsPage.GENERAL -> languageManager.getString("general")
+        SettingsPage.SCANNING -> languageManager.getString("scan_settings_title")
         SettingsPage.THEME -> languageManager.getString("theme_section")
         SettingsPage.NOTIFICATIONS -> languageManager.getString("notifications_settings_title")
         SettingsPage.VOICE -> languageManager.getString("voice_settings_title")
@@ -165,6 +167,11 @@ fun SettingsScreen(
                     headlineContent = { Text(languageManager.getString("general")) },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("scan_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SCANNING }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
@@ -222,6 +229,7 @@ fun SettingsScreen(
                 )
             }
             SettingsPage.GENERAL -> GeneralSettingsTab(settings = settings, stateManager = stateManager, settingsRepo = settingsRepo, modifier = mod)
+            SettingsPage.SCANNING -> ScanSettingsTab(settings = settings, stateManager = stateManager, modifier = mod)
             SettingsPage.THEME -> ThemeSettingsScreen(
                 darkMode = settings.themeDarkMode.toEnumOr(VoxDarkMode.SYSTEM),
                 colored = settings.themeColored,

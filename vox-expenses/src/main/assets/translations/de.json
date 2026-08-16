@@ -504,5 +504,9 @@
   "vat_display_on": "Immer",
   "vat_display_on_desc": "Auf jedem Datensatz angezeigt, leer oder nicht.",
   "vat_found_hidden": "Dieses Dokument hat eine MwSt-Aufschlüsselung. Hinzufügen?",
-  "vat_found_hidden_add": "Hinzufügen"
+  "vat_found_hidden_add": "Hinzufügen",
+  "scan_settings_title": "Scannen",
+  "scan_zone_sent": "Was das Gerät verlässt",
+  "scan_zone_read": "Was aus dem Dokument gelesen wird",
+  "scan_zone_after": "Nach einem Scan"
 }
