@@ -28,7 +28,7 @@ object LineItemBattery {
     /** Slack for one comparison: printed figures are rounded to the cent and rows accumulate that. */
     private const val TOLERANCE = 0.02
 
-    data class Row(val name: String, val quantity: Double, val unitPrice: Double) {
+    data class Row(val name: String, val quantity: Double, val unitPrice: Double, val vatAmount: Double? = null) {
         val value: Double get() = quantity * unitPrice
     }
 

@@ -58,6 +58,14 @@ data class Expense(
     // keeps its original name from the field's first iteration; only the Kotlin name is semantic.
     val previousBalanceAmount: Double? = null,
     @ColumnInfo(name = "totalToPayAmount") val invoiceOwnAmount: Double? = null,
+    /**
+     * The document's own three figures: what it charges before tax, the tax on it, and the total it
+     * already carries in [totalAmount]. Null where the document did not separate them — most
+     * receipts do not — and never derived, so their presence is what tells the edit screen there is
+     * a breakdown worth showing.
+     */
+    val netAmount: Double? = null,
+    val vatAmount: Double? = null,
     val currencyCode: String,
     val vendor: String? = null,
     val bank: String? = null,

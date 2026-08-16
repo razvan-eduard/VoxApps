@@ -59,11 +59,17 @@ object ModelFreeScanCreator {
             category = category?.name,
             date = reading.header.date ?: dateTime.date,
             time = dateTime.time,
+            // Written only where the table printed a tax column that proved itself; a row the
+            // document was silent about stays silent here, rather than carrying a share of a total
+            // that rounding would not distribute exactly.
             items = reading.items.orEmpty().map {
                 ExpenseParseResultParser.ParsedItem(
                     name = it.name,
                     quantity = it.quantity,
-                    unitPrice = it.unitPrice
+                    unitPrice = it.unitPrice,
+                    netAmount = it.vatAmount?.let { _ -> it.quantity * it.unitPrice },
+                    vatAmount = it.vatAmount,
+                    grossAmount = it.vatAmount?.let { vat -> it.quantity * it.unitPrice + vat }
                 )
             }
         )

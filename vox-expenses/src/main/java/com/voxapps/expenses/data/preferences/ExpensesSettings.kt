@@ -92,7 +92,15 @@ data class ExpensesSettings(
     val bankingSourcePackages: Set<String> = emptySet(),
     val autoAcceptNotificationExpenses: Boolean = false,
     val debugLoggingEnabled: Boolean = false,
-    val vatDisplayEnabled: Boolean = false,
+    /**
+     * Whether the net/VAT/gross breakdown is shown — see [VAT_OFF], [VAT_AUTO], [VAT_ON].
+     *
+     * Three settings rather than two because the honest answer depends on the document. Always
+     * showing the columns leaves most receipts with three empty fields; never showing them hides a
+     * breakdown the scan actually read. [VAT_AUTO] shows them exactly when the document carried
+     * them, and is what a scan-first install wants.
+     */
+    val vatDisplay: String = VAT_AUTO,
     val decimalSeparator: String = DECIMAL_PERIOD,
     val calendarViewEnabled: Boolean = false,
     val isGridView: Boolean = false,
@@ -238,6 +246,17 @@ data class ExpensesSettings(
         const val DEFAULT_CURRENCY = "RON"
 
         const val INTERVAL_OFF = "OFF"
+
+        /** Never shown. A scan that finds a breakdown says so once, rather than silently dropping it. */
+        const val VAT_OFF = "OFF"
+
+        /** Shown for the records that carry one, hidden for the records that do not. */
+        const val VAT_AUTO = "AUTO"
+
+        /** Always shown, empty or not, for someone who enters the breakdown by hand. */
+        const val VAT_ON = "ON"
+
+        val VAT_CHOICES = listOf(VAT_OFF, VAT_AUTO, VAT_ON)
 
         /** The model reads everything: it may correct recognition, infer a category, name the vendor. */
         const val SCAN_MODEL_FULL = "FULL"

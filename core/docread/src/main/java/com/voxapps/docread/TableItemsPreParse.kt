@@ -14,7 +14,18 @@ import org.json.JSONObject
  */
 object TableItemsPreParse {
 
-    data class Item(val name: String, val quantity: Double, val unitPrice: Double)
+    /**
+     * @property vatAmount the tax charged on this row, where the table printed a column for it and
+     *  that column proved itself — see [ColumnRoleInference]. Null where the document was silent,
+     *  never derived from a rate: rounding to the cent does not distribute, so a row's share of a
+     *  printed tax total is a calculation and this reads only what is on the page.
+     */
+    data class Item(
+        val name: String,
+        val quantity: Double,
+        val unitPrice: Double,
+        val vatAmount: Double? = null
+    )
 
     private const val TOLERANCE = 0.05
 
@@ -105,11 +116,22 @@ object TableItemsPreParse {
                     matches(parseAmount(row[q])!! * parseAmount(row[u])!!, parseAmount(row[valueColumn])!!)
                 }
             }
+        // Which column holds the tax, decided by what a tax column does rather than by its heading:
+        // it is a constant fraction of the values it is charged on. See [ColumnRoleInference].
+        val roles = ColumnRoleInference.infer(
+            columns = (0 until columnCount).map { c -> itemRows.map { parseAmount(it[c]) } },
+            printedTotals = totalsRows.flatMap { totals ->
+                totals.indices.mapNotNull { parseAmount(totals[it]) }
+            }
+        )
+        val vatColumn = roles.vat?.takeIf { it != valueColumn }
+
         return itemRows.map { row ->
             val value = parseAmount(row[valueColumn])!!
             val qty = qtyUnit?.let { parseAmount(row[it.first]) }
             val unit = qtyUnit?.let { parseAmount(row[it.second]) }
-            if (qty != null && unit != null) Item(row[0], qty, unit) else Item(row[0], 1.0, value)
+            val vat = vatColumn?.let { parseAmount(row[it]) }
+            if (qty != null && unit != null) Item(row[0], qty, unit, vat) else Item(row[0], 1.0, value, vat)
         }
     }
 
@@ -131,7 +153,11 @@ object TableItemsPreParse {
     fun toJson(items: List<Item>): String {
         val array = JSONArray()
         items.forEach { item ->
-            array.put(JSONObject().put("n", item.name).put("q", item.quantity).put("u", item.unitPrice))
+            val o = JSONObject().put("n", item.name).put("q", item.quantity).put("u", item.unitPrice)
+            // Written only where the document printed it, so an item with no tax column stays the
+            // same three keys it always was and an older reader loses nothing it understood.
+            item.vatAmount?.let { o.put("v", it) }
+            array.put(o)
         }
         return array.toString()
     }
@@ -141,7 +167,12 @@ object TableItemsPreParse {
             val array = JSONArray(json)
             (0 until array.length()).mapNotNull { i ->
                 val o = array.optJSONObject(i) ?: return@mapNotNull null
-                Item(o.optString("n"), o.optDouble("q", 1.0), o.optDouble("u", 0.0))
+                Item(
+                    o.optString("n"),
+                    o.optDouble("q", 1.0),
+                    o.optDouble("u", 0.0),
+                    if (o.has("v")) o.optDouble("v") else null
+                )
             }.takeIf { it.isNotEmpty() }
         }
     } catch (e: Exception) {

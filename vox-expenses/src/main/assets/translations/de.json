@@ -496,5 +496,13 @@
   "scan_model_none_desc": "Kein Text verlässt das Gerät. Der Lieferant wird aus dem Briefkopf gelesen, die markierte Kategorie wird verwendet.",
   "default_category_suffix": "Haupt",
   "set_default_category": "Zur Hauptkategorie machen",
-  "default_category_cannot_delete": "Die Hauptkategorie kann nicht gelöscht werden"
+  "default_category_cannot_delete": "Die Hauptkategorie kann nicht gelöscht werden",
+  "vat_display_off": "Nie",
+  "vat_display_off_desc": "Ausgeblendet. Ein Scan, der eine Aufschlüsselung findet, bietet sie einmal am Datensatz an.",
+  "vat_display_auto": "Wenn das Dokument sie hat",
+  "vat_display_auto_desc": "Für Datensätze mit Aufschlüsselung angezeigt, sonst ausgeblendet.",
+  "vat_display_on": "Immer",
+  "vat_display_on_desc": "Auf jedem Datensatz angezeigt, leer oder nicht.",
+  "vat_found_hidden": "Dieses Dokument hat eine MwSt-Aufschlüsselung. Hinzufügen?",
+  "vat_found_hidden_add": "Hinzufügen"
 }

@@ -46,6 +46,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val AUTO_ACCEPT_NOTIFICATION_EXPENSES = booleanPreferencesKey("auto_accept_notification_expenses")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
+        val VAT_DISPLAY = stringPreferencesKey("vat_display")
         val DECIMAL_SEPARATOR = stringPreferencesKey("decimal_separator")
         val CALENDAR_VIEW_ENABLED = booleanPreferencesKey("calendar_view_enabled")
         val IS_GRID_VIEW = booleanPreferencesKey("is_grid_view")
@@ -122,7 +123,15 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             bankingSourcePackages = prefs[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet(),
             autoAcceptNotificationExpenses = prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] ?: false,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
-            vatDisplayEnabled = prefs[Keys.VAT_DISPLAY_ENABLED] ?: false,
+            // The old two-state setting is read once, where the new one has never been written:
+            // somebody who had the breakdown showing keeps it showing, and somebody who had it off
+            // keeps it off. Only a fresh install lands on the setting that decides per document.
+            vatDisplay = prefs[Keys.VAT_DISPLAY]?.takeIf { it in ExpensesSettings.VAT_CHOICES }
+                ?: when (prefs[Keys.VAT_DISPLAY_ENABLED]) {
+                    true -> ExpensesSettings.VAT_ON
+                    false -> ExpensesSettings.VAT_OFF
+                    null -> ExpensesSettings.VAT_AUTO
+                },
             decimalSeparator = prefs[Keys.DECIMAL_SEPARATOR] ?: ExpensesSettings.DECIMAL_PERIOD,
             calendarViewEnabled = prefs[Keys.CALENDAR_VIEW_ENABLED] ?: false,
             isGridView = prefs[Keys.IS_GRID_VIEW] ?: false,
@@ -271,8 +280,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
 
-    override suspend fun setVatDisplayEnabled(enabled: Boolean) {
-        dataStore.edit { it[Keys.VAT_DISPLAY_ENABLED] = enabled }
+    override suspend fun setVatDisplay(mode: String) {
+        if (mode !in ExpensesSettings.VAT_CHOICES) return
+        dataStore.edit { it[Keys.VAT_DISPLAY] = mode }
     }
 
     override suspend fun setDecimalSeparator(separator: String) {
@@ -501,7 +511,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.BANKING_SOURCE_PACKAGES] = settings.bankingSourcePackages
             prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] = settings.autoAcceptNotificationExpenses
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
-            prefs[Keys.VAT_DISPLAY_ENABLED] = settings.vatDisplayEnabled
+            prefs[Keys.VAT_DISPLAY] = settings.vatDisplay
             prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator
             prefs[Keys.CALENDAR_VIEW_ENABLED] = settings.calendarViewEnabled
             prefs[Keys.IS_GRID_VIEW] = settings.isGridView

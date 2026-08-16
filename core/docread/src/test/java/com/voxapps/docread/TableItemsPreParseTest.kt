@@ -161,4 +161,15 @@ class TableItemsPreParseTest {
 
         assertEquals(0, items.count { it.name.startsWith("2 4") })
     }
+
+    /** Tax rides along only where the document printed it, so an older reader loses nothing. */
+    @Test
+    fun `tax survives the json round trip and is absent when unknown`() {
+        val withTax = listOf(TableItemsPreParse.Item("Service", 2.0, 2.35, vatAmount = 0.99))
+        val withoutTax = listOf(TableItemsPreParse.Item("Service", 2.0, 2.35))
+
+        assertEquals(0.99, TableItemsPreParse.fromJson(TableItemsPreParse.toJson(withTax))!!.first().vatAmount!!, 0.0001)
+        assertNull(TableItemsPreParse.fromJson(TableItemsPreParse.toJson(withoutTax))!!.first().vatAmount)
+        assertTrue("an item with no tax must not carry the key", !TableItemsPreParse.toJson(withoutTax).contains("\"v\""))
+    }
 }

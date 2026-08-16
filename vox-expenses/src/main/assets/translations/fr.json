@@ -496,5 +496,13 @@
   "scan_model_none_desc": "Aucun texte ne quitte l'appareil. Le fournisseur est lu sur l'en-tête et la catégorie étoilée est utilisée.",
   "default_category_suffix": "principale",
   "set_default_category": "En faire la catégorie principale",
-  "default_category_cannot_delete": "La catégorie principale ne peut pas être supprimée"
+  "default_category_cannot_delete": "La catégorie principale ne peut pas être supprimée",
+  "vat_display_off": "Jamais",
+  "vat_display_off_desc": "Masqué. Un scan qui trouve une ventilation la propose une fois, sur la fiche.",
+  "vat_display_auto": "Quand le document l'a",
+  "vat_display_auto_desc": "Affiché pour les fiches qui portent une ventilation, masqué sinon.",
+  "vat_display_on": "Toujours",
+  "vat_display_on_desc": "Affiché sur chaque fiche, vide ou non.",
+  "vat_found_hidden": "Ce document a une ventilation de TVA. L'ajouter ?",
+  "vat_found_hidden_add": "Ajouter"
 }

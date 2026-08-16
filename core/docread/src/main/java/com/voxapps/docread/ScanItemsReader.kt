@@ -56,7 +56,7 @@ object ScanItemsReader {
         // readings of the same rows, so the best one is the answer rather than their sum.
         val columnar = sections.itemBlocks
             .firstNotNullOfOrNull { block -> TableItemsPreParse.parse(block, targets.invoiceTotal) }
-            ?.map { LineItemBattery.Row(it.name, it.quantity, it.unitPrice) }
+            ?.map { LineItemBattery.Row(it.name, it.quantity, it.unitPrice, it.vatAmount) }
 
         // Two bodies of text are worth reading, and which one carries the rows varies by scan.
         //
@@ -98,7 +98,12 @@ object ScanItemsReader {
         )
         return Result(
             items = reading.rows.map {
-                TableItemsPreParse.Item(name = it.name, quantity = it.quantity, unitPrice = it.unitPrice)
+                TableItemsPreParse.Item(
+                    name = it.name,
+                    quantity = it.quantity,
+                    unitPrice = it.unitPrice,
+                    vatAmount = it.vatAmount
+                )
             },
             templateId = reading.templateId
         )
