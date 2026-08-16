@@ -4,6 +4,7 @@ import android.app.Application
 import com.voxapps.ipc.PendingLlmRequestScheduler
 import com.voxapps.ipc.VoxLlmQueueHost
 import com.voxapps.ipc.VoxLlmRequestQueue
+import com.voxapps.docread.ReceiptTemplates
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.domain.limits.SpendingLimitScheduler
 import com.voxapps.expenses.domain.llm.CategoryAutoMergeScheduler
@@ -56,7 +57,7 @@ class ExpensesApplication : Application(), VoxLlmQueueHost {
         SchemaRepo.appFolder = "expenses"
         ExternalServiceConfig.init(this)
         com.voxapps.expenses.data.FieldVocabularies.init(this)
-        com.voxapps.expenses.domain.llm.ReceiptTemplates.init(this)
+        ReceiptTemplates.init(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             // The repository this app follows, and whether it is asked at all — its own settings,
             // so an install can follow a fork here and not in Commander.

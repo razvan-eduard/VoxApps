@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.docread.ReceiptTotalRegexParser
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index

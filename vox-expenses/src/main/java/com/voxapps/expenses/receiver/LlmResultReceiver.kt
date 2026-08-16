@@ -1,5 +1,7 @@
 package com.voxapps.expenses.receiver
 
+import com.voxapps.docread.InvoiceTotalsReconciler
+import com.voxapps.docread.TableItemsPreParse
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -23,7 +25,6 @@ import com.voxapps.expenses.domain.llm.CategoryMergeMappingParser
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationResultParser
-import com.voxapps.expenses.domain.llm.InvoiceTotalsReconciler
 import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
@@ -33,7 +34,6 @@ import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
-import com.voxapps.expenses.domain.llm.TableItemsPreParse
 import com.voxapps.expenses.ui.widget.ExpensesWidget
 import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
@@ -676,7 +676,7 @@ class LlmResultReceiver : BroadcastReceiver() {
         if (preParse == null) return this
         // Deterministically-read items (validated against the printed total at pre-parse time)
         // replace whatever the model returned — it was told to return none.
-        val preItems = com.voxapps.expenses.domain.llm.TableItemsPreParse.fromJson(preParse.itemsJson)
+        val preItems = com.voxapps.docread.TableItemsPreParse.fromJson(preParse.itemsJson)
             ?.map { ExpenseParseResultParser.ParsedItem(name = it.name, quantity = it.quantity, unitPrice = it.unitPrice) }
         return copy(
             totalAmount = preParse.total ?: totalAmount,

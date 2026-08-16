@@ -1,5 +1,7 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.docread.ReceiptTotalRegexParser
+import com.voxapps.docread.TableItemsPreParse
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey

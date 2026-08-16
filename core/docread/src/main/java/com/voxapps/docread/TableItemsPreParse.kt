@@ -1,4 +1,4 @@
-package com.voxapps.expenses.domain.llm
+package com.voxapps.docread
 
 import org.json.JSONArray
 import org.json.JSONObject
