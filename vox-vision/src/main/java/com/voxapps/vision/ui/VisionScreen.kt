@@ -86,6 +86,7 @@ import com.voxapps.vision.domain.OcrResultSender
 import com.voxapps.vision.domain.ScanTargetDiscovery
 import com.voxapps.vision.ocr.ContinuityMatcher
 import com.voxapps.vision.ocr.DocumentCropper
+import com.voxapps.vision.ocr.ReadingCascade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1358,7 +1359,19 @@ private suspend fun finishRecognition(
     // same dispatcher instance don't redispatch, so engine.recognize()'s own internal
     // withContext(Dispatchers.IO) stays on this exact thread too.
     val text = if (produceOCR) {
-        withContext(Dispatchers.IO) { nativeCvLock.withLock { engine.recognize(cropped, tableMode) } }
+        withContext(Dispatchers.IO) {
+            nativeCvLock.withLock {
+                // The lock covers the whole cascade rather than each pass: the renderings are
+                // native CV work too, and a retry only ever happens while the preview is already
+                // frozen on the captured frame.
+                if (tableMode) {
+                    ReadingCascade.read(cropped) { engine.recognize(it, tableMode = true) }
+                } else {
+                    // No totals to close against, so a second pass could only prove nothing.
+                    engine.recognize(cropped, tableMode)
+                }
+            }
+        }
     } else {
         ""
     }
