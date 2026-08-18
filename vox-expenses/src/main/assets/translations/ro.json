@@ -514,5 +514,11 @@
   "zone_browsing": "Navigare și widget-uri",
   "zone_places": "Locuri",
   "zone_danger": "Zonă periculoasă",
-  "logging_section": "Jurnalizare"
+  "logging_section": "Jurnalizare",
+  "notification_model_use_label": "Folosirea modelului",
+  "notification_model_use_desc": "Unde are voie să fie trimisă o notificare capturată.",
+  "notification_model_full": "Trimite pentru interpretare",
+  "notification_model_full_desc": "Textul ajunge la motor, care citește suma, comerciantul și dacă banii au ieșit din cont.",
+  "notification_model_none": "Nu pleacă nimic de pe telefon",
+  "notification_model_none_desc": "Suma se citește pe telefon. Înțelesul mesajului vine din șabloanele confirmate deja de tine; restul așteaptă în revizuire, nu se ghicește."
 }

@@ -514,5 +514,11 @@
   "zone_browsing": "Navigation et widgets",
   "zone_places": "Lieux",
   "zone_danger": "Zone dangereuse",
-  "logging_section": "Journalisation"
+  "logging_section": "Journalisation",
+  "notification_model_use_label": "Utilisation du modèle",
+  "notification_model_use_desc": "Ce à quoi une notification capturée peut être envoyée.",
+  "notification_model_full": "Envoyer pour interprétation",
+  "notification_model_full_desc": "Le texte va au moteur, qui lit le montant, le marchand et le sens de l'opération.",
+  "notification_model_none": "Rien ne quitte l'appareil",
+  "notification_model_none_desc": "Le montant est lu sur l'appareil. Le sens vient des modèles déjà confirmés ; le reste attend une revue."
 }
