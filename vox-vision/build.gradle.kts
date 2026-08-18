@@ -239,6 +239,9 @@ tasks.withType<Test>().configureEach {
 
 dependencies {
     implementation(project(":core:design"))
+    // The arithmetic that decides whether a page was read at all — the cascade's judge (see
+    // ReadingCascade). Reading stays where it was; only the verdict is consulted here.
+    implementation(project(":core:docread"))
     implementation(project(":core:ipc"))
     implementation(project(":core:logging"))
     implementation(project(":core:nativelibs"))
