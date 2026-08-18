@@ -169,11 +169,6 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
                 ListItem(
-                    headlineContent = { Text(languageManager.getString("scan_settings_title")) },
-                    leadingContent = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SCANNING }
-                )
-                ListItem(
                     headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
@@ -194,6 +189,11 @@ fun SettingsScreen(
                     headlineContent = { Text(languageManager.getString("notification_capture_title")) },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATION_CAPTURE }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("scan_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SCANNING }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_data"))
                 ListItem(
@@ -378,6 +378,7 @@ fun SettingsScreen(
                 paymentSourcePackages = settings.paymentSourcePackages,
                 bankingSourcePackages = settings.bankingSourcePackages,
                 autoAcceptNotificationExpenses = settings.autoAcceptNotificationExpenses,
+                    notificationModelUse = settings.notificationModelUse,
                 stateManager = stateManager,
                 settingsRepo = settingsRepo,
                 modifier = mod
