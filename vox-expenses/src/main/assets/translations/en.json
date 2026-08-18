@@ -505,7 +505,7 @@
   "vat_display_on_desc": "Shown on every record, empty or not.",
   "vat_found_hidden": "This document has a VAT breakdown. Add it?",
   "vat_found_hidden_add": "Add",
-  "scan_settings_title": "Scanning",
+  "scan_settings_title": "From Scan",
   "scan_zone_sent": "What leaves the device",
   "scan_zone_read": "What is read from the document",
   "scan_zone_after": "After a scan",
