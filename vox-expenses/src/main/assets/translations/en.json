@@ -514,5 +514,11 @@
   "zone_browsing": "Browsing and widgets",
   "zone_places": "Places",
   "zone_danger": "Danger zone",
-  "logging_section": "Logging"
+  "logging_section": "Logging",
+  "notification_model_use_label": "Model use",
+  "notification_model_use_desc": "What a captured notification is allowed to be sent to.",
+  "notification_model_full": "Send for interpretation",
+  "notification_model_full_desc": "The notification's text goes to the engine, which reads the amount, the merchant and whether money left the account.",
+  "notification_model_none": "Nothing leaves the device",
+  "notification_model_none_desc": "The amount is read on the device. What the message means is taken from templates you have already confirmed; anything else waits in review instead of being guessed."
 }

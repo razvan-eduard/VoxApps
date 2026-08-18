@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -45,6 +47,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.apppicker.AppPickerCard
 import com.voxapps.apppicker.AppPickerStrings
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
@@ -109,6 +112,7 @@ fun NotificationCaptureSettingsTab(
     paymentSourcePackages: Set<String>,
     bankingSourcePackages: Set<String>,
     autoAcceptNotificationExpenses: Boolean,
+    notificationModelUse: String,
     stateManager: ExpensesStateManager,
     settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
@@ -348,6 +352,41 @@ fun NotificationCaptureSettingsTab(
                 onApplyStarred = { updated -> stateManager.setBankingSourcePackages(updated) }
             )
 
+        }
+
+        SettingsSectionCard(languageManager.getString("notification_model_use_label")) {
+            Text(
+                languageManager.getString("notification_model_use_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val notificationModes = listOf(
+                ExpensesSettings.NOTIFICATION_MODEL_FULL to "notification_model_full",
+                ExpensesSettings.NOTIFICATION_MODEL_NONE to "notification_model_none"
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for ((mode, key) in notificationModes) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { stateManager.setNotificationModelUse(mode) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = notificationModelUse == mode,
+                            onClick = { stateManager.setNotificationModelUse(mode) }
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                languageManager.getString(key + "_desc"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         SettingsSectionCard(languageManager.getString("auto_accept_notification_expenses_label")) {

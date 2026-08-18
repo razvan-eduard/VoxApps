@@ -85,6 +85,17 @@ data class ExpensesSettings(
      * a model at all rather than losing the feature.
      */
     val scanModelUse: String = SCAN_MODEL_FULL,
+    /**
+     * Whether a captured notification is sent to a model at all — see [NOTIFICATION_MODEL_FULL] and
+     * [NOTIFICATION_MODEL_NONE].
+     *
+     * Separate from [scanModelUse] because the two channels differ in what the device can work out
+     * alone. A scanned page carries arithmetic that proves a reading; a payment notification carries
+     * one sentence, so the deterministic half can recover the amount but not what the sentence
+     * means. The lower setting is therefore not "read it locally instead" but "capture it locally
+     * and let a person confirm it", which is what the pending-review queue already exists for.
+     */
+    val notificationModelUse: String = NOTIFICATION_MODEL_FULL,
     val scheduledMergeInterval: String = INTERVAL_OFF,
     val scheduledExpenseDedupInterval: String = INTERVAL_OFF,
     val homeCurrency: String = DEFAULT_CURRENCY,
@@ -274,6 +285,16 @@ data class ExpensesSettings(
         val SCAN_MODEL_CHOICES = listOf(
             SCAN_MODEL_FULL, SCAN_MODEL_HEADER_FOOTER_AUTO, SCAN_MODEL_HEADER_FOOTER_SUGGEST, SCAN_MODEL_NONE
         )
+
+        /** The notification's text is sent for interpretation, as it always has been. */
+        const val NOTIFICATION_MODEL_FULL = "FULL"
+
+        /** Nothing leaves the device: the amount is taken by the deterministic pre-parse, the
+         *  meaning of the sentence by the template memory where a human already taught it, and
+         *  anything still unproven waits in review rather than being guessed at. */
+        const val NOTIFICATION_MODEL_NONE = "NONE"
+
+        val NOTIFICATION_MODEL_CHOICES = listOf(NOTIFICATION_MODEL_FULL, NOTIFICATION_MODEL_NONE)
         const val INTERVAL_HOURLY = "HOURLY"
         const val INTERVAL_DAILY = "DAILY"
         const val INTERVAL_WEEKLY = "WEEKLY"
