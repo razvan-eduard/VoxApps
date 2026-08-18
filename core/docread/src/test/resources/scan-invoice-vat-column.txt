@@ -1,0 +1,70 @@
+Furnizor: BIOSCEM S.R.L. Cumparator: Madi Petrareanu
+Nr. Reg. Com.: J40/3321/04.03.2016 CNP:
+CIF: RO 35759101 Adresa: Str. Regele Ferdinand, Nr. 83,
+Sediu: Str Laurentiu Claudian 27, Pleasa
+Bucuresti Judetul: Prahova
+Judetul: Sector 2 Tara: Romania
+Capital social: 2060 LEI
+Mobil: 0740667194 BIOSCEM
+Cod IBAN: RO81BTRLRONCRT0390167701
+Banca: Banca Transilvania
+Swift: BTRLRO022 vitalitate & protecție
+Cod IBAN: RO31BTRLEURCRT0390167701
+Banca: Banca Transilvania
+Swift: BTRLR0022 FACTURA
+Seria: BGH Nr: 66544
+10.06.2026
+Data (ziua/luna/anul)
+Nr. Denumirea produselor U.M. Cantitatea Pretul Unitar Valoare Cota Valoare
+crt. sau a serviciilor RON RON T.V.A. T.V.A.
+0 2 3 4 5 6 7
+1 QUINTON FIOLE HYPERTONIC Buc 115,7025 231,40 21% 48,60
+2 QUINTON SPRAY NAZAL PEDIATRIC Buc 221 53,7190 107,44 21% 22,56
+3 BIOFERMENT 250 G Buc 45,4545 45,45 21% 9,55
+Intocmit de: SD
+Termen de plata: 10.06.2026
+Semnatura si Date privind expeditia Total: Total TVA:
+Numele delegatului: FAN COURIER 384,29 RON 80,71 RON
+stampila
+furnizorului Mijloc de transport: Total de plata: 465,00 RON
+Expedierea s-a efectuat in prezenta noastra la Semnatura de primire
+data de: 10.06.2026 ora 09:19
+Semnaturile
+Generata cu aplicatia: Defact Gestiune Professional - www.defact.ro
+--- [table reconstruction] ---
+--- [header] ---
+Furnizor: BIOSCEM S.R.L. Cumparator: Madi Petrareanu
+Nr. Reg. Com.: J40/3321/04.03.2016 CNP:
+CIF: RO 35759101 Adresa: Str. Regele Ferdinand, Nr. 83,
+Sediu: Str Laurentiu Claudian 27, Pleasa
+Bucuresti Judetul: Prahova
+Judetul: Sector 2 Tara: Romania
+Capital social: 2060 LEI
+Mobil: 0740667194 BIOSCEM
+Cod IBAN: RO81BTRLRONCRT0390167701
+Banca: Banca Transilvania
+Swift: BTRLRO022 vitalitate & protecție
+Cod IBAN: RO31BTRLEURCRT0390167701
+Banca: Banca Transilvania
+Swift: BTRLR0022 FACTURA
+Seria: BGH Nr: 66544
+10.06.2026
+Data (ziua/luna/anul)
+Nr. Denumirea produselor U.M. Cantitatea Pretul Unitar Valoare Cota Valoare
+crt. sau a serviciilor RON RON T.V.A. T.V.A.
+--- [items] ---
+0 2 3 4 6 | 5 | 7
+1 QUINTON FIOLE HYPERTONIC Buc 115,7025 21% | 231,40 | 48,60
+2 QUINTON SPRAY NAZAL PEDIATRIC Buc 221 53,7190 21% | 107,44 | 22,56
+3 BIOFERMENT 250 G Buc 45,4545 21% | 45,45 | 9,55
+--- [footer] ---
+Intocmit de: SD
+Termen de plata: 10.06.2026
+Semnatura si Date privind expeditia Total: Total TVA:
+Numele delegatului: FAN COURIER 384,29 RON 80,71 RON
+stampila
+furnizorului Mijloc de transport: Total de plata: 465,00 RON
+Expedierea s-a efectuat in prezenta noastra la Semnatura de primire
+data de: 10.06.2026 ora 09:19
+Semnaturile
+Generata cu aplicatia: Defact Gestiune Professional - www.defact.ro
