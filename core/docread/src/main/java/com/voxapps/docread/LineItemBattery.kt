@@ -56,8 +56,14 @@ object LineItemBattery {
         val vatTotal: Double? = null,
         val labelledOther: List<Double> = emptyList()
     ) {
-        internal fun accepted(): List<Double> =
-            InvoiceTotalsReconciler.acceptedTargets(invoiceTotal, netSubtotal, vatTotal) + labelledOther
+        internal fun accepted(): List<Double> {
+            val labelled = InvoiceTotalsReconciler.acceptedTargets(invoiceTotal, netSubtotal, vatTotal)
+            // Only the unlabelled figures are filtered: a total this app recognised by its caption
+            // says what it is, and a small invoice against a large balance carried forward would
+            // otherwise look like tax on that balance.
+            return labelled +
+                InvoiceTotalsReconciler.withoutTaxComponents(labelledOther, labelled + labelledOther)
+        }
     }
 
     /**

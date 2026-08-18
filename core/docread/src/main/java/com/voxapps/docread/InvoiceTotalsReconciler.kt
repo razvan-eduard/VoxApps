@@ -167,4 +167,34 @@ object InvoiceTotalsReconciler {
         netSubtotal,
         if (netSubtotal != null && vatTotal != null) netSubtotal + vatTotal else null
     )
+
+    /**
+     * Of [candidates], the ones a line-item sum may legitimately equal — the tax components
+     * removed.
+     *
+     * Line items sum to the net, never to the tax on it. An unlabelled figure cannot say which it
+     * is, but the page's own arithmetic can: where the document prints a pair that adds to a third
+     * figure, and the smaller of the pair is no more than [MAX_TAX_RATE] of the larger, the smaller
+     * one is the tax and the larger is the net it was computed from. Nothing else on an invoice
+     * stands in that relation — a balance carried forward pairs with the invoice total the same way
+     * arithmetically, but it is not a fraction of it, so the rate bound keeps it.
+     *
+     * This matters because the alternative check is not "is this number plausible" but "do these
+     * rows sum to it exactly", and a table read one column across satisfies that perfectly: rows
+     * read from the tax column sum to the tax total, and the reading closes on a figure that is
+     * real, printed, and the wrong one.
+     *
+     * [printed] is every figure the document shows, which is where the pair is looked for; only
+     * [candidates] are filtered, so a figure the document labelled for us stays authoritative.
+     */
+    fun withoutTaxComponents(candidates: List<Double>, printed: List<Double>): List<Double> {
+        val all = (candidates + printed).distinct()
+        return candidates.filterNot { candidate ->
+            candidate > 0.0 && all.any { net ->
+                net > candidate &&
+                    candidate / net <= MAX_TAX_RATE &&
+                    all.any { gross -> abs(candidate + net - gross) <= TOLERANCE }
+            }
+        }
+    }
 }
