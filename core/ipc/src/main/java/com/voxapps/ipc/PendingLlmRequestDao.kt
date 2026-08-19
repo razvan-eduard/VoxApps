@@ -17,6 +17,9 @@ interface PendingLlmRequestDao {
     @Query("UPDATE pending_llm_requests SET attemptCount = attemptCount + 1, lastAttemptAt = :now WHERE requestId = :requestId")
     suspend fun incrementAttempt(requestId: String, now: Long)
 
+    @Query("SELECT * FROM pending_llm_requests WHERE requestId = :requestId LIMIT 1")
+    suspend fun getByRequestId(requestId: String): PendingLlmRequestEntity?
+
     @Query("DELETE FROM pending_llm_requests WHERE requestId = :requestId")
     suspend fun deleteByRequestId(requestId: String)
 

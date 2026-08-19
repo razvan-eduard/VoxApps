@@ -93,6 +93,24 @@ class VoxLlmRequestQueue(
         dao.deleteByRequestId(requestId)
     }
 
+    /**
+     * The input this app sent under [requestId] — the first entry of the request's `data`, which is
+     * where every sender puts the text the prompt was built from.
+     *
+     * For recovering what the device could have established on its own, once an answer comes back:
+     * the reply carries only the answer, so without this the question is gone by the time there is
+     * something to check it against. Must be read *before* [markFulfilled], which deletes the row.
+     *
+     * Null when nothing was queued here — which is the case when Commander composed the request
+     * itself from a cached schema. On that path the input comes back on the reply instead, as
+     * [VoxLlmResult.input].
+     */
+    suspend fun originalInput(requestId: String?): String? {
+        val id = requestId ?: return null
+        val row = dao.getByRequestId(id) ?: return null
+        return VoxLlmRequest.fromJson(row.payloadJson)?.data?.firstOrNull()?.takeIf { it.isNotBlank() }
+    }
+
     /** Re-dispatches every row whose last attempt is older than [staleAfterMillis] and hasn't yet hit
      *  [maxAttempts] — called from each app's periodic retry worker. Rows that exhaust [maxAttempts]
      *  are left in place rather than deleted, so they stay inspectable instead of silently vanishing

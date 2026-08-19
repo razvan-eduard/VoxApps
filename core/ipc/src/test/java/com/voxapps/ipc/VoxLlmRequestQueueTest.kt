@@ -26,6 +26,62 @@ class VoxLlmRequestQueueTest {
         }
     }
 
+    /**
+     * The satellite's own copy of what it asked about.
+     *
+     * This is what makes an answer checkable against its question on the path where the satellite
+     * composed the request: the reply carries only the answer, and this row is the other half. It has
+     * to be readable while the row still exists, which is why the receivers read it before
+     * markFulfilled.
+     */
+    @Test
+    fun `originalInput returns the text the request was built from`() = runTest {
+        val request = VoxLlmRequest(
+            sourcePackage = "com.voxapps.expenses",
+            task = "EXPENSE_PARSE",
+            promptText = "a long prompt with the words baked in",
+            data = listOf("three loaves at ten each")
+        )
+        coEvery { dao.getByRequestId("req-1") } returns PendingLlmRequestEntity(
+            requestId = "req-1",
+            payloadJson = request.toJson(),
+            targetPackage = "com.voxapps.commander",
+            createdAt = 0L,
+            attemptCount = 1,
+            lastAttemptAt = 0L
+        )
+
+        assertEquals("three loaves at ten each", queue.originalInput("req-1"))
+    }
+
+    @Test
+    fun `originalInput is null when nothing was queued here`() = runTest {
+        coEvery { dao.getByRequestId(any()) } returns null
+
+        assertNull("an untracked id is not an error", queue.originalInput("req-unknown"))
+        assertNull("neither is no id at all", queue.originalInput(null))
+    }
+
+    /** A request carrying no data has no input to recover — blank is the same as absent. */
+    @Test
+    fun `originalInput is null when the request carried no data`() = runTest {
+        val request = VoxLlmRequest(
+            sourcePackage = "com.voxapps.expenses",
+            task = "EXPENSE_PARSE",
+            promptText = "prompt"
+        )
+        coEvery { dao.getByRequestId("req-2") } returns PendingLlmRequestEntity(
+            requestId = "req-2",
+            payloadJson = request.toJson(),
+            targetPackage = "com.voxapps.commander",
+            createdAt = 0L,
+            attemptCount = 1,
+            lastAttemptAt = 0L
+        )
+
+        assertNull(queue.originalInput("req-2"))
+    }
+
     @Test
     fun `enqueueAndSend persists a row before dispatching`() = runTest {
         queue.enqueueAndSend(
