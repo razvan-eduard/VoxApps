@@ -74,7 +74,17 @@ object LineItemBattery {
     data class Template(
         val id: String,
         val row: Regex,
-        val continuation: Regex? = null
+        val continuation: Regex? = null,
+        /**
+         * Whether a row's description is the single line above it rather than everything unmatched
+         * since the last row.
+         *
+         * Accumulating is right where a description wraps: the lines belong together and the row is
+         * their conclusion. It is wrong where the name is simply printed above its figures, because
+         * then everything before the first row — the letterhead, the address, the column captions —
+         * has nowhere else to go and lands on it.
+         */
+        val descriptionIsTheNearestLine: Boolean = false
     )
 
     /**
@@ -110,6 +120,24 @@ object LineItemBattery {
         Template(
             id = "qty-first",
             row = Regex("""^(?<qty>\d{1,3})\s+(?<desc>\D.*?)\s+(?<value>[\d.,]+)\s*$""")
+        ),
+        // A row that is figures only, with its name printed on the line above. Every pattern before
+        // this one wants the description beside the numbers, and the continuation they carry extends
+        // a description onto a row that already has one — neither reaches a row that has none, so no
+        // amount of loosening them expresses this shape.
+        //
+        // Strict where it can afford to be: all three figures must carry two decimals, which is what
+        // keeps a column of ranks ("0 2 3 4") or a bare count from passing as a row.
+        //
+        // A column rule printed hard against a figure survives recognition three different ways on
+        // one page — kept as a bar, absorbed onto the number as a trailing 1, or lost entirely — so
+        // all three are admitted between columns. Dropping the stray digit is not a guess: the row's
+        // own multiplication still has to close, so a figure that was really 19.001 fails.
+        Template(
+            id = "figures-under-name",
+            row = Regex("""^\W*(?<qty>\d+[.,]\d{2})1?\s*\|?\s+(?<unit>\d+[.,]\d{2})1?\s*\|?\s+(?<value>\d+[.,]\d{2})\s*$"""),
+            continuation = Regex("""^\s*(?<desc>(?=.*\p{L}).+?)\s*$"""),
+            descriptionIsTheNearestLine = true
         ),
         // Weakest on purpose, and therefore last: a name and one amount. It matches nearly any line,
         // so it only ever survives on a document where the sum reconciles exactly.
@@ -176,6 +204,7 @@ object LineItemBattery {
                 template.continuation?.find(line)?.let { cont ->
                     val text = cont.groupOrNull("desc")?.trim().orEmpty()
                     if (text.isNotEmpty()) {
+                        if (template.descriptionIsTheNearestLine) pendingDescription.setLength(0)
                         if (pendingDescription.isNotEmpty()) pendingDescription.append(' ')
                         pendingDescription.append(text)
                     }

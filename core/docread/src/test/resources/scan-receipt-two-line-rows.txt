@@ -1,0 +1,60 @@
+SCOICA
+NOTA DE INFORMARE
+SC GOLFUL PESCARILOR SRL
+COD FISCAL: RO 31339776
+SAT AGIGEA COM AGIGEA STR MEDUZEI NR 6
+LOT 5 CONSTANTA
+Data: 17.08.2026 0ra:16:19:37
+Masa: 413, GAZON STG, Desch.1a: 15.11
+Ospatar: PINZARU CATALIN
+Produs |Cant  Pret Valoare
+beck s 0.33
+|1.00| 16.00| 16.00
+cappuccino 0.181
+|1.00| 19.001 19.00
+CARTOFI CU USTUROI SI PARMEZAN
+| 1.00| 32.00| 32.00
+chefal plita 300g
+|1.00| 64.001 64.00
+ciorba 1ipoveneasca 100/250g
+|2.00| 36.00 72.00
+limonada ca-n golf 0.31
+| 1.00| 32.00| 32.00
+PIEPT DE PUI SATAY
+|1.00| 52.001 52.00
+TOTAL DE PLATA 287.00
+NU INCLUDE TIPS RECOMANDAT 10%
+Bacsis neinclus/Tips are not included!
+Procent | 10% | 12% | 15% |
+Valoare 291 34| 43 1
+Total | 316.00 | 321.00 | 330.00 |
+Alegerea ta / Your choice
+VA MULTUMIM!
+Powered by Multisoft - www.multisoft.ro
+--- [table reconstruction] ---
+SCOICA
+NOTA DE INFORMARE
+SC GOLFUL PESCARILOR SRL
+COD FISCAL: RO 31339776
+SAT AGIGEA COM AGIGEA STR MEDUZEI NR 6
+LOT 5 CONSTANTA
+Data: 17.08.2026 0ra:16:19:37
+Masa: 413, GAZON STG, Desch.1a: 15.11
+Ospatar: PINZARU CATALIN
+Produs |Cant  Pret Valoare
+beck s 0.33
+|1.00| 16.00| 16.00
+cappuccino 0.181
+|1.00| CARTOFI CU USTUROI SI PARMEZAN | 19.001 | 19.00
+| 1.00| 32.00| chefal plita 300g |1.00| | 64.001 | 64.00
+ciorba 1ipoveneasca 100/250g |2.00| limonada ca-n golf 0.31 | 1.00| 32.00| | 36.00 | 72.00
+PIEPT DE PUI SATAY |1.00| | 52.001 | 52.00
+TOTAL DE PLATA 287.00
+NU INCLUDE TIPS RECOMANDAT 10%
+Bacsis neinclus/Tips are not included!
+Procent | 10% | 12% | 15% |
+Valoare 291 34| 43 1
+Total | 316.00 | 321.00 | 330.00 |
+Alegerea ta / Your choice
+VA MULTUMIM!
+Powered by Multisoft - www.multisoft.ro
