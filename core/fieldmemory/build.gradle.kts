@@ -25,6 +25,10 @@ dependencies {
 
     // LearnedFieldCorrection/Dao — each consuming app's own @Database includes them directly, same
     // pattern as :core:attachments' AttachmentEntity/Dao; this module itself has no @Database.
+    // TemplateVerdictMemory stores what a person taught about a message shape; the store itself is
+    // handed in by the app that owns those keys.
+    implementation(libs.androidx.datastore.preferences)
+
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
