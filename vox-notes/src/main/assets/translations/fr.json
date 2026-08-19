@@ -200,5 +200,16 @@
   "logging_section": "Journalisation",
   "zone_security": "Sécurité",
   "zone_notes": "Notes",
-  "zone_capture": "Numérisation"
+  "zone_capture": "Numérisation",
+  "scan_llm_level": "Ce que l'IA lit d'une numérisation",
+  "flow_send_nothing": "Rien ne quitte l'appareil",
+  "flow_send_nothing_desc_notes": "Le texte numérisé devient la note tel quel.",
+  "flow_send_missing": "Seulement ce qui n'a pas pu être établi",
+  "flow_send_missing_desc": "La question la plus étroite.",
+  "flow_send_head": "Tous les champs principaux",
+  "flow_send_head_desc": "Demandés même là où la lecture avait déjà une réponse.",
+  "flow_send_everything": "Tout",
+  "flow_send_everything_desc_notes": "Le texte est nettoyé, avec un titre et une catégorie.",
+  "notes_fill_head": "Remplir automatiquement le titre et la catégorie",
+  "flow_cannot_suggest": "Cette app n'a pas où garder une suggestion ; la réponse est donc écrite."
 }

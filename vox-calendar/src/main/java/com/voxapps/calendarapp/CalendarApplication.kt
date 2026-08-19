@@ -59,14 +59,17 @@ class CalendarApplication : Application(), VoxLlmQueueHost {
             .drop(1)
             .map { it.map { l -> l.name } }
             .distinctUntilChanged()
-            .onEach { layerNames ->
-                val settings = container.settingsRepository.getSnapshot()
-                val todoListNames = container.toDoRepository.lists.first().map { it.title }
-                val schema = VoxSatelliteSchema(
-                    needsExtractionPass = true,
-                    promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(layerNames, todoListNames, settings.language),
-                    fieldSchemaVersion = GeneratedParsedSchema.VERSION,
-                    taskId = LlmTasks.CALENDAR_EVENT_PARSE
+            .onEach {
+                // Composed by the flow, exactly as the on-demand fetch composes it — a pushed schema
+                // and a fetched one describing different arrangements is the failure this one
+                // declaration exists to prevent. The layer list is what changed; the flow reads the
+                // current one itself.
+                val flow = com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow(container)
+                val schema = VoxSatelliteSchema.of(
+                    asksModel = !flow.support.default.staysOnDevice,
+                    promptTemplate = flow.promptTemplate(flow.support.default.asks),
+                    taskId = flow.taskId,
+                    fieldSchemaVersion = GeneratedParsedSchema.VERSION
                 )
                 VoxDataTransferClient.pushSchemaChanged(this, schema)
             }

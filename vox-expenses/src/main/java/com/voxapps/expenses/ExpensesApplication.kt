@@ -90,15 +90,17 @@ class ExpensesApplication : Application(), VoxLlmQueueHost {
             .drop(1)
             .map { it.map { c -> c.name } }
             .distinctUntilChanged()
-            .onEach { categoryNames ->
-                val settings = container.settingsRepository.getSnapshot()
-                val schema = VoxSatelliteSchema(
-                    needsExtractionPass = true,
-                    promptTemplate = ExpenseParsePromptBuilder.buildTemplate(
-                        categoryNames, settings.defaultCurrency, settings.language
-                    ),
-                    fieldSchemaVersion = GeneratedParsedSchema.VERSION,
-                    taskId = LlmTasks.EXPENSE_PARSE
+            .onEach {
+                // Composed by the flow, exactly as the on-demand fetch composes it — a pushed
+                // schema and a fetched one describing different arrangements is the failure this
+                // one declaration exists to prevent. The category list is what changed; the flow
+                // reads the current one itself.
+                val flow = com.voxapps.expenses.domain.llm.ExpenseVoiceFlow(this, container)
+                val schema = VoxSatelliteSchema.of(
+                    asksModel = !flow.support.default.staysOnDevice,
+                    promptTemplate = flow.promptTemplate(flow.support.default.asks),
+                    taskId = flow.taskId,
+                    fieldSchemaVersion = GeneratedParsedSchema.VERSION
                 )
                 VoxDataTransferClient.pushSchemaChanged(this, schema)
             }

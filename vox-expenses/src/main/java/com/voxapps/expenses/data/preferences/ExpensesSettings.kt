@@ -1,5 +1,10 @@
 package com.voxapps.expenses.data.preferences
 
+import com.voxapps.recordflow.FieldWeight
+import com.voxapps.recordflow.FlowSupport
+import com.voxapps.recordflow.LlmLevel
+import com.voxapps.recordflow.RecordSource
+
 import androidx.compose.runtime.Immutable
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.design.effects.TodayEffect
@@ -286,6 +291,40 @@ data class ExpensesSettings(
             SCAN_MODEL_FULL, SCAN_MODEL_HEADER_FOOTER_AUTO, SCAN_MODEL_HEADER_FOOTER_SUGGEST, SCAN_MODEL_NONE
         )
 
+        /**
+         * What this app can honestly do with a scanned page.
+         *
+         * Every rung: the deterministic reader can establish a page's figures alone, and the edit
+         * screen can hold a proposal for anything it could not. Line items are the fine detail — a
+         * row that reads 51,38 for 51,33 is wrong in a way nothing downstream catches — so the rungs
+         * that leave them to be approved are the point of the scale here.
+         */
+        val SCAN_FLOW_SUPPORT = FlowSupport(
+            source = RecordSource.SCAN,
+            // Every rung, and each is honoured on both halves of the round trip: the level governs
+            // the reply as well as the reading, so "send everything, write nothing" writes nothing
+            // and offers the answer on the record instead. A declaration this app could not keep
+            // would be worse than a shorter scale.
+            supported = LlmLevel.entries.toSet(),
+            default = LlmLevel.FULL,
+            suggestsAnswers = true
+        )
+
+        /**
+         * The four settings this app carried before the scale was written down, read as the rungs
+         * they always were. Each is exact: the pair of questions was already being answered, just
+         * not separately.
+         */
+        fun scanLevelOf(stored: String): LlmLevel = when (stored) {
+            SCAN_MODEL_NONE -> LlmLevel.NONE
+            SCAN_MODEL_HEADER_FOOTER_SUGGEST -> LlmLevel.ASSIST_SUGGEST
+            SCAN_MODEL_HEADER_FOOTER_AUTO -> LlmLevel.ASSIST_AUTO
+            SCAN_MODEL_FULL -> LlmLevel.FULL
+            // Already a rung, or a value from a newer build: an unreadable one reads as the fullest
+            // behaviour, which is what installs had before any of this existed.
+            else -> LlmLevel.entries.firstOrNull { it.name == stored } ?: LlmLevel.FULL
+        }
+
         /** The notification's text is sent for interpretation, as it always has been. */
         const val NOTIFICATION_MODEL_FULL = "FULL"
 
@@ -295,6 +334,45 @@ data class ExpensesSettings(
         const val NOTIFICATION_MODEL_NONE = "NONE"
 
         val NOTIFICATION_MODEL_CHOICES = listOf(NOTIFICATION_MODEL_FULL, NOTIFICATION_MODEL_NONE)
+
+        /**
+         * What this app can honestly do with a captured notification.
+         *
+         * Two rungs. The middle ones would need somewhere to hold a proposal *for a record that does
+         * not exist yet* — and the queue this channel already has is that place, but it holds whole
+         * entries awaiting approval rather than fields awaiting acceptance, which is a different
+         * thing. So the choice here stays "send the sentence, or work from the figures alone".
+         *
+         * One coarse half only: a notification carries no list of rows.
+         */
+        val NOTIFICATION_FLOW_SUPPORT = FlowSupport(
+            source = RecordSource.NOTIFICATION,
+            supported = setOf(LlmLevel.NONE, LlmLevel.FULL),
+            default = LlmLevel.FULL,
+            weights = setOf(FieldWeight.HEAD)
+        )
+
+        /**
+         * What this app can do with a spoken expense.
+         *
+         * One rung, and the declaration is the honest state rather than a ceiling: reading an amount
+         * out of speech on the device is possible — `:core:textmatch` finds currency-marked figures
+         * — but this flow does not do it yet, and a scale offering "only what could not be worked
+         * out" while working nothing out would be a promise about nothing.
+         */
+        val VOICE_FLOW_SUPPORT = FlowSupport(
+            source = RecordSource.VOICE,
+            supported = setOf(LlmLevel.FULL),
+            default = LlmLevel.FULL,
+            weights = setOf(FieldWeight.HEAD)
+        )
+
+        /** The stored setting as a rung. The two values predate the scale and map exactly. */
+        fun notificationLevelOf(stored: String): LlmLevel = when (stored) {
+            NOTIFICATION_MODEL_NONE -> LlmLevel.NONE
+            NOTIFICATION_MODEL_FULL -> LlmLevel.FULL
+            else -> LlmLevel.entries.firstOrNull { it.name == stored } ?: LlmLevel.FULL
+        }
         const val INTERVAL_HOURLY = "HOURLY"
         const val INTERVAL_DAILY = "DAILY"
         const val INTERVAL_WEEKLY = "WEEKLY"

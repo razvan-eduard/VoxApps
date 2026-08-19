@@ -133,6 +133,7 @@ class NotesStateManager(
     fun setIsGridView(enabled: Boolean) { scope.launch { settingsRepo.setIsGridView(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanImageRetention(mode: String) { scope.launch { settingsRepo.setScanImageRetention(mode) } }
+    fun setScanLlmLevel(level: String) { scope.launch { settingsRepo.setScanLlmLevel(level) } }
 
     // --- Attachments (generic per-note photos, both the scan-kept one and manually-added ones) ---
     fun observeAttachments(noteId: Long): Flow<List<AttachmentEntity>> =

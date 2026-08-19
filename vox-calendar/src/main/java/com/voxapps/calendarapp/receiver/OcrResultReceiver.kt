@@ -17,18 +17,24 @@ import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.data.preferences.CalendarSettings
+import com.voxapps.textmatch.extract.DateTimeExtractor
+import com.voxapps.recordflow.RecordFlow
+import com.voxapps.calendarapp.domain.llm.CalendarScanFlow
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarScanCleanupPromptBuilder
 import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.calendarapp.domain.llm.TodoScanCleanupPromptBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
+private const val TITLE_LIMIT = 80
 private const val TAG = "OcrResultReceiver"
 private const val CALENDAR_FILE_PROVIDER_AUTHORITY = "com.voxapps.calendar.fileprovider"
 
@@ -174,27 +180,33 @@ class OcrResultReceiver : BroadcastReceiver() {
         val settings = container.settingsRepository.getSnapshot()
         val language = settings.language
 
-        // No image-attached record equivalent here (unlike Expenses) and no retry mechanism,
-        // so the AI-attachment copy only ever needs to live long enough for this one call —
-        // staged into cache, not persisted. Gated on our own attachPhotoOnScan toggle
-        // (checked here) and Vision having actually provided a downscaled copy in the first
-        // place (its own "send photo to AI" setting); the multimodal-engine check happens
-        // inside the grant. A batch reply's per-photo AI copy isn't currently produced by
-        // Vision (aiImageUri is null for those calls) — same limitation the old
-        // headless-relaunch design had.
+        // No image-attached record equivalent here (unlike Expenses) and no retry mechanism, so the
+        // AI-attachment copy only ever needs to live long enough for this one call — staged into
+        // cache, not persisted. Gated on our own attachPhotoOnScan toggle and Vision having actually
+        // provided a downscaled copy in the first place.
         val attachmentUri = if (settings.attachPhotoOnScan) {
             aiImageUri?.let { aiUriString -> stageAndGrantAiCopy(context, aiUriString) }
         } else null
 
-        container.pendingLlmRequestQueue.enqueueAndSend(
-            context = context,
-            sourcePackage = context.packageName,
-            task = LlmTasks.CALENDAR_SCAN_CLEANUP,
-            promptText = CalendarScanCleanupPromptBuilder.build(rawText, existingLayers, existingTodoLists, language),
-            targetPackage = COMMANDER_PACKAGE,
-            data = listOf(rawText),
-            attachmentUri = attachmentUri
-        )
+        // One flow, whatever the level: the shared template reads what the device can establish,
+        // decides who answers the rest, and either writes the entry, hands it back, or asks.
+        RecordFlow.dispatch(
+            spec = CalendarScanFlow(context, container),
+            input = rawText,
+            level = CalendarSettings.scanLevelOf(settings.scanLlmLevel)
+        ) { _, prompt ->
+            // The prompt arrives already composed by the flow; delivery stays here, where the
+            // durable queue is.
+            container.pendingLlmRequestQueue.enqueueAndSend(
+                context = context,
+                sourcePackage = context.packageName,
+                task = LlmTasks.CALENDAR_SCAN_CLEANUP,
+                promptText = prompt,
+                targetPackage = COMMANDER_PACKAGE,
+                data = listOf(rawText),
+                attachmentUri = attachmentUri
+            )
+        }
     }
 
     /** One scanned photo's text -> one new to-do item in the already-known [listId] (baked into the

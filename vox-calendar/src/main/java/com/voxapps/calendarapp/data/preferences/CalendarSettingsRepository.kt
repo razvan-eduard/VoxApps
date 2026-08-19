@@ -18,6 +18,8 @@ interface CalendarSettingsRepository {
     suspend fun setDefaultLayerId(id: Long?)
     suspend fun setAutoCreateLayer(enabled: Boolean)
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
+    /** See [CalendarSettings.scanLlmLevel]; a rung this app cannot honour is ignored. */
+    suspend fun setScanLlmLevel(level: String)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
     suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setThemeDarkMode(mode: String)

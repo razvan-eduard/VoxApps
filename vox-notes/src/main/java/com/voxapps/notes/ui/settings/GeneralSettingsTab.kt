@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.state.NotesStateManager
 import com.voxapps.design.settings.SettingsSectionCard
+import com.voxapps.recordflow.ui.RecordFlowLevelCard
+import com.voxapps.recordflow.ui.RecordFlowStrings
 import com.voxapps.notes.ui.LocalLanguageManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,6 +88,25 @@ fun GeneralSettingsTab(
                 )
             }
         }
+
+        RecordFlowLevelCard(
+            support = NotesSettings.SCAN_FLOW_SUPPORT,
+            level = NotesSettings.scanLevelOf(settings.scanLlmLevel),
+            strings = RecordFlowStrings(
+                title = languageManager.getString("scan_llm_level"),
+                sendNothing = languageManager.getString("flow_send_nothing"),
+                sendNothingDesc = languageManager.getString("flow_send_nothing_desc_notes"),
+                sendMissing = languageManager.getString("flow_send_missing"),
+                sendMissingDesc = languageManager.getString("flow_send_missing_desc"),
+                sendHead = languageManager.getString("flow_send_head"),
+                sendHeadDesc = languageManager.getString("flow_send_head_desc"),
+                sendEverything = languageManager.getString("flow_send_everything"),
+                sendEverythingDesc = languageManager.getString("flow_send_everything_desc_notes"),
+                fillHead = languageManager.getString("notes_fill_head"),
+                cannotSuggest = languageManager.getString("flow_cannot_suggest")
+            ),
+            onLevelChange = { stateManager.setScanLlmLevel(it.name) }
+        )
 
         SettingsSectionCard(languageManager.getString("zone_capture")) {
             // --- Attach photo to AI on scan (opt-in; costs real LLM tokens on top of free OCR text,

@@ -111,9 +111,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             defaultVoiceCategoryId = prefs[Keys.DEFAULT_VOICE_CATEGORY_ID],
             voiceSaveToastEnabled = prefs[Keys.VOICE_SAVE_TOAST_ENABLED] ?: false,
             autoCreateVoiceCategory = prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] ?: false,
-            scanModelUse = prefs[Keys.SCAN_MODEL_USE]
-                ?.takeIf { it in ExpensesSettings.SCAN_MODEL_CHOICES }
-                ?: ExpensesSettings.SCAN_MODEL_FULL,
+            scanModelUse = prefs[Keys.SCAN_MODEL_USE] ?: ExpensesSettings.SCAN_MODEL_FULL,
             notificationModelUse = prefs[Keys.NOTIFICATION_MODEL_USE]
                 ?.takeIf { it in ExpensesSettings.NOTIFICATION_MODEL_CHOICES }
                 ?: ExpensesSettings.NOTIFICATION_MODEL_FULL,
@@ -239,7 +237,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     }
 
     override suspend fun setScanModelUse(mode: String) {
-        if (mode !in ExpensesSettings.SCAN_MODEL_CHOICES) return
+        // Either a rung's name or one of the four values that predate the scale — both read back
+        // through ExpensesSettings.scanLevelOf, so a stored setting survives the change.
+        val known = mode in ExpensesSettings.SCAN_MODEL_CHOICES ||
+            com.voxapps.recordflow.LlmLevel.entries.any { it.name == mode }
+        if (!known) return
         dataStore.edit { it[Keys.SCAN_MODEL_USE] = mode }
     }
 

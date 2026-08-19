@@ -5,8 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseResultParser
+import com.voxapps.recordflow.RecordFlow
+import com.voxapps.calendarapp.domain.llm.CalendarScanFlow
 import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.calendarapp.domain.llm.ParsedKind
 import com.voxapps.datahygiene.FieldCleaner
@@ -99,33 +102,30 @@ class LlmResultReceiver : BroadcastReceiver() {
             }
 
             task == LlmTasks.CALENDAR_SCAN_CLEANUP -> {
-                val rawJson = result.rawJson
-                val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
-                    CalendarEventParseResultParser.parse(rawJson) ?: run {
-                        // Missing title, or a date required for a non-TODO kind but not found — same
-                        // mandatory-field rule voice-created records already enforce (a TODO-kind
-                        // result never fails on a missing date).
-                        Logger.w(TAG, "Calendar scan cleanup: could not parse LLM result (missing title, or a date was required but missing). rawJson=$rawJson")
-                        null
-                    }
-                } else {
+                // The other half of the same flow that sent this. The reading behind it is gone, and
+                // is not needed: a reply that parses carries the whole entry, and one that does not
+                // is handed back to the person, which is what the flow's own review step does.
+                val reply = result.rawJson.takeIf { result.status == VoxLlmResult.STATUS_SUCCESS }
+                if (result.status != VoxLlmResult.STATUS_SUCCESS) {
                     Logger.w(TAG, "Calendar scan cleanup failed: ${result.error}")
-                    null
                 }
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
-                        if (parsed == null) {
-                            // Unconditional — the only signal the user has that the scan didn't
-                            // produce a record, mirrors vox-notes'/vox-expenses' OCR-failure toast.
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
-                            }
-                            return@launch
+                        val flow = CalendarScanFlow(context, container)
+                        if (reply == null) {
+                            flow.queueForReview(reading = null, parsed = null)
+                        } else {
+                            RecordFlow.deliver(
+                                spec = flow,
+                                reading = null,
+                                level = CalendarSettings.scanLevelOf(
+                                    container.settingsRepository.getSnapshot().scanLlmLevel
+                                ),
+                                reply = reply
+                            )
                         }
-                        Logger.d(TAG, "Calendar scan cleanup: creating ${parsed.kind} '${parsed.title}' layer=${parsed.layer} list=${parsed.listName}")
-                        routeParsed(container, parsed)
                     } finally {
                         pending.finish()
                     }
@@ -153,7 +153,10 @@ class LlmResultReceiver : BroadcastReceiver() {
     /** Dispatches on [CalendarEventParseResultParser.Parsed.kind]: EVENT/TASK go to the plain
      *  calendar-entry path (unchanged); TODO goes to the to-do item path instead — see
      *  [ParsedKind]'s doc comment for why this is a routing decision, not a stored field value. */
-    private suspend fun routeParsed(container: CalendarContainer, parsed: CalendarEventParseResultParser.Parsed) {
+    /** Also the write point for [com.voxapps.calendarapp.domain.llm.CalendarScanFlow], so a scanned
+     *  entry is created the one way whether or not a model answered — same arrangement expenses uses
+     *  for its own createExpenseFromParsed. */
+    internal suspend fun routeParsed(container: CalendarContainer, parsed: CalendarEventParseResultParser.Parsed) {
         when (parsed.kind) {
             ParsedKind.TODO -> createTodoItemFromParsed(container, parsed)
             ParsedKind.EVENT, ParsedKind.TASK -> createEntryFromParsed(container, parsed)

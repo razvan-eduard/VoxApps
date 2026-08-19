@@ -1,5 +1,10 @@
 package com.voxapps.notes.data.preferences
 
+import com.voxapps.recordflow.FieldWeight
+import com.voxapps.recordflow.FlowSupport
+import com.voxapps.recordflow.LlmLevel
+import com.voxapps.recordflow.RecordSource
+
 import androidx.compose.runtime.Immutable
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
@@ -40,6 +45,13 @@ import com.voxapps.design.effects.TodayEffectStyle
  */
 @Immutable
 data class NotesSettings(
+    /**
+     * How far a model is let into making a note from a scan — see [SCAN_FLOW_SUPPORT].
+     *
+     * Stored as the rung's name. Defaults to the fullest behaviour, which is what installs had
+     * before the setting existed.
+     */
+    val scanLlmLevel: String = "FULL",
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val defaultVoiceCategoryId: Long? = null,
@@ -88,6 +100,43 @@ data class NotesSettings(
     val notificationsChannelVersion: Int = 1
 ) {
     companion object {
+        /**
+         * What this app can honestly do with a scanned page.
+         *
+         * Two rungs, and the reason is the same one that makes Notes' voice flow need no extraction
+         * pass at all: a note's body *is* its text, so a scan with no model still produces the whole
+         * record rather than a fragment of one. What a model adds here is a title and a category —
+         * judgements, not content.
+         *
+         * The rungs between the ends are absent because there is nowhere to put a proposal: this
+         * app has no per-field suggestion surface, so an answer can only be written or not asked for.
+         */
+        val SCAN_FLOW_SUPPORT = FlowSupport(
+            source = RecordSource.SCAN,
+            supported = setOf(LlmLevel.NONE, LlmLevel.FULL),
+            default = LlmLevel.FULL,
+            // A note has no fine detail: its text is the record, not an answer about the record.
+            weights = setOf(FieldWeight.HEAD)
+        )
+
+        /**
+         * What this app can do with a spoken note: one rung, because there is nothing to ask.
+         *
+         * The words are the note. Declaring a single level is not a limitation admitted reluctantly
+         * — it is the honest shape of a flow where a model has no question to answer, and it is what
+         * this app already told Commander through its `needsExtractionPass = false`.
+         */
+        val VOICE_FLOW_SUPPORT = FlowSupport(
+            source = RecordSource.VOICE,
+            supported = setOf(LlmLevel.NONE),
+            default = LlmLevel.NONE,
+            weights = setOf(FieldWeight.HEAD)
+        )
+
+        /** The stored rung, or the fullest behaviour where the value is unreadable. */
+        fun scanLevelOf(stored: String): LlmLevel =
+            LlmLevel.entries.firstOrNull { it.name == stored } ?: LlmLevel.FULL
+
         const val TIMEOUT_30M = 30
         const val TIMEOUT_1H = 60
         const val TIMEOUT_1D = 1440

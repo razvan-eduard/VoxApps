@@ -32,6 +32,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
         val DEFAULT_LAYER_ID = longPreferencesKey("default_layer_id")
         val AUTO_CREATE_LAYER = booleanPreferencesKey("auto_create_layer")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
+        val SCAN_LLM_LEVEL = stringPreferencesKey("scan_llm_level")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val DEBUG_TOASTS_ENABLED = booleanPreferencesKey("debug_toasts_enabled")
         val THEME_DARK_MODE = stringPreferencesKey("theme_dark_mode")
@@ -74,6 +75,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             defaultLayerId = prefs[Keys.DEFAULT_LAYER_ID],
             autoCreateLayer = prefs[Keys.AUTO_CREATE_LAYER] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
+            scanLlmLevel = prefs[Keys.SCAN_LLM_LEVEL] ?: CalendarSettings.SCAN_FLOW_SUPPORT.default.name,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: CalendarSettings.THEME_SYSTEM,
@@ -143,6 +145,11 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
 
     override suspend fun setAttachPhotoOnScan(enabled: Boolean) {
         dataStore.edit { it[Keys.ATTACH_PHOTO_ON_SCAN] = enabled }
+    }
+
+    override suspend fun setScanLlmLevel(level: String) {
+        if (CalendarSettings.SCAN_FLOW_SUPPORT.supported.none { it.name == level }) return
+        dataStore.edit { it[Keys.SCAN_LLM_LEVEL] = level }
     }
 
     override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
@@ -265,6 +272,7 @@ class CalendarSettingsRepositoryImpl(appContext: Context) : CalendarSettingsRepo
             }
             prefs[Keys.AUTO_CREATE_LAYER] = settings.autoCreateLayer
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
+            prefs[Keys.SCAN_LLM_LEVEL] = settings.scanLlmLevel
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
             prefs[Keys.DEBUG_TOASTS_ENABLED] = settings.debugToastsEnabled
             prefs[Keys.THEME_DARK_MODE] = settings.themeDarkMode

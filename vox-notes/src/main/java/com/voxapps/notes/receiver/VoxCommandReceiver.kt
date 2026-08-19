@@ -52,19 +52,19 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         // Read inside the coroutine — getSnapshot() blocks on DataStore until its
                         // cache warms, and a broadcast can be what cold-starts this process.
                         val settings = container.settingsRepository.getSnapshot()
-                        val resolved = container.notesRepository.addVoiceNote(
-                            title = command.title,
-                            text = text,
-                            spokenCategory = command.category,
-                            defaultCategoryId = settings.defaultVoiceCategoryId,
-                            autoCreate = settings.autoCreateVoiceCategory,
-                            createdAt = System.currentTimeMillis()
-                        )
+                        // The same template every other capture runs through; for a spoken note it
+                        // decides only one thing, but it decides it in the one place.
+                        var resolved: com.voxapps.notes.data.VoiceNoteResult? = null
+                        com.voxapps.recordflow.RecordFlow.dispatch(
+                            spec = com.voxapps.notes.domain.llm.NoteVoiceFlow(container) { resolved = it },
+                            input = command,
+                            level = com.voxapps.notes.data.preferences.NotesSettings.VOICE_FLOW_SUPPORT.default
+                        ) { _, _ -> }
                         if (settings.voiceSaveToastEnabled) {
                             val label = command.title?.takeIf { it.isNotBlank() } ?: text
                             val template = container.languageManager.getString("toast_note_saved")
                             val msg = String.format(template, label) +
-                                (resolved.categoryName?.let { " · $it" } ?: "")
+                                (resolved?.categoryName?.let { " · $it" } ?: "")
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context.applicationContext, msg, Toast.LENGTH_SHORT).show()
                             }
@@ -76,11 +76,16 @@ class VoxCommandReceiver : BroadcastReceiver() {
             }
 
             VoxIpc.OP_GET_SCHEMA -> {
-                // Notes' voice flow has no extraction prompt builder at all — the raw transcript IS
-                // the note body, category comes straight from Commander's own classification call.
-                // needsExtractionPass=false, declared explicitly rather than left as a Commander-side
-                // implicit default (see the collapsed voice-command plan, section 1b/6a).
-                setResult(Activity.RESULT_OK, VoxResult(ok = true, text = VoxSatelliteSchema(needsExtractionPass = false).toJson()).toJson(), null)
+                // Derived from the flow rather than restated here: what this app tells Commander and
+                // what it actually does are then one declaration. Notes asks nothing — the raw
+                // transcript IS the note body — so what Commander is handed says exactly that.
+                val flow = com.voxapps.notes.domain.llm.NoteVoiceFlow(container)
+                val schema = VoxSatelliteSchema.of(
+                    asksModel = !flow.support.default.staysOnDevice,
+                    promptTemplate = null,
+                    taskId = flow.taskId
+                )
+                setResult(Activity.RESULT_OK, VoxResult(ok = true, text = schema.toJson()).toJson(), null)
             }
 
             VoxIpc.OP_READ -> {

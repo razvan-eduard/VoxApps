@@ -520,5 +520,16 @@
   "notification_model_full": "Zur Auswertung senden",
   "notification_model_full_desc": "Der Text geht an die Engine, die Betrag, Händler und Richtung liest.",
   "notification_model_none": "Nichts verlässt das Gerät",
-  "notification_model_none_desc": "Der Betrag wird auf dem Gerät gelesen. Die Bedeutung stammt aus bereits bestätigten Vorlagen; alles andere wartet auf Prüfung."
+  "notification_model_none_desc": "Der Betrag wird auf dem Gerät gelesen. Die Bedeutung stammt aus bereits bestätigten Vorlagen; alles andere wartet auf Prüfung.",
+  "flow_send_nothing": "Nichts verlässt das Gerät",
+  "flow_send_nothing_desc": "Hier gelesen; was nicht belegt werden kann, wartet auf dich.",
+  "flow_send_missing": "Nur was nicht ermittelt werden konnte",
+  "flow_send_missing_desc": "Die engste Frage — und gar keine, wenn nichts fehlt.",
+  "flow_send_head": "Alle Hauptfelder",
+  "flow_send_head_desc": "Auch dort gefragt, wo bereits eine Antwort vorlag.",
+  "flow_send_everything": "Alles, samt Detailangaben",
+  "flow_send_everything_desc": "Das ganze Dokument, für die bestmögliche Antwort.",
+  "scan_fill_head": "Hauptfelder automatisch ausfüllen",
+  "scan_fill_body": "Positionen automatisch ausfüllen",
+  "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben."
 }

@@ -35,10 +35,10 @@ private const val TAG = "PaymentNotificationListenerService"
  * decide whether it's actually a transaction and, if so, extract it — never parsed or acted on
  * locally. The async reply lands in [LlmResultReceiver], which either stores it for individual
  * approve/dismiss or (if `autoAcceptNotificationExpenses` is on) inserts it directly — this service
- * never creates an expense itself — unless the model is switched off for this channel entirely
- * (`notificationModelUse`), in which case nothing is sent and
- * [com.voxapps.expenses.domain.llm.ModelFreeNotificationCreator] decides between the review queue
- * and a record, from what the device can establish on its own.
+ * never decides for itself what becomes of a capture: it hands the sentence to
+ * [com.voxapps.recordflow.RecordFlow], which reads what the device can establish and then either
+ * files the expense, leaves it in the review queue, or asks — the last only where the level allows
+ * it. See [com.voxapps.expenses.domain.llm.NotificationExpenseFlow].
  *
  * [ProcessedNotificationKeysStore.markProcessed] is deliberately NOT called here, only once
  * [LlmResultReceiver] actually receives Commander's reply (the notification's key rides along
@@ -161,41 +161,54 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // Display backfill for the learned-templates settings list — capture time is the only
         // moment the hash and its text coexist (no-op unless this template is already learned).
         container.templateDirectionMemory.noteSkeleton(templateHash, skeleton)
-        // The promise the setting makes is that nothing leaves the device, so it is honoured before
-        // a prompt is composed rather than before it is sent — same order as the scan path.
-        if (com.voxapps.expenses.domain.llm.ModelFreeNotificationCreator.isEnabled(settings)) {
-            com.voxapps.expenses.domain.llm.ModelFreeNotificationCreator.handle(
-                context = applicationContext,
-                container = container,
-                preParse = preParse,
-                templateHash = templateHash,
-                knownBank = knownBankName,
-                title = title
-            )
-            // Marked once it has actually been handled, for the same reason the model path waits
-            // for its reply: a capture that failed halfway must stay eligible for the next attempt.
-            processedKeys.markProcessed(sbn.key)
-            return
-        }
-
-        Logger.d(TAG, "Captured notification from ${sbn.packageName}, forwarding for LLM triage " +
-            "(bank=$bankName preAmount=${preParse.amount != null} preVendor=${preParse.vendor != null}" +
-            " templateDirection=${inheritedDirection ?: "-"} paymentKnown=$paymentKnown)")
-        val existingCategories = container.expensesRepository.categories.first().map { it.name }
-        val isLocalEngine = VoxCapabilityClient.isLocalEngine(applicationContext)
-        val promptText = NotificationExpenseParsePromptBuilder.build(
-            notificationTitle = title,
-            notificationText = fullText,
-            existingCategories = existingCategories,
-            defaultCurrency = settings.defaultCurrency,
-            languageCode = settings.language,
-            knownBankName = bankName,
-            isLocalEngine = isLocalEngine,
-            preParsedAmount = preParse.amount,
-            preParsedVendor = preParse.vendor,
-            preParsedDirection = inheritedDirection?.toJsonValue(),
-            preKnownPayment = paymentKnown
+        // One flow, whatever the level: the shared template reads what the device can establish,
+        // decides who answers the rest, and either files the expense, queues it for a person, or
+        // asks. The promise that nothing leaves the device is kept inside it, before a prompt is
+        // ever composed — see RecordFlowPolicy.
+        val captured = com.voxapps.expenses.domain.llm.CapturedNotification(
+            title = title,
+            text = fullText,
+            amount = preParse.amount,
+            vendor = preParse.vendor,
+            bank = bankName,
+            templateHash = templateHash,
+            direction = inheritedDirection,
+            knownPayment = paymentKnown
         )
+        val flow = com.voxapps.expenses.domain.llm.NotificationExpenseFlow(applicationContext, container)
+        val outcome = com.voxapps.recordflow.RecordFlow.dispatch(
+            spec = flow,
+            input = captured,
+            level = com.voxapps.expenses.data.preferences.ExpensesSettings.notificationLevelOf(
+                settings.notificationModelUse
+            )
+        ) { _, prompt ->
+            sendForTriage(sbn, bankName, prompt, preParse, templateHash, inheritedDirection, paymentKnown)
+        }
+        // Marked once it has actually been handled. Where a request went out, the reply's own
+        // arrival marks it instead, for the same reason it always has: a capture that got no answer
+        // must stay eligible for the next attempt.
+        if (outcome !is com.voxapps.recordflow.RecordFlow.Outcome.Asked) {
+            processedKeys.markProcessed(sbn.key)
+        }
+    }
+
+    /**
+     * Hand the sentence to Commander, and remember on this side what was suppressed from the
+     * question so the reply can be reunited with it.
+     */
+    private suspend fun sendForTriage(
+        sbn: StatusBarNotification,
+        bankName: String?,
+        promptText: String,
+        preParse: com.voxapps.expenses.domain.llm.NotificationPreParse.Result,
+        templateHash: String?,
+        inheritedDirection: com.voxapps.expenses.data.TransactionDirection?,
+        paymentKnown: Boolean
+    ) {
+        val container = (applicationContext as ExpensesApplication).container
+        val title = sbn.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val fullText = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         val encodedKey = Base64.encodeToString(sbn.key.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         // knownBankName rides along the same way rather than trusting the LLM to echo it back
         // verbatim in its JSON reply — that's what the "bank" field being empty on a successfully
