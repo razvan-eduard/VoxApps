@@ -89,6 +89,7 @@ dependencies {
     implementation(project(":core:datahygiene"))
     implementation(project(":core:fieldmemory"))
     implementation(project(":core:textmatch"))
+    implementation(project(":core:recordflow"))
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))
     implementation(project(":core:onboarding"))

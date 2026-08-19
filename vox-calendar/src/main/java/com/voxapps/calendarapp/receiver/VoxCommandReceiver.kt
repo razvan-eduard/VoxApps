@@ -88,13 +88,14 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         val settings = container.settingsRepository.getSnapshot()
                         val layerNames = container.calendarRepository.layers.first().map { it.name }
                         val todoListNames = container.toDoRepository.lists.first().map { it.title }
-                        val schema = VoxSatelliteSchema(
-                            needsExtractionPass = true,
-                            promptTemplate = CalendarEventParsePromptBuilder.buildTemplate(
-                                layerNames, todoListNames, settings.language
-                            ),
-                            fieldSchemaVersion = GeneratedParsedSchema.VERSION,
-                            taskId = LlmTasks.CALENDAR_EVENT_PARSE
+                        // Derived from the flow rather than restated: what this app tells Commander
+                        // and what it does locally are then one declaration.
+                        val flow = com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow(container)
+                        val schema = VoxSatelliteSchema.of(
+                            asksModel = !flow.support.default.staysOnDevice,
+                            promptTemplate = flow.promptTemplate(flow.support.default.asks),
+                            taskId = flow.taskId,
+                            fieldSchemaVersion = GeneratedParsedSchema.VERSION
                         )
                         pending.setResultData(VoxResult(ok = true, text = schema.toJson()).toJson())
                     } finally {

@@ -306,5 +306,17 @@
   "zone_security": "Sécurité",
   "zone_capture": "Création d'entrées",
   "zone_display": "Ce qui apparaît dans le calendrier",
-  "widget_zone": "Widget d'écran d'accueil"
+  "widget_zone": "Widget d'écran d'accueil",
+  "scan_llm_level": "Ce que l'IA lit d'une numérisation",
+  "flow_send_nothing": "Rien ne quitte l'appareil",
+  "flow_send_nothing_desc_calendar": "Une entrée n'est créée que si la page porte une date.",
+  "flow_send_missing": "Seulement ce qui n'a pas pu être établi",
+  "flow_send_missing_desc": "La question la plus étroite.",
+  "flow_send_head": "Tous les champs principaux",
+  "flow_send_head_desc": "Demandés même là où la lecture avait déjà une réponse.",
+  "flow_send_everything": "Tout",
+  "flow_send_everything_desc_calendar": "La page est lue pour un titre, une date et une heure, quelle que soit leur écriture.",
+  "calendar_fill_head": "Remplir automatiquement l'entrée",
+  "flow_cannot_suggest": "Cette app n'a pas où garder une suggestion ; la réponse est donc écrite.",
+  "scan_no_date_offline": "Aucune date sur la page ; aucune entrée créée."
 }

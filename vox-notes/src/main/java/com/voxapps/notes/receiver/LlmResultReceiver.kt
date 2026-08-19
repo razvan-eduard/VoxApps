@@ -4,41 +4,24 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
-import androidx.glance.appwidget.updateAll
-import com.voxapps.notes.ui.widget.NotesWidget
-import com.voxapps.attachments.AttachmentEntity
-import com.voxapps.attachments.AttachmentFileStore
-import com.voxapps.attachments.AttachmentSource
 import com.voxapps.logging.Logger
-import com.voxapps.datahygiene.FieldCleaner
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.VoxLlmResult
 import com.voxapps.notes.NotesApplication
-import com.voxapps.notes.data.NotesAttachments
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.CategoryMergeMappingParser
+import com.voxapps.recordflow.RecordFlow
+import com.voxapps.notes.domain.llm.NoteScanFlow
 import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.domain.llm.NoteDeduplicationResultParser
-import com.voxapps.notes.domain.llm.NoteScanCleanupResultParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private const val TAG = "LlmResultReceiver"
 
-// A batch scan delivers its NOTE_SCAN_CLEANUP replies as several separate broadcasts in quick
-// succession, each with its own goAsync()-scoped coroutine calling NotesWidget().updateAll()
-// independently. Confirmed on-device: firing updateAll() from several near-simultaneous coroutines
-// without this lock only ever produces ONE actual widget redraw (the first), leaving the widget stuck
-// showing whatever data existed at that point — later notes never appear until something else happens
-// to trigger a redraw. Serializing here (so each call's updateAll() fully returns before the next one
-// starts) avoids whatever internal coalescing causes calls made while one is still in flight to be
-// dropped rather than queued.
-private val widgetUpdateMutex = Mutex()
 
 /**
  * Notes' end of Commander's generic LLM hook: receives the async [VoxIpc.ACTION_LLM_RESULT] reply
@@ -94,93 +77,30 @@ class LlmResultReceiver : BroadcastReceiver() {
                 }
             }
             LlmTasks.NOTE_SCAN_CLEANUP -> {
-                val rawJson = result.rawJson
-                val cleaned = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
-                    NoteScanCleanupResultParser.parse(rawJson) ?: run {
-                        Logger.w(TAG, "Note scan cleanup: could not parse LLM result. rawJson=$rawJson")
-                        null
-                    }
-                } else {
+                // The other half of the same flow that sent this. What arrives is only the answer —
+                // the reading behind it is long gone, and does not need to be here: a reply that
+                // parses carries the whole note, and one that does not is handed to a person, which
+                // is what the flow's own review step already does.
+                val reply = result.rawJson.takeIf { result.status == VoxLlmResult.STATUS_SUCCESS }
+                if (result.status != VoxLlmResult.STATUS_SUCCESS) {
                     Logger.w(TAG, "Note scan cleanup failed: ${result.error}")
-                    null
                 }
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        val flow = NoteScanFlow(context, container, storedImageName)
                         val settings = container.settingsRepository.getSnapshot()
-                        if (cleaned == null) {
-                            // Real outcome is known now — decide whether the staged scan photo
-                            // (unconditionally saved by OcrResultReceiver, since we didn't know
-                            // success/failure yet at that point) becomes a real attachment or gets
-                            // discarded, per NotesSettings.scanImageRetention.
-                            if (storedImageName != null && settings.scanImageRetention != NotesSettings.RETENTION_NEVER) {
-                                val title = container.languageManager.getString("manual_review_required")
-                                val noteId = container.notesRepository.addStubNote(title, System.currentTimeMillis())
-                                if (noteId > 0) {
-                                    container.attachmentDao.insert(
-                                        AttachmentEntity(
-                                            recordType = NotesAttachments.RECORD_TYPE,
-                                            recordId = noteId,
-                                            fileName = storedImageName,
-                                            source = AttachmentSource.SCANNED,
-                                            createdAt = System.currentTimeMillis()
-                                        )
-                                    )
-                                    // Explicit, not left to NotesContainer's DB-driven widget collector —
-                                    // that collector runs in its own coroutine, decoupled from this
-                                    // receiver's goAsync() lifecycle. A batch reply creates several notes
-                                    // back-to-back and each pending.finish() below is the OS's cue that
-                                    // this process can be reclaimed; without forcing the refresh here,
-                                    // process death can beat the collector to actually observing the new
-                                    // row and calling updateAll(), leaving the widget stale until the app
-                                    // is opened directly. See widgetUpdateMutex's doc comment for why
-                                    // this is also serialized against sibling batch-reply receivers.
-                                    widgetUpdateMutex.withLock { NotesWidget().updateAll(context.applicationContext) }
-                                }
-                            } else {
-                                if (storedImageName != null) {
-                                    AttachmentFileStore.delete(context.applicationContext, NotesAttachments.DIR, storedImageName)
-                                }
-                                // Unconditional (not gated behind voiceSaveToastEnabled) — the only
-                                // signal the user has that the scan didn't produce a note.
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            return@launch
+                        if (reply == null) {
+                            flow.queueForReview(reading = null, parsed = null)
+                        } else {
+                            RecordFlow.deliver(
+                                spec = flow,
+                                reading = null,
+                                level = NotesSettings.scanLevelOf(settings.scanLlmLevel),
+                                reply = reply
+                            )
                         }
-                        Logger.d(TAG, "Note scan cleanup: creating note title=${cleaned.title} category=${cleaned.category}")
-                        // Same category resolution voice notes already use: match an existing
-                        // category case-insensitively, else fall back to the default / auto-create.
-                        // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard.
-                        val voiceNoteResult = container.notesRepository.addVoiceNote(
-                            title = FieldCleaner.clean(cleaned.title, "title", "Note"),
-                            text = cleaned.text,
-                            spokenCategory = FieldCleaner.clean(cleaned.category, "category", "Note"),
-                            defaultCategoryId = settings.defaultVoiceCategoryId,
-                            autoCreate = settings.autoCreateVoiceCategory,
-                            createdAt = System.currentTimeMillis()
-                        )
-                        if (storedImageName != null) {
-                            if (settings.scanImageRetention == NotesSettings.RETENTION_ALWAYS && voiceNoteResult.noteId > 0) {
-                                container.attachmentDao.insert(
-                                    AttachmentEntity(
-                                        recordType = NotesAttachments.RECORD_TYPE,
-                                        recordId = voiceNoteResult.noteId,
-                                        fileName = storedImageName,
-                                        source = AttachmentSource.SCANNED,
-                                        createdAt = System.currentTimeMillis()
-                                    )
-                                )
-                            } else {
-                                AttachmentFileStore.delete(context.applicationContext, NotesAttachments.DIR, storedImageName)
-                            }
-                        }
-                        // See the stub-note branch above for why this is explicit rather than left to
-                        // NotesContainer's DB-driven widget collector, and widgetUpdateMutex's doc
-                        // comment for why it's also serialized against sibling batch-reply receivers.
-                        widgetUpdateMutex.withLock { NotesWidget().updateAll(context.applicationContext) }
                     } finally {
                         pending.finish()
                     }

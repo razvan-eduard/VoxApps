@@ -306,5 +306,17 @@
   "zone_security": "Security",
   "zone_capture": "Creating entries",
   "zone_display": "What shows in the calendar",
-  "widget_zone": "Home-screen widget"
+  "widget_zone": "Home-screen widget",
+  "scan_llm_level": "How much AI reads a scan",
+  "flow_send_nothing": "Nothing leaves the device",
+  "flow_send_nothing_desc_calendar": "An entry is made only where the page prints a date.",
+  "flow_send_missing": "Only what could not be worked out",
+  "flow_send_missing_desc": "The narrowest question.",
+  "flow_send_head": "All the main fields",
+  "flow_send_head_desc": "Asked about even where the reading already had an answer.",
+  "flow_send_everything": "Everything",
+  "flow_send_everything_desc_calendar": "The page is read for a title, a date and a time, however they are written.",
+  "calendar_fill_head": "Fill in the entry automatically",
+  "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written.",
+  "scan_no_date_offline": "No date on the page, so no entry was created."
 }

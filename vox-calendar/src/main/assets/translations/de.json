@@ -306,5 +306,17 @@
   "zone_security": "Sicherheit",
   "zone_capture": "Einträge erstellen",
   "zone_display": "Was im Kalender erscheint",
-  "widget_zone": "Startbildschirm-Widget"
+  "widget_zone": "Startbildschirm-Widget",
+  "scan_llm_level": "Wie viel die KI von einem Scan liest",
+  "flow_send_nothing": "Nichts verlässt das Gerät",
+  "flow_send_nothing_desc_calendar": "Ein Eintrag entsteht nur, wenn die Seite ein Datum zeigt.",
+  "flow_send_missing": "Nur was nicht ermittelt werden konnte",
+  "flow_send_missing_desc": "Die engste Frage.",
+  "flow_send_head": "Alle Hauptfelder",
+  "flow_send_head_desc": "Auch dort gefragt, wo bereits eine Antwort vorlag.",
+  "flow_send_everything": "Alles",
+  "flow_send_everything_desc_calendar": "Die Seite wird nach Titel, Datum und Uhrzeit gelesen, wie auch immer geschrieben.",
+  "calendar_fill_head": "Eintrag automatisch ausfüllen",
+  "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben.",
+  "scan_no_date_offline": "Kein Datum auf der Seite — kein Eintrag erstellt."
 }

@@ -26,6 +26,8 @@ interface NotesSettingsRepository {
     suspend fun setIsGridView(enabled: Boolean)
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
     suspend fun setScanImageRetention(mode: String)
+    /** See [NotesSettings.scanLlmLevel]; a rung this app cannot honour is ignored. */
+    suspend fun setScanLlmLevel(level: String)
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)

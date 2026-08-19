@@ -42,6 +42,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ATTACH_PHOTO_ON_SCAN = booleanPreferencesKey("attach_photo_on_scan")
         val SCAN_IMAGE_RETENTION = stringPreferencesKey("scan_image_retention")
+        val SCAN_LLM_LEVEL = stringPreferencesKey("scan_llm_level")
         val TODAY_EFFECT = stringPreferencesKey("today_effect")
         val TODAY_EFFECT_STYLE = stringPreferencesKey("today_effect_style")
         val TODAY_EFFECT_COLOR = longPreferencesKey("today_effect_color")
@@ -80,6 +81,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
             attachPhotoOnScan = prefs[Keys.ATTACH_PHOTO_ON_SCAN] ?: false,
             scanImageRetention = prefs[Keys.SCAN_IMAGE_RETENTION] ?: NotesSettings.RETENTION_ON_FAILURE,
+            scanLlmLevel = prefs[Keys.SCAN_LLM_LEVEL] ?: NotesSettings.SCAN_FLOW_SUPPORT.default.name,
             todayEffect = prefs[Keys.TODAY_EFFECT] ?: TodayEffect.NONE.name,
             todayEffectStyle = prefs[Keys.TODAY_EFFECT_STYLE] ?: TodayEffectStyle.RING.name,
             todayEffectColor = prefs[Keys.TODAY_EFFECT_COLOR] ?: NotesSettings.TODAY_EFFECT_DEFAULT_COLOR,
@@ -179,6 +181,11 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         dataStore.edit { it[Keys.SCAN_IMAGE_RETENTION] = mode }
     }
 
+    override suspend fun setScanLlmLevel(level: String) {
+        if (NotesSettings.SCAN_FLOW_SUPPORT.supported.none { it.name == level }) return
+        dataStore.edit { it[Keys.SCAN_LLM_LEVEL] = level }
+    }
+
     override suspend fun setTodayEffect(effect: String) {
         dataStore.edit { it[Keys.TODAY_EFFECT] = effect }
     }
@@ -249,6 +256,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             prefs[Keys.THEME_COLORED] = settings.themeColored
             prefs[Keys.ATTACH_PHOTO_ON_SCAN] = settings.attachPhotoOnScan
             prefs[Keys.SCAN_IMAGE_RETENTION] = settings.scanImageRetention
+            prefs[Keys.SCAN_LLM_LEVEL] = settings.scanLlmLevel
             prefs[Keys.TODAY_EFFECT] = settings.todayEffect
             prefs[Keys.TODAY_EFFECT_STYLE] = settings.todayEffectStyle
             prefs[Keys.TODAY_EFFECT_COLOR] = settings.todayEffectColor

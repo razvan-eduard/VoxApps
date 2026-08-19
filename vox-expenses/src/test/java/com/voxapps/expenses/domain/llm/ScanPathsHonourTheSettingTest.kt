@@ -40,29 +40,33 @@ class ScanPathsHonourTheSettingTest {
         }.toMap()
     }
 
+    /**
+     * Every capture path hands the page to the shared flow rather than composing a prompt of its
+     * own — a stronger guarantee than the one this used to make, which was that a prompt built here
+     * had checked the setting beforehand. Now there is no prompt built here to check: the only text
+     * that can be sent is what the flow produced, and it produces one only where the rung asked for
+     * it.
+     */
     @Test
-    fun `every path that builds a prompt checks the setting first`() {
+    fun `every capture path goes through the shared flow`() {
         val unguarded = paths()
-            .filterValues { it.contains("ExpenseScanCleanupPromptBuilder.build") }
             .filterKeys { it !in deliberatelyExempt }
-            .filterValues { !it.contains("ScanFlow.modeOf") }
+            .filterValues { it.contains("ExpenseScanCleanupPromptBuilder.build") }
             .keys
 
         assertTrue(
-            "these send a scan to the model without checking whether the user allowed it: $unguarded",
+            "these compose a prompt themselves, bypassing the level entirely: $unguarded",
             unguarded.isEmpty()
         )
+        val dispatching = paths().filterValues { it.contains("RecordFlow.dispatch(") }.keys
+        assertTrue("no capture path dispatches through the flow any more", dispatching.size >= 2)
     }
 
     /** The exemption must stay a single, named path rather than becoming a habit. */
     @Test
-    fun `only the deliberate rescan is exempt`() {
+    fun `only the deliberate rescan composes its own prompt`() {
         val building = paths().filterValues { it.contains("ExpenseScanCleanupPromptBuilder.build") }.keys
-
-        assertTrue("the sender stopped building prompts — has it been renamed?", building.size >= 2)
-        assertEquals(deliberatelyExempt, building.filterNot {
-            paths().getValue(it).contains("ScanFlow.modeOf")
-        }.toSet())
+        assertEquals(deliberatelyExempt, building)
     }
 
     /**
@@ -74,7 +78,9 @@ class ScanPathsHonourTheSettingTest {
         val text = source()
 
         assertEquals(1, Regex("""ScanReading\.of\(""").findAll(text).count())
-        assertTrue(text.contains("private suspend fun readScan("))
+        // Named rather than private now, because the flow reads the page through the same one — the
+        // point was never the visibility, it was that there is exactly one.
+        assertTrue(text.contains("suspend fun readScanFor("))
     }
 
     /** Whatever a path decides, it decides it from the mode rather than from a setting string. */

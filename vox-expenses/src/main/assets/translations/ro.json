@@ -520,5 +520,16 @@
   "notification_model_full": "Trimite pentru interpretare",
   "notification_model_full_desc": "Textul ajunge la motor, care citește suma, comerciantul și dacă banii au ieșit din cont.",
   "notification_model_none": "Nu pleacă nimic de pe telefon",
-  "notification_model_none_desc": "Suma se citește pe telefon. Înțelesul mesajului vine din șabloanele confirmate deja de tine; restul așteaptă în revizuire, nu se ghicește."
+  "notification_model_none_desc": "Suma se citește pe telefon. Înțelesul mesajului vine din șabloanele confirmate deja de tine; restul așteaptă în revizuire, nu se ghicește.",
+  "flow_send_nothing": "Nu pleacă nimic de pe telefon",
+  "flow_send_nothing_desc": "Se citește aici, iar ce nu se poate dovedi te așteaptă.",
+  "flow_send_missing": "Doar ce nu am reușit singur",
+  "flow_send_missing_desc": "Cea mai îngustă întrebare — și niciuna când nu lipsește nimic.",
+  "flow_send_head": "Toate câmpurile principale",
+  "flow_send_head_desc": "Întrebate chiar și acolo unde citirea avea deja un răspuns.",
+  "flow_send_everything": "Tot, cu detalii cu tot",
+  "flow_send_everything_desc": "Documentul întreg, pentru cel mai bun răspuns posibil.",
+  "scan_fill_head": "Completează automat câmpurile principale",
+  "scan_fill_body": "Completează automat pozițiile",
+  "flow_cannot_suggest": "Aplicația n-are unde ține o sugestie, deci răspunsul se scrie."
 }

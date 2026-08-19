@@ -1,5 +1,10 @@
 package com.voxapps.calendarapp.data.preferences
 
+import com.voxapps.recordflow.FieldWeight
+import com.voxapps.recordflow.FlowSupport
+import com.voxapps.recordflow.LlmLevel
+import com.voxapps.recordflow.RecordSource
+
 import androidx.compose.runtime.Immutable
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.design.effects.TodayEffect
@@ -42,6 +47,9 @@ import com.voxapps.design.effects.TodayEffectStyle
  */
 @Immutable
 data class CalendarSettings(
+    /** How far a model is let into making an entry from a scan — see [SCAN_FLOW_SUPPORT]. Stored as
+     *  the rung's name; defaults to the fullest behaviour, which is what installs had before. */
+    val scanLlmLevel: String = "FULL",
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val language: String = DEFAULT_LANGUAGE,
@@ -90,6 +98,44 @@ data class CalendarSettings(
     val fieldCorrectionThreshold: Int = CORRECTION_SPEED_MEDIUM
 ) {
     companion object {
+        /**
+         * What this app can honestly do with a scanned page.
+         *
+         * The offline rung is real but narrow: an entry needs a moment in time, and the only one a
+         * device can establish without interpreting anything is a date written as digits. Where the
+         * page carries one, the scan becomes an entry; where it does not, nothing is created, because
+         * an entry filed on a guessed day is worse than a scan that visibly did nothing.
+         *
+         * The rungs in between are absent for want of anywhere to put a proposal.
+         */
+        val SCAN_FLOW_SUPPORT = FlowSupport(
+            source = RecordSource.SCAN,
+            supported = setOf(LlmLevel.NONE, LlmLevel.FULL),
+            default = LlmLevel.FULL,
+            // An entry is one coarse thing — a title, a day, an hour. It carries no list of rows
+            // whose individual correctness nobody could check.
+            weights = setOf(FieldWeight.HEAD)
+        )
+
+        /**
+         * What this app can do with a spoken entry.
+         *
+         * One rung. An entry needs a moment in time, and "next Tuesday at nine" is exactly the kind
+         * of phrase [com.voxapps.textmatch.extract.DateTimeExtractor] declines to read — it settles
+         * digits, not language. So there is nothing here the device could settle on its own, and the
+         * scale says one thing honestly rather than four things loosely.
+         */
+        val VOICE_FLOW_SUPPORT = FlowSupport(
+            source = RecordSource.VOICE,
+            supported = setOf(LlmLevel.FULL),
+            default = LlmLevel.FULL,
+            weights = setOf(FieldWeight.HEAD)
+        )
+
+        /** The stored rung, or the fullest behaviour where the value is unreadable. */
+        fun scanLevelOf(stored: String): LlmLevel =
+            LlmLevel.entries.firstOrNull { it.name == stored } ?: LlmLevel.FULL
+
         const val TIMEOUT_30M = 30
         const val TIMEOUT_1H = 60
         const val TIMEOUT_1D = 1440

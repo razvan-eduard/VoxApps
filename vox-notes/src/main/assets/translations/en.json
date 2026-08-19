@@ -200,5 +200,16 @@
   "logging_section": "Logging",
   "zone_security": "Security",
   "zone_notes": "Notes",
-  "zone_capture": "Scanning"
+  "zone_capture": "Scanning",
+  "scan_llm_level": "How much AI reads a scan",
+  "flow_send_nothing": "Nothing leaves the device",
+  "flow_send_nothing_desc_notes": "The scanned text becomes the note as it is.",
+  "flow_send_missing": "Only what could not be worked out",
+  "flow_send_missing_desc": "The narrowest question.",
+  "flow_send_head": "All the main fields",
+  "flow_send_head_desc": "Asked about even where the reading already had an answer.",
+  "flow_send_everything": "Everything",
+  "flow_send_everything_desc_notes": "The text is tidied up, and a title and category are chosen for it.",
+  "notes_fill_head": "Fill in the title and category automatically",
+  "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written."
 }

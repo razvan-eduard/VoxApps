@@ -200,5 +200,16 @@
   "logging_section": "Protokollierung",
   "zone_security": "Sicherheit",
   "zone_notes": "Notizen",
-  "zone_capture": "Scannen"
+  "zone_capture": "Scannen",
+  "scan_llm_level": "Wie viel die KI von einem Scan liest",
+  "flow_send_nothing": "Nichts verlässt das Gerät",
+  "flow_send_nothing_desc_notes": "Der gescannte Text wird unverändert zur Notiz.",
+  "flow_send_missing": "Nur was nicht ermittelt werden konnte",
+  "flow_send_missing_desc": "Die engste Frage.",
+  "flow_send_head": "Alle Hauptfelder",
+  "flow_send_head_desc": "Auch dort gefragt, wo bereits eine Antwort vorlag.",
+  "flow_send_everything": "Alles",
+  "flow_send_everything_desc_notes": "Der Text wird bereinigt, Titel und Kategorie werden gewählt.",
+  "notes_fill_head": "Titel und Kategorie automatisch ausfüllen",
+  "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben."
 }

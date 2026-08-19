@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.design.settings.SettingsSectionCard
+import com.voxapps.recordflow.ui.RecordFlowLevelCard
+import com.voxapps.recordflow.ui.RecordFlowStrings
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 
@@ -59,46 +61,27 @@ fun ScanSettingsTab(
             }
 
         }
-        SettingsSectionCard(languageManager.getString("scan_zone_read")) {
-            // --- How much of a scan the model is asked to read. Placed beside the photo toggles because
-            // it answers the same question they do — what leaves the device — and its lowest setting is
-            // the only one that answers "nothing". ---
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(languageManager.getString("scan_model_use"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    languageManager.getString("scan_model_use_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val scanModes = listOf(
-                    ExpensesSettings.SCAN_MODEL_FULL to "scan_model_full",
-                    ExpensesSettings.SCAN_MODEL_HEADER_FOOTER_AUTO to "scan_model_header_footer_auto",
-                    ExpensesSettings.SCAN_MODEL_HEADER_FOOTER_SUGGEST to "scan_model_header_footer_suggest",
-                    ExpensesSettings.SCAN_MODEL_NONE to "scan_model_none"
-                )
-                for ((mode, key) in scanModes) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { stateManager.setScanModelUse(mode) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = settings.scanModelUse == mode,
-                            onClick = { stateManager.setScanModelUse(mode) }
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                languageManager.getString(key + "_desc"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
+        RecordFlowLevelCard(
+            support = ExpensesSettings.SCAN_FLOW_SUPPORT,
+            level = ExpensesSettings.scanLevelOf(settings.scanModelUse),
+            strings = RecordFlowStrings(
+                title = languageManager.getString("scan_model_use"),
+                sendNothing = languageManager.getString("flow_send_nothing"),
+                sendNothingDesc = languageManager.getString("flow_send_nothing_desc"),
+                sendMissing = languageManager.getString("flow_send_missing"),
+                sendMissingDesc = languageManager.getString("flow_send_missing_desc"),
+                sendHead = languageManager.getString("flow_send_head"),
+                sendHeadDesc = languageManager.getString("flow_send_head_desc"),
+                sendEverything = languageManager.getString("flow_send_everything"),
+                sendEverythingDesc = languageManager.getString("flow_send_everything_desc"),
+                fillHead = languageManager.getString("scan_fill_head"),
+                fillBody = languageManager.getString("scan_fill_body"),
+                cannotSuggest = languageManager.getString("flow_cannot_suggest")
+            ),
+            onLevelChange = { stateManager.setScanModelUse(it.name) }
+        )
 
+        SettingsSectionCard(languageManager.getString("scan_zone_read")) {
             // --- The tax breakdown: never, when the document carries one, or always. Three settings
             // rather than a switch because the honest answer depends on the document — see VatDisplay. ---
             Column(modifier = Modifier.fillMaxWidth()) {

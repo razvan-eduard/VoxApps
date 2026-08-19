@@ -306,5 +306,17 @@
   "zone_security": "Securitate",
   "zone_capture": "Crearea intrărilor",
   "zone_display": "Ce apare în calendar",
-  "widget_zone": "Widget pe ecranul principal"
+  "widget_zone": "Widget pe ecranul principal",
+  "scan_llm_level": "Cât citește AI dintr-o scanare",
+  "flow_send_nothing": "Nu pleacă nimic de pe telefon",
+  "flow_send_nothing_desc_calendar": "Se creează o intrare doar dacă pagina are o dată scrisă.",
+  "flow_send_missing": "Doar ce nu am reușit singur",
+  "flow_send_missing_desc": "Cea mai îngustă întrebare.",
+  "flow_send_head": "Toate câmpurile principale",
+  "flow_send_head_desc": "Întrebate chiar și acolo unde citirea avea deja un răspuns.",
+  "flow_send_everything": "Tot",
+  "flow_send_everything_desc_calendar": "Pagina e citită pentru titlu, dată și oră, oricum ar fi scrise.",
+  "calendar_fill_head": "Completează automat intrarea",
+  "flow_cannot_suggest": "Aplicația n-are unde ține o sugestie, deci răspunsul se scrie.",
+  "scan_no_date_offline": "Nicio dată pe pagină, deci nu s-a creat nicio intrare."
 }

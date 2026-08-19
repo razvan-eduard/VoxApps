@@ -12,6 +12,7 @@ import com.voxapps.attachments.AttachmentSource
 import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.logging.Logger
 import com.voxapps.notes.data.NotesAttachments
+import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.ipc.VoxIpc
@@ -19,6 +20,8 @@ import com.voxapps.ipc.VoxOcrResult
 import com.voxapps.notes.NotesApplication
 import com.voxapps.notes.di.NotesContainer
 import com.voxapps.notes.domain.llm.LlmTasks
+import com.voxapps.recordflow.RecordFlow
+import com.voxapps.notes.domain.llm.NoteScanFlow
 import com.voxapps.notes.domain.llm.NoteScanCleanupPromptBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -162,21 +165,33 @@ class OcrResultReceiver : BroadcastReceiver() {
         val stagedImageName = imageUri?.let { uriString ->
             AttachmentFileStore.stage(context, Uri.parse(uriString), NotesAttachments.DIR)
         }
+        // One flow, whatever the level: the shared template reads what the device can establish,
+        // decides who answers the rest, and either writes the note, keeps it for a person, or asks.
+        // The offline path is not a branch here any more — it is this same call with a level that
+        // asks nothing.
+        val flow = NoteScanFlow(context, container, stagedImageName)
         val taskWithMeta = if (stagedImageName != null) {
             "${LlmTasks.NOTE_SCAN_CLEANUP}:$stagedImageName"
         } else {
             LlmTasks.NOTE_SCAN_CLEANUP
         }
-
-        container.pendingLlmRequestQueue.enqueueAndSend(
-            context = context,
-            sourcePackage = context.packageName,
-            task = taskWithMeta,
-            promptText = NoteScanCleanupPromptBuilder.build(rawText, existingCategories, language),
-            targetPackage = COMMANDER_PACKAGE,
-            data = listOf(rawText),
-            attachmentUri = attachmentUri
-        )
+        RecordFlow.dispatch(
+            spec = flow,
+            input = rawText,
+            level = NotesSettings.scanLevelOf(settings.scanLlmLevel)
+        ) { _, prompt ->
+            // The prompt arrives already composed by the flow; delivery stays here, where the
+            // durable queue is.
+            container.pendingLlmRequestQueue.enqueueAndSend(
+                context = context,
+                sourcePackage = context.packageName,
+                task = taskWithMeta,
+                promptText = prompt,
+                targetPackage = COMMANDER_PACKAGE,
+                data = listOf(rawText),
+                attachmentUri = attachmentUri
+            )
+        }
     }
 
     /** Stages every returned photo and commits it as a real AttachmentEntity row — no OCR text

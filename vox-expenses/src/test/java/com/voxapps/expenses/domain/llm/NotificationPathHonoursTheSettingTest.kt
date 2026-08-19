@@ -1,6 +1,8 @@
 package com.voxapps.expenses.domain.llm
 
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.recordflow.LlmLevel
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,45 +38,52 @@ class NotificationPathHonoursTheSettingTest {
             }
             .joinToString("\n")
 
+    /**
+     * The listener composes no prompt of its own any more, which is a stronger guarantee than the
+     * one this test used to make. It used to check that the offline branch came *before* the prompt
+     * was built; now there is no prompt here to come before. The only text that can be sent is the
+     * one the flow produces, and the flow produces it only where the policy asked for it.
+     */
     @Test
-    fun `the capture returns before a prompt is built`() {
+    fun `the listener never composes a prompt itself`() {
         val text = source()
-        val guard = text.indexOf("ModelFreeNotificationCreator.isEnabled")
-        val prompt = text.indexOf("NotificationExpenseParsePromptBuilder.build(")
-        val send = text.indexOf("pendingLlmRequestQueue.enqueueAndSend(")
-
-        assertTrue("the no-model branch has to exist in the listener", guard > 0)
-        assertTrue("the setting must be honoured before the prompt is composed", guard < prompt)
-        assertTrue("and therefore before anything is sent", guard < send)
-    }
-
-    /** The branch has to end the capture, or it would compose the prompt anyway. */
-    @Test
-    fun `the no-model branch returns`() {
-        val text = source()
-        val guard = text.indexOf("ModelFreeNotificationCreator.isEnabled")
-        val prompt = text.indexOf("NotificationExpenseParsePromptBuilder.build(")
-        assertTrue("no return between the guard and the prompt", text.substring(guard, prompt).contains("return"))
-    }
-
-    @Test
-    fun `only the none setting skips the model`() {
         assertTrue(
-            ModelFreeNotificationCreator.isEnabled(
-                ExpensesSettings(notificationModelUse = ExpensesSettings.NOTIFICATION_MODEL_NONE)
-            )
+            "the capture has to run through the shared flow",
+            text.contains("RecordFlow.dispatch(")
         )
         assertFalse(
-            ModelFreeNotificationCreator.isEnabled(
-                ExpensesSettings(notificationModelUse = ExpensesSettings.NOTIFICATION_MODEL_FULL)
-            )
+            "a prompt built here would bypass the level entirely",
+            text.contains("NotificationExpenseParsePromptBuilder.build(")
         )
+    }
+
+    /** And what is sent can only be what the flow handed over. */
+    @Test
+    fun `sending happens only inside the flow's own send step`() {
+        val text = source()
+        val dispatch = text.indexOf("RecordFlow.dispatch(")
+        val send = text.indexOf("pendingLlmRequestQueue.enqueueAndSend(")
+        assertTrue("nothing is sent before the flow has decided", dispatch in 0 until send)
+    }
+
+    @Test
+    fun `only the none setting keeps the sentence on the device`() {
+        assertEquals(
+            LlmLevel.NONE,
+            ExpensesSettings.notificationLevelOf(ExpensesSettings.NOTIFICATION_MODEL_NONE)
+        )
+        assertEquals(
+            LlmLevel.FULL,
+            ExpensesSettings.notificationLevelOf(ExpensesSettings.NOTIFICATION_MODEL_FULL)
+        )
+        assertTrue(LlmLevel.NONE.staysOnDevice)
+        assertFalse(LlmLevel.FULL.staysOnDevice)
     }
 
     /** An install that never touched the setting keeps sending, which is what it did before it
      *  existed — a default that silently stopped capturing would be a regression, not a promise. */
     @Test
     fun `the default is unchanged behaviour`() {
-        assertFalse(ModelFreeNotificationCreator.isEnabled(ExpensesSettings()))
+        assertEquals(LlmLevel.FULL, ExpensesSettings.notificationLevelOf(ExpensesSettings().notificationModelUse))
     }
 }

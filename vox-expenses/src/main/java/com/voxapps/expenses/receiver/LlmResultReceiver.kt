@@ -30,6 +30,8 @@ import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ScanPreParse
 import com.voxapps.expenses.domain.location.resolveCurrentCityName
+import com.voxapps.recordflow.RecordFlow
+import com.voxapps.expenses.domain.llm.ExpenseScanFlow
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
@@ -116,7 +118,24 @@ class LlmResultReceiver : BroadcastReceiver() {
                             // the original stub).
                             updateExpenseFromRetry(context.applicationContext, container, parsed, retryOfExpenseId)
                         } else if (parsed != null) {
-                            val newId = createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName, preParse)
+                            // Through the flow rather than straight to the writer: the rung decides
+                            // how much of this answer lands on the record and how much is offered on
+                            // it instead, and only the flow knows that. A voice reply has no such
+                            // scale of its own yet, so it keeps going the direct way.
+                            val newId = if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP) {
+                                val settings = container.settingsRepository.getSnapshot()
+                                val outcome = RecordFlow.deliver(
+                                    spec = ExpenseScanFlow(
+                                        context.applicationContext, container, storedImageName, preParse
+                                    ),
+                                    reading = null,
+                                    level = ExpensesSettings.scanLevelOf(settings.scanModelUse),
+                                    reply = rawJson!!
+                                )
+                                (outcome as? RecordFlow.Outcome.Committed)?.recordId ?: 0L
+                            } else {
+                                createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName, preParse)
+                            }
                             if (isPendingScanCreate && newId > 0) {
                                 linkPendingScanAttachments(container, newId, pendingFileNames, pendingGroupId)
                             }
@@ -670,7 +689,9 @@ class LlmResultReceiver : BroadcastReceiver() {
      * produce it — while date and time only fill gaps, since a reply that still carries them was
      * asked for them and had the whole document to weigh.
      */
-    private fun ExpenseParseResultParser.Parsed.withPreParse(
+    /** Also used by [com.voxapps.expenses.domain.llm.ExpenseScanFlow], which parses the same reply
+     *  on the flow's behalf — one reunion rule, not two. */
+    internal fun ExpenseParseResultParser.Parsed.withPreParse(
         preParse: ScanPreParse?
     ): ExpenseParseResultParser.Parsed {
         if (preParse == null) return this
@@ -700,7 +721,7 @@ class LlmResultReceiver : BroadcastReceiver() {
      * contradict it. That keeps ordinary receipts — where the total is often the only number the app
      * can read — working exactly as they do today.
      */
-    private fun ExpenseParseResultParser.Parsed.withoutDisprovedItems(
+    internal fun ExpenseParseResultParser.Parsed.withoutDisprovedItems(
         preParse: ScanPreParse?
     ): ExpenseParseResultParser.Parsed {
         if (items.isEmpty()) return this

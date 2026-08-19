@@ -141,6 +141,7 @@ class CalendarStateManager(
     fun setDefaultLayerId(id: Long?) { scope.launch { settingsRepo.setDefaultLayerId(id) } }
     fun setAutoCreateLayer(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateLayer(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
+    fun setScanLlmLevel(level: String) { scope.launch { settingsRepo.setScanLlmLevel(level) } }
     fun setDebugLoggingEnabled(enabled: Boolean) {
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }

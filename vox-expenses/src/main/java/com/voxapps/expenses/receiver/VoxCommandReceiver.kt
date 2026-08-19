@@ -79,13 +79,14 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     try {
                         val settings = container.settingsRepository.getSnapshot()
                         val categoryNames = container.expensesRepository.categories.first().map { it.name }
-                        val schema = VoxSatelliteSchema(
-                            needsExtractionPass = true,
-                            promptTemplate = ExpenseParsePromptBuilder.buildTemplate(
-                                categoryNames, settings.defaultCurrency, settings.language
-                            ),
-                            fieldSchemaVersion = GeneratedParsedSchema.VERSION,
-                            taskId = LlmTasks.EXPENSE_PARSE
+                        // Derived from the flow rather than restated: what this app tells Commander
+                        // and what it does locally are then one declaration.
+                        val flow = com.voxapps.expenses.domain.llm.ExpenseVoiceFlow(context, container)
+                        val schema = VoxSatelliteSchema.of(
+                            asksModel = !flow.support.default.staysOnDevice,
+                            promptTemplate = flow.promptTemplate(flow.support.default.asks),
+                            taskId = flow.taskId,
+                            fieldSchemaVersion = GeneratedParsedSchema.VERSION
                         )
                         pending.setResultData(VoxResult(ok = true, text = schema.toJson()).toJson())
                     } finally {

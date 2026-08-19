@@ -87,6 +87,7 @@ dependencies {
     implementation(project(":core:preferences"))
     implementation(project(":core:datahygiene"))
     implementation(project(":core:docread"))
+    implementation(project(":core:recordflow"))
     implementation(project(":core:fieldmemory"))
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))

@@ -46,17 +46,8 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val reading = readScan(context, rawText, plainText)
+        val reading = readScanFor(context, rawText, plainText)
 
-        // What this scan is allowed to do, asked once and on every axis — see [ScanFlow]. The
-        // record is written here rather than after a reply whenever the model is not the one
-        // deciding, and where nothing is sent the check happens before the request is composed,
-        // because the promise is that no text leaves the device.
-        val mode = ScanFlow.modeOf(settings)
-        if (mode.writesRecordLocally) {
-            ModelFreeScanCreator.create(context, container, reading, plainText, imageName)
-        }
-        if (!mode.sendsToModel) return
         val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
@@ -68,30 +59,25 @@ object ExpenseScanCleanupRequestSender {
             else -> LlmTasks.EXPENSE_SCAN_CLEANUP
         }
 
-        // Two independent reasons to leave the item half out — the user asked for the items to stay
-        // on the device, or the engine cannot take a prompt that long. See [ScanFlow.asksForItems].
-        val includeLineItems = ScanFlow.asksForItems(mode, askEngineForLineItems(context))
-
-        val promptText = ExpenseScanCleanupPromptBuilder.build(
-            plainText,
-            existingCategories,
-            settings.defaultCurrency,
-            settings.language,
-            preParsedDate = preParsed.date,
-            preParsedTime = preParsed.time,
-            includeLineItems = includeLineItems,
-        )
-
-        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
-        val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
-            context = context,
-            sourcePackage = context.packageName,
-            task = taskWithMeta,
-            promptText = promptText,
-            targetPackage = COMMANDER_PACKAGE,
-            attachmentUri = attachmentUri
-        )
-        rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
+        // One flow, whatever the level: the shared template reads the page, decides who answers what
+        // it could not prove, and either writes the expense, leaves it for a person, or asks. The
+        // promise that nothing leaves the device is kept inside it, before a prompt exists.
+        com.voxapps.recordflow.RecordFlow.dispatch(
+            spec = ExpenseScanFlow(context, container, imageName),
+            input = ScannedPage(rawText, plainText),
+            level = com.voxapps.expenses.data.preferences.ExpensesSettings.scanLevelOf(settings.scanModelUse)
+        ) { _, promptText ->
+            Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for scan cleanup (retryOfExpenseId=$retryOfExpenseId, multimodal=${attachmentUri != null})")
+            val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
+                context = context,
+                sourcePackage = context.packageName,
+                task = taskWithMeta,
+                promptText = promptText,
+                targetPackage = COMMANDER_PACKAGE,
+                attachmentUri = attachmentUri
+            )
+            rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
+        }
     }
 
     /**
@@ -119,7 +105,7 @@ object ExpenseScanCleanupRequestSender {
         val preParsed = DateTimeRegexParser.parse(plainText)
         // A rescan of the items is asked for deliberately, from the expense itself, so it is the one
         // path the setting does not silence — a button that quietly did nothing would be worse.
-        val reading = readScan(context, rawText, plainText)
+        val reading = readScanFor(context, rawText, plainText)
         val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
@@ -175,45 +161,32 @@ object ExpenseScanCleanupRequestSender {
         // deterministic items gate, so a reconstruction misfire can never degrade the LLM's input.
         val plainText = TableItemsPreParse.plainText(rawText)
         val preParsed = DateTimeRegexParser.parse(plainText)
-        val reading = readScan(context, rawText, plainText)
+        val reading = readScanFor(context, rawText, plainText)
 
-        // The path a fresh scan actually takes, and so the one the setting has to be honoured on.
-        val mode = ScanFlow.modeOf(settings)
-        if (mode.writesRecordLocally) {
-            ModelFreeScanCreator.create(context, container, reading, plainText, fileNames.firstOrNull())
-        }
-        if (!mode.sendsToModel) return
         val totals = reading.totals
         val preParsedTotal = totals.total
         // Every deterministic reading of the items, not just the columnar one — see ScanItemsReader.
         val preParsedItems = reading.items
-
-        // Two independent reasons to leave the item half out — the user asked for the items to stay
-        // on the device, or the engine cannot take a prompt that long. See [ScanFlow.asksForItems].
-        val includeLineItems = ScanFlow.asksForItems(mode, askEngineForLineItems(context))
-
-        val promptText = ExpenseScanCleanupPromptBuilder.build(
-            plainText,
-            existingCategories,
-            settings.defaultCurrency,
-            settings.language,
-            preParsedDate = preParsed.date,
-            preParsedTime = preParsed.time,
-            includeLineItems = includeLineItems,
-        )
-
         val taskWithMeta = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending:${groupId.orEmpty()}:${fileNames.joinToString(",")}"
 
-        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for pending scan create (pages=${fileNames.size})")
-        val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
-            context = context,
-            sourcePackage = context.packageName,
-            task = taskWithMeta,
-            promptText = promptText,
-            targetPackage = COMMANDER_PACKAGE,
-            attachmentUri = attachmentUri
-        )
-        rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
+        // Same flow as a fresh capture, and so the same promise: this is a path the setting has to
+        // be honoured on, and honouring it is no longer this function's business to remember.
+        com.voxapps.recordflow.RecordFlow.dispatch(
+            spec = ExpenseScanFlow(context, container, fileNames.firstOrNull()),
+            input = ScannedPage(rawText, plainText),
+            level = com.voxapps.expenses.data.preferences.ExpensesSettings.scanLevelOf(settings.scanModelUse)
+        ) { _, promptText ->
+            Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for pending scan create (pages=${fileNames.size})")
+            val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
+                context = context,
+                sourcePackage = context.packageName,
+                task = taskWithMeta,
+                promptText = promptText,
+                targetPackage = COMMANDER_PACKAGE,
+                attachmentUri = attachmentUri
+            )
+            rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
+        }
     }
 
     /**
@@ -250,7 +223,9 @@ object ExpenseScanCleanupRequestSender {
      * the text went to the model with the setting plainly off. Reading in one place is what keeps
      * that from being possible to get wrong again.
      */
-    private suspend fun readScan(
+    /** Also the reading step of [ExpenseScanFlow], so a page is read the one way whatever happens
+     *  to it afterwards. */
+    internal suspend fun readScanFor(
         context: Context,
         rawText: String,
         plainText: String
@@ -287,7 +262,7 @@ object ExpenseScanCleanupRequestSender {
  *
  * Both flags fail safe towards asking for less: an unreachable Commander reports local and short.
  */
-private suspend fun askEngineForLineItems(context: android.content.Context): Boolean {
+internal suspend fun askEngineForLineItems(context: android.content.Context): Boolean {
     if (com.voxapps.ipc.VoxCapabilityClient.isLocalEngine(context)) return false
     return com.voxapps.ipc.VoxCapabilityClient.supportsLongPrompt(context)
 

@@ -520,5 +520,16 @@
   "notification_model_full": "Send for interpretation",
   "notification_model_full_desc": "The notification's text goes to the engine, which reads the amount, the merchant and whether money left the account.",
   "notification_model_none": "Nothing leaves the device",
-  "notification_model_none_desc": "The amount is read on the device. What the message means is taken from templates you have already confirmed; anything else waits in review instead of being guessed."
+  "notification_model_none_desc": "The amount is read on the device. What the message means is taken from templates you have already confirmed; anything else waits in review instead of being guessed.",
+  "flow_send_nothing": "Nothing leaves the device",
+  "flow_send_nothing_desc": "Read here, and anything that cannot be proved waits for you.",
+  "flow_send_missing": "Only what could not be worked out",
+  "flow_send_missing_desc": "The narrowest question — and none at all when nothing is missing.",
+  "flow_send_head": "All the main fields",
+  "flow_send_head_desc": "Asked about even where the reading already had an answer.",
+  "flow_send_everything": "Everything, fine detail included",
+  "flow_send_everything_desc": "The whole document, for the best answer it can give.",
+  "scan_fill_head": "Fill in the main fields automatically",
+  "scan_fill_body": "Fill in the line items automatically",
+  "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written."
 }
