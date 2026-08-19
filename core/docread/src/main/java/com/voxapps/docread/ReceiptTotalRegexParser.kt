@@ -13,6 +13,12 @@ import com.voxapps.textmatch.extract.LabelledAmountExtractor
  * always smaller than the sum containing it. Labels are required, which is what keeps figures that
  * routinely exceed the total out of the running: cash tendered, a credit limit and a carried-over
  * balance are printed under headings of their own, so they are never candidates.
+ *
+ * Largest-wins is an opinion, though, and one document can hold several honest totals — a bill that
+ * suggests what to add for service prints a labelled total per suggestion, every one of them above
+ * the amount actually charged. [others] exists for that: the runners-up, offered so the arithmetic
+ * can settle which was the real one. It never overrides this parser's answer, and where nothing
+ * proves anything the answer stays what it has always been.
  */
 object ReceiptTotalRegexParser {
 
@@ -61,5 +67,18 @@ object ReceiptTotalRegexParser {
             invoiceTotal = invoiceTotal,
             previousBalance = previousBalance
         )
+    }
+
+    /**
+     * Every other labelled total in [text], largest first, without the one [parse] already returned.
+     *
+     * Offered to the reading as further candidates to try after that one — so a document whose rows
+     * add up to a figure this parser passed over can still prove it, and one that reads correctly
+     * today is unaffected, since its answer is still the first thing tried.
+     */
+    fun others(text: String): List<Double> {
+        val all = LabelledAmountExtractor.find(text, totalLabels).map { it.value }
+        val chosen = all.maxOrNull() ?: return emptyList()
+        return all.filterNot { it == chosen }.distinct().sortedDescending()
     }
 }

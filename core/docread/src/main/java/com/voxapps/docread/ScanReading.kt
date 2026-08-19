@@ -74,7 +74,24 @@ object ScanReading {
                     net = null,
                     vat = null
                 )
-            )
+            ) +
+            // Last of all, the totals the compiled-in parser passed over. A document can print more
+            // than one honest total — a bill suggesting what to add for service labels every
+            // suggestion "total", each one above what was actually charged — and largest-wins has no
+            // way to tell those from the inclusive total it is meant to find. Offered rather than
+            // preferred: they are tried only once everything above has failed to reconcile, so the
+            // answer that reads a document correctly today is still the first one tried, and a
+            // document where nothing closes still reports the same total it always did.
+            ReceiptTotalRegexParser.others(footerText).map { runnerUp ->
+                FooterReader.Candidate(
+                    templateId = "built-in-runner-up",
+                    grandTotal = runnerUp,
+                    invoiceTotal = null,
+                    previousBalance = null,
+                    net = null,
+                    vat = null
+                )
+            }
 
         for (candidate in candidates) {
             val reading = ScanItemsReader.read(

@@ -59,10 +59,20 @@ object ReceiptSections {
     fun split(rawText: String): Sections {
         val lines = rawText.lines()
         if (lines.none { it.trim() in MARKERS }) {
-            // Unsectioned: hand every caller the whole text, which is what they read before.
+            // Unsectioned, but a page can still carry the geometric reconstruction below its own
+            // marker — a scan whose table was rebuilt while the section markers were not written.
+            // The two halves have to be told apart even here, for the reason the sectioned branch
+            // gives: the reconstruction restates the same rows, so handing both to a pattern lets
+            // one row be counted twice and no sum can then reconcile. The reading-order text is what
+            // the patterns read; the reconstruction is the columnar parse's own input.
+            val plainOnly = rawText.substringBefore(TABLE_SECTION_MARKER).trimEnd()
+            val reconstruction = rawText.substringAfter(TABLE_SECTION_MARKER, "").trim()
             return Sections(
-                header = rawText, items = rawText, footer = rawText, plain = rawText,
-                marked = false, itemBlocks = listOf(rawText)
+                header = plainOnly, items = plainOnly, footer = plainOnly, plain = plainOnly,
+                marked = false,
+                // Absent a reconstruction this is the whole text, which is what every caller read
+                // before and what a page with no rebuilt table still needs.
+                itemBlocks = listOf(reconstruction.ifBlank { rawText })
             )
         }
 
