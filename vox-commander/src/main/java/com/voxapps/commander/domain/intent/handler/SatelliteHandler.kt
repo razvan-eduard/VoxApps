@@ -107,18 +107,26 @@ class SatelliteHandler : IntentHandler {
     ) {
         val appContext = context.applicationContext
         val container = (appContext as VoxApplication).container
-        val prompt = schema.buildPrompt(intent.toDecompositionText())
+        // Kept rather than inlined into buildPrompt: it is echoed back with the answer. This is the
+        // only path where the satellite never sees what it is being answered about — it handed over
+        // a template and Commander filled it — so without the echo, anything a rule on the device
+        // could have settled from these words is unreachable, and every field has to come from the
+        // model whether it needed to or not.
+        val input = intent.toDecompositionText()
+        val prompt = schema.buildPrompt(input)
         handlerScope.launch {
             val result = when (val outcome = container.llmHookEngineSelector.run(prompt)) {
                 is RawPromptOutcome.Success -> VoxLlmResult(
                     task = schema.taskId,
                     status = VoxLlmResult.STATUS_SUCCESS,
-                    rawJson = NluIntentParser.cleanGenericOutput(outcome.rawText)
+                    rawJson = NluIntentParser.cleanGenericOutput(outcome.rawText),
+                    input = input
                 )
                 is RawPromptOutcome.Error -> VoxLlmResult(
                     task = schema.taskId,
                     status = VoxLlmResult.STATUS_ERROR,
-                    error = outcome.reason
+                    error = outcome.reason,
+                    input = input
                 )
             }
             deliverResult(appContext, pkg, result)

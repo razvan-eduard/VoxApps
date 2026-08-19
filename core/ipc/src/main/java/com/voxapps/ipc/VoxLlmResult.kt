@@ -12,7 +12,22 @@ data class VoxLlmResult(
     val task: String,
     val status: String,
     val rawJson: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    /**
+     * What was put to the model, echoed back, when the satellite has no other way to know it.
+     *
+     * Set only where Commander composed the input itself — it fills a cached
+     * [VoxSatelliteSchema.promptTemplate] from its own decomposition, so the satellite never saw the
+     * text it is now being answered about. Without this, anything a satellite could have established
+     * from that text on its own is unreachable by the time the answer arrives, and every field has to
+     * be taken from the model whether or not a rule could have settled it.
+     *
+     * Null on the ordinary path, and correctly so: there the satellite composed the request, and its
+     * own durable queue still holds the input under the request id (see
+     * [VoxLlmRequestQueue.originalInput]). Echoing it back would be sending a satellite its own
+     * words, and on a scan those words are a whole page.
+     */
+    val input: String? = null
 ) {
     fun toJson(): String {
         val o = JSONObject()
@@ -20,6 +35,7 @@ data class VoxLlmResult(
         o.put("status", status)
         rawJson?.let { o.put("rawJson", it) }
         error?.let { o.put("error", it) }
+        input?.let { o.put("input", it) }
         return o.toString()
     }
 
@@ -38,7 +54,10 @@ data class VoxLlmResult(
                     task = task,
                     status = status,
                     rawJson = o.optStringOrNull("rawJson"),
-                    error = o.optStringOrNull("error")
+                    error = o.optStringOrNull("error"),
+                    // Absent from an older Commander's reply, which reads as "I did not compose
+                    // this" — the same thing it means on the ordinary path.
+                    input = o.optStringOrNull("input")
                 )
             } catch (e: Exception) {
                 null
