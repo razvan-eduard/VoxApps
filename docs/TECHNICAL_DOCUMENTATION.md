@@ -27,6 +27,8 @@
 21. [Data Hygiene (`:core:datahygiene`)](#21-data-hygiene-coredatahygiene)
 22. [Project Structure](#22-project-structure)
 23. [Release Process & CI Automation](#23-release-process--ci-automation)
+24. [Record Creation (`:core:recordflow`, `:core:suggestions`)](#24-record-creation-corerecordflow-coresuggestions)
+25. [Document Reading (`:core:docread`)](#25-document-reading-coredocread)
 
 ---
 
@@ -945,11 +947,21 @@ Immutable data class containing all persisted settings. Emitted as a `Flow` via 
 ### Settings Menu & Pages
 
 `SettingsContent` (`SettingsScreen.kt`) holds a private `SettingsPage` enum (`MENU`, `GENERAL`,
-`MODELS`, `SERVICE`, `APP_MANAGER`, `INTEGRATIONS`, `PERMISSIONS`, `ADVANCED`, `BACKUP`). The menu
-page is a scrollable column of plain `ListItem` entries separated by full-bleed `SettingsSectionHeader`
-bands from `:core:design` — the same menu shape as the Expenses/Notes settings screens — each entry
-opening one subpage; the top bar shows a back arrow (and `BackHandler` returns to the menu) on every
-page but the menu itself.
+`MODELS`, `SERVICE`, `APP_MANAGER`, `INTEGRATIONS`, `INTEGRATIONS_APPS`, `INTEGRATIONS_MEDIA`,
+`INTEGRATIONS_SEARCH`, `PERMISSIONS`, `ADVANCED`, `LOGS`, `DIAGNOSTICS`, `BACKUP`). Integrations is
+itself a submenu rather than three unrelated composables stacked behind one entry, so `backTarget(page)`
+— not a hardcoded `MENU` — is what the back arrow and `BackHandler` both use.
+
+**Two shapes, and which one a page gets follows from where it sits.** A *menu* page is a scrollable
+column of plain `ListItem` entries separated by full-bleed `SettingsSectionHeader` bands from
+`:core:design`, each entry opening one subpage. A *final* page — one that holds settings rather than
+routes to them — has no bands, no dividers and no bare headings: every section is a
+`SettingsSectionCard`, an elevated card carrying its own title and the same padding as every other,
+so a group is delimited by the logic it contains rather than by a rule drawn across the screen. A
+section that already arrives as its own card from `:core:design` (notifications, backup, the log
+viewer, the location picker, permission items) is left alone rather than double-wrapped. The
+convention holds across all six apps; `ThemeSettingsBody`, `SchemaUpdatesSection` and
+`LogsSettingsTab` card themselves in `:core:design` so no caller has to.
 
 | Menu section | Entry (page) | File | Content |
 |---|---|---|---|
@@ -957,10 +969,15 @@ page but the menu itself.
 | Engines & Models | AI & Models | `ModelsSettingsTab.kt` | Voice/intent engine selection, model downloads, imports, fallbacks |
 | Engines & Models | Service | `ServiceSettingsTab.kt` | Wake word engine/model config, sensitivity, service start/stop |
 | Apps & Integrations | App Manager | `AppManagerTab.kt` | Default apps per domain, media session permission, return-to-previous-app, external trigger |
-| Apps & Integrations | Integrations | `IntegrationsTab.kt` (+ `PipedSettingsSection`, `SearchSettingsSection` on the same page) | Spotify OAuth, Vox Apps, Piped/NewPipe selection, search providers |
+| Apps & Integrations | Integrations | `SettingsScreen.kt` (submenu) | Routes to the three below |
+| ↳ | Connected apps | `IntegrationsTab.kt` | Spotify OAuth, Vox Apps discovery/refresh |
+| ↳ | Media services | `PipedSettingsSection.kt` | YouTube URL backend, Piped instance/region |
+| ↳ | Search providers | `SearchSettingsSection.kt` | Provider categories, location field |
 | System | Permissions | `PermissionsSettingsTab.kt` | Runtime permissions management |
-| System | Advanced | `AdvancedSettingsTab.kt` | Offline fallback, the Engine & Model Management card — the cloud/Google consent toggles (the Google one labeled "Google on-device support", key `google_services_title`), the two per-engine "GPU acceleration (Experimental)" switches with their verdict line and "Test again" action ([§4](#gpu-acceleration-opencl)) — and maintenance. The Logging section (the debug-logging and debug-toast switches plus `LogViewerCard`) is deliberately the page's **last** section — the viewer grows without bound. |
-| Data | Backup & Diagnostics | `BenchmarkSettingsTab.kt` + `BackupSettingsSection` | One page for both: the backup card rides as the diagnostics `LazyColumn`'s header, so the page has a single scroll surface |
+| System | Advanced | `AdvancedSettingsTab.kt` | Offline fallback (its timeout now beside the "clear default" that acts on it), the Engine & Model Management card — the cloud/Google consent toggles (the Google one labeled "Google on-device support", key `google_services_title`), the two per-engine "GPU acceleration (Experimental)" switches with their verdict line and "Test again" action ([§4](#gpu-acceleration-opencl)) — maintenance, and the tutorial. Logging moved to its own page. |
+| System | Logs | shared `LogsSettingsTab` (`:core:design`) | The debug-logging and debug-toast switches plus `LogViewerCard` — its own page in every app now, rather than three hand-rolled copies riding at the bottom of an unrelated one |
+| Data | Backup | `BackupSettingsSection.kt` | `VoxBackupSettingsCard` alone |
+| Data | Diagnostics | `BenchmarkSettingsTab.kt` | Engine benchmark, native library inventory, runtime diagnostics |
 
 ### Reusable Components
 
@@ -1753,7 +1770,7 @@ satellite ──VoxLlmRequest{sourcePackage,task,promptText}──▶ LlmHookRec
                                                                                       │
                                                                     LlmHookEngineSelector.run(promptText)
                                                                                       │
-satellite  ◀── VoxLlmResult{task,status,rawJson} ── explicit intent, signature-checked ┘
+satellite  ◀── VoxLlmResult{task,status,rawJson,input?} ── explicit intent, signature-checked ┘
 ```
 
 ### Durable delivery: the pending-request queue (`VoxLlmRequestQueue`)
@@ -1878,6 +1895,18 @@ when the satellite process isn't already running. This is now collapsed:
   zero live IPC for the extraction step itself, one fire-and-forget delivery broadcast at the end
   (which doesn't need flash-retry — it's the same kind of explicit broadcast that already worked
   without it, flash-retry is only for the Refresh button's synchronous fetch).
+- **The reply carries the question back.** On this path — and only on this path — Commander is the
+  only side that saw what the model was asked about: the satellite handed over a template and
+  Commander filled it. `VoxLlmResult.input` is that text, echoed on success and on error alike (a
+  failed answer is still an answer to something, and a satellite that only learned its own question
+  on success would have to handle two shapes of one event). Without it, anything a rule on the device
+  could have settled from those words is unreachable by the time there is an answer to check it
+  against, so every field has to be taken from the model whether or not a rule could have answered
+  it. It is deliberately **not** echoed on the generic hook (§19's `LlmHookWorker` path): there the
+  satellite composed the request and its own durable queue still holds the input under the request id
+  (`VoxLlmRequestQueue.originalInput`, read before `markFulfilled` deletes the row) — echoing would
+  be sending a satellite its own words back, and on a scan those words are a whole page crossing a
+  broadcast. Absence therefore means the same thing on both paths: "I did not compose this."
 - **Satellite-initiated cache correction.** The one exception to manual-only refresh: if a satellite's
   own dynamic context changes as a side effect of normal use (e.g. Expenses auto-creating a category
   from a voice command, or a user editing categories in Expenses' own UI), the cached prompt template
@@ -2631,16 +2660,16 @@ new satellite app is expected to follow.
 
 ### Shared modules
 
-Twenty-three `:core:*` modules, plus three vendored modules compiled in-tree:
+Twenty-six `:core:*` modules, plus three vendored modules compiled in-tree:
 
 ```
 :core:apppicker      :core:attachments   :core:audio        :core:backup
-:core:calendar       :core:datahygiene   :core:design       :core:fieldmemory
-:core:identity
-:core:ipc            :core:location      :core:logging      :core:nativelibs
-:core:onboarding     :core:preferences   :core:schema-annotations
-:core:schema-processor  :core:services   :core:testing      :core:textmatch
-:core:voxconnect     :core:wakeword      :core:widget
+:core:calendar       :core:datahygiene   :core:design       :core:docread
+:core:fieldmemory    :core:identity      :core:ipc          :core:location
+:core:logging        :core:nativelibs    :core:onboarding   :core:preferences
+:core:recordflow     :core:schema-annotations
+:core:schema-processor  :core:services   :core:suggestions  :core:testing
+:core:textmatch      :core:voxconnect    :core:wakeword     :core:widget
 
 vendor/ppocr-sdk     PaddleOCR fork (+ 4 patches), compiled into vox-vision
 vendor/docquad-sdk   DocQuadNet-256 corner detector (from-scratch port of MakeACopy files, see its
@@ -2799,3 +2828,146 @@ follow-up workflow onto one that creates its own releases/PRs with the default t
 ---
 
 *This documentation reflects the codebase as of August 2026. For the latest changes, refer to the git history.*
+
+---
+
+## 24. Record Creation (`:core:recordflow`, `:core:suggestions`)
+
+Every way a record is born in this suite — a spoken command, a scanned page, a captured payment
+notification — enters through `RecordFlow.dispatch` and leaves through `RecordFlow.deliver`. Three
+apps had written that path independently before this module existed, and the differences between the
+three were never decisions anybody made: the scan created a record whenever it had a total, the
+notification channel queued or created depending on a setting, and voice had no offline path at all.
+
+### Two halves, because the flow has two
+
+Asking a model crosses a process boundary and comes back later through a broadcast
+([§19](#19-vox-apps-ecosystem-cross-app-contract)), so no single call can carry a capture from input
+to record. `dispatch` ends in `Committed(id)`, `Queued`, `Asked` or `Discarded`; `deliver` resumes
+when the reply lands. Collapsing the two into one suspending call would hide the only part of the
+flow that can fail silently — the answer that never comes — which is the reason the durable queue
+exists in the first place.
+
+`send` is a parameter of `dispatch` rather than something the module reaches for: delivery is
+durable, retryable, and owned by the app that has the queue. `:core:recordflow` never composes a
+prompt and never inspects one.
+
+### The ladder
+
+`LlmLevel` is eight rungs over two independent questions — how much leaves the device, and how much
+of the answer lands on the record without being accepted first:
+
+| | asks nothing | asks what is missing | asks all head fields | asks everything |
+|---|---|---|---|---|
+| **applies nothing** | `NONE` | `ASSIST_SUGGEST` | `HEAD_SUGGEST` | `ALL_SUGGEST` |
+| **applies head** | — | `ASSIST_AUTO` | `HEAD_AUTO` | `BODY_SUGGEST` |
+| **applies all** | — | — | — | `FULL` |
+
+`AskScope` (`NOTHING`, `MISSING_HEAD`, `ALL_HEAD`, `EVERYTHING`) is what leaves; `applies(weight)` is
+what is written. `FieldWeight` splits a record into `HEAD` — the fields that identify it — and `BODY`,
+the fine detail, because they fail differently: a wrong vendor is visible at a glance, a list of
+plausible line items with invented amounts reads as data. The enum's `init` block refuses the
+combinations that would be incoherent (applying a weight the level never asked about, applying body
+without head), so an impossible rung cannot be constructed.
+
+`RecordFlowPolicy.decide` switches on `level.asks` alone. That is what makes the offline path not a
+second implementation: it is the same call with a level that asks nothing, which is why three
+parallel model-free creators and a per-app dial could be deleted rather than kept in step.
+
+**The level governs the reply as well as the reading.** A rung promising "send everything, write
+nothing" while the delivery half wrote everything anyway would be the exact failure the contract
+exists to prevent — so `deliver` passes `effectiveLevel::applies` into `commit`, and what a rung
+declines to write is offered on the record instead.
+
+### What a satellite declares
+
+`FlowSupport(source, supported, default, suggestsAnswers, weights)` states what a flow can honour.
+A satellite with nowhere to hold a proposal cannot offer the rungs that make one; a flow whose record
+has no fine detail declares `weights = setOf(FieldWeight.HEAD)` and its settings card draws one
+checkbox rather than two. A stored level outside `supported` falls back to `default` with a loud log
+— the only way to arrive there is a rung withdrawn from under a saved setting, which is a mismatch
+somebody should see rather than a state to accommodate quietly.
+
+`ui/RecordFlowLevelCard` renders the two questions rather than eight compound labels, drawing only
+what the passed `FlowSupport` admits.
+
+### Proposals (`:core:suggestions`)
+
+A rung that asks but does not apply has to put the answer somewhere. `SuggestionStore` is a key/value
+`FieldSuggestion` table keyed by record: `offer`, `offered(recordId)`, `accept`, `dismiss`, `clear`,
+`sourceOf`, `disposeIfSpent`. Each app declares its own `SuggestableField(key, label, weight)` set —
+which fields of its record may be proposed at all is the app's decision, not the module's.
+
+Note the ordering constraint in `deliver`: the record is written from what the device proved either
+way, even at a level that writes none of the answer. A proposal has to be attached to something.
+
+### Reference
+
+`core/recordflow/src/main/java/com/voxapps/recordflow/` (`RecordFlow.kt`, `RecordFlowSpec.kt`,
+`RecordFlowPolicy.kt`, `LlmLevel.kt`, `ui/RecordFlowLevelCard.kt`),
+`core/suggestions/src/main/java/com/voxapps/suggestions/`. The seven implementations live under each
+app's `domain/llm/`. The satellite-facing tutorial is
+[`SATELLITE_APP_GUIDE.md` §12](SATELLITE_APP_GUIDE.md#12-record-creation-the-shape-every-path-ends-in-corerecordflow).
+
+---
+
+## 25. Document Reading (`:core:docread`)
+
+What a scanned document yields before any model is asked. Moved out of `vox-expenses` so the reading
+is one implementation rather than one per app; no Android dependency except `ReceiptTemplates`, which
+needs a `Context` for `RemoteSchema`.
+
+### Rows and totals prove each other
+
+The two are read as **combinations**, not in sequence. A footer pattern proposes what the document's
+totals are, an items pattern proposes what its rows are, and the pair is accepted only when the rows
+sum to one of those totals **to the cent**. Neither half can be checked alone — a set of totals with
+nothing summing to it is a guess, and a set of rows with nothing to compare against is a guess — so
+the unit of acceptance is the pair, and `ScanReading.of` searches until one closes.
+
+Matching is to the cent rather than to a percentage: with a list of candidates, a loose threshold
+eventually crowns a wrong reading by luck.
+
+**Where nothing closes, no items are emitted.** An empty list is a record a person completes; an
+invented one is a record they must first notice is wrong.
+
+### The shapes are data
+
+`ReceiptTemplates` serves header/items/footer patterns from signed schema
+([§17](#17-dynamic-json-configuration)), so a format nobody anticipated is a repository edit rather
+than an app release. The three regions are independent lists and any header may combine with any
+items pattern and any footer pattern, because they vary independently in the wild.
+
+Published patterns are tried **before** the compiled-in battery, and the battery follows them rather
+than being replaced by them. The substitution it replaced was quietly subtractive: an install that had
+ever fetched a file read exactly what that file described, so a shape the library itself learned to
+read reached only the installs whose fetch had never succeeded. Appending is free by the battery's own
+rule — a template that fails to reconcile emits nothing — so the worst an extra one can do is be tried
+and lose. A published pattern restating a built-in by id replaces it rather than stacking on top,
+so a correction is not shadowed by the version it corrects.
+
+### The parts
+
+- `ScanReading.of` — the entry point; iterates footer candidates × item patterns.
+- `LineItemBattery` — the patterns, strictest first, and the arithmetic that accepts one. Order is the
+  whole priority mechanism.
+- `ReceiptSections` — splits the OCR text into header/items/footer, and keeps the geometric
+  reconstruction apart from the reading-order text. Counting both would let one row be read twice, and
+  then no sum can reconcile.
+- `TableItemsPreParse` / `ColumnRoleInference` / `ColumnHeaderDetector` — the columnar path, which
+  resolves which column is which by arithmetic rather than by declared order.
+- `CursorScanner` — two cursors over the whole text, for pages that arrived with no usable structure.
+- `InvoiceTotalsReconciler` — the verdicts (`RECONCILED`, `UNTESTABLE`, …), the repair of shifted
+  captions, and the rule that a candidate which is a tax component of another is not the total.
+- `ReceiptTotalRegexParser` — the compiled-in fallback: the largest labelled total, with the
+  runners-up offered afterwards as further candidates so the arithmetic can settle which was real.
+  A document may print several honest totals — a restaurant bill labels every suggested-tip column
+  "Total", each above what was charged.
+- `HeaderReader` / `FooterReader` / `TaxBreakdown` — the letterhead, the totals block, and the
+  net/VAT/gross reconciliation that derives only from read figures and never from a rate.
+
+### Fixtures
+
+`core/docread/src/test/resources/` holds verbatim OCR of real documents, kept as it came — misread
+characters, stray markers and all. They existed before the code that reads them, which is the point:
+a constructed fixture can be shaped, unconsciously, to fit the code it exercises.

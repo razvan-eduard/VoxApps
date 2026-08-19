@@ -41,6 +41,11 @@ handful of constants, and the small durable-delivery queue (§7).
   categories). See §7. **Route it through `VoxLlmRequestQueue`, not a raw broadcast** — a plain
   `sendBroadcast` to a stopped/OEM-killed Commander is silently dropped with no error, which is exactly
   what happened to a real production notification-capture flow before this queue existed.
+- **However the answer arrives, the record is made the same way.** Voice, a scan and a captured
+  notification differ in what carries the text, not in what happens to it: read what the device can
+  prove, decide who answers the rest, then write it, keep it for a person, or ask. That shape is
+  `:core:recordflow`, and a satellite implements it rather than re-deriving it — which is also what
+  makes the model *optional* rather than a second code path. See §12.
 - **TTS is VoxCommander's job, not yours.** For `OP_READ`, you return text; VoxCommander decides to
   speak it. Your app never calls a "speak" hook itself.
 - **`:core:datahygiene`** gives every satellite a shared way to clean garbage out of a record before
@@ -133,6 +138,9 @@ and taking them is cheaper than re-solving what they cover:
 | `:core:datahygiene` | Normalisation, duplicate rules, the WHEN/THEN re-map engine, merge-quality scoring (§6.6, §6.7) |
 | `:core:textmatch` | Deterministic extraction (template skeletons, date/amount extractors, vocabulary classification) plus fuzzy name matching |
 | `:core:fieldmemory` | Learned field-correction memory over `:core:textmatch`'s diff — quarantines on disagreement |
+| `:core:recordflow` | The shape every record-creation path takes, and the ladder that makes the model optional (§12) |
+| `:core:suggestions` | A proposal a record can hold until someone accepts it — the "offer it, don't apply it" half of that ladder |
+| `:core:docread` | Reading a scanned document deterministically: rows and totals that prove each other before any model is asked |
 | `:core:attachments`, `:core:location`, `:core:widget`, `:core:onboarding` | As needed |
 
 If your app offers a choice between services that may need an API key or a reachability test, use
@@ -482,7 +490,12 @@ data class VoxLlmResult(
     val task: String,
     val status: String,            // STATUS_SUCCESS | STATUS_ERROR
     val rawJson: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val input: String? = null      // what Commander put to the model, echoed back — set ONLY on the
+                                   // collapsed path, where Commander filled your cached
+                                   // promptTemplate itself and you never saw the text. Null on the
+                                   // generic hook, where YOU composed the request and your own
+                                   // queue still holds the input (VoxLlmRequestQueue.originalInput)
 )
 
 data class VoxOcrRequest(
@@ -674,6 +687,17 @@ override fun onReceive(context: Context, intent: Intent) {
 
 Register this receiver in your manifest guarded by `com.voxapps.vox.permission.LLM_RESULT` (same
 pattern as §2.2's `VoxCommandReceiver`, different action: `com.voxapps.action.LLM_RESULT`).
+
+The body above writes the record inline, which is the shortest thing that works and the wrong place
+to leave it once a satellite has more than one way to make a record. What replaces
+`createFromParsed` is `RecordFlow.deliver` — see §12.
+
+Note `result.input`. On this path Commander composed the prompt from your cached template, so it is
+the only side that saw the text; the echo is how you get it back, and it is what lets a rule on the
+device check an answer against the question it answered. On the generic hook (§7) it is null by
+design — there *you* composed the request, and your own durable queue still holds the input under
+the request id (`VoxLlmRequestQueue.originalInput`, which must be read before `markFulfilled`
+deletes the row).
 
 Define your own task-id constants somewhere local (they're entirely opaque to VoxCommander — it
 only ever echoes them back):
@@ -1116,3 +1140,152 @@ understanding it helps when debugging "my app doesn't show up" or "the wrong app
   [`TECHNICAL_DOCUMENTATION.md` §20](TECHNICAL_DOCUMENTATION.md#20-shared-ui-modules-corecalendar-coreapppicker-coredesign-color-picker)
   for the design, and any of the three apps' category/layer add-edit dialogs for a consuming example
   (e.g. `vox-expenses/.../ui/settings/CategoriesSettingsTab.kt`).
+
+---
+
+## 12. Record creation: the shape every path ends in (`:core:recordflow`)
+
+§6 and §7 are about *transport* — which mechanism carries a piece of text to a model and an answer
+back. This section is about what a satellite does with what arrives, and the answer is the same
+whether the text was spoken, photographed, or captured from a notification.
+
+Three flows existed independently before this module, in three apps, and the disagreements between
+them were never decisions anybody made: one created a record whenever it had a total, another queued
+or created depending on a setting, a third had no offline path at all. `:core:recordflow` is that
+shape written once.
+
+### 12.1 The two halves, and why there are two
+
+Asking a model crosses a process boundary and comes back later through a broadcast, so no single
+call can carry a capture from input to record:
+
+```kotlin
+RecordFlow.dispatch(spec, input, level, send)   // read, decide, and either write or ask
+RecordFlow.deliver(spec, reading, level, reply) // the answer arrived; finish the record
+```
+
+`dispatch` ends in one of four outcomes — `Committed(id)`, `Queued`, `Asked`, `Discarded` — and
+`deliver` resumes when the reply lands. Papering over the seam with one suspending call would hide
+the only part of the flow that can fail silently: the answer that never comes. That is also why
+`send` is supplied by the caller rather than reached for inside the module — delivery is durable,
+retryable, and belongs to the app that owns the queue (§7). `:core:recordflow` never composes a
+prompt and never inspects one.
+
+### 12.2 What a satellite implements
+
+```kotlin
+interface RecordFlowSpec<I, T, P> {
+    val source: RecordSource                       // VOICE | SCAN | NOTIFICATION
+    val support: FlowSupport                       // which rungs this flow can honour
+    val taskId: String                             // the LlmTasks constant replies come back under
+
+    suspend fun read(input: I): DeterministicReading<T>   // what the device can prove alone
+    suspend fun prompt(reading: DeterministicReading<T>, asks: AskScope): String?
+    suspend fun promptTemplate(asks: AskScope): String? = null   // for the transport that fills it
+    suspend fun parse(reply: String): P?
+    suspend fun commit(reading: DeterministicReading<T>?, parsed: P?,
+                       applies: (FieldWeight) -> Boolean = { true }): Long?
+    suspend fun queueForReview(reading: DeterministicReading<T>?, parsed: P?)
+    fun autoAcceptWhenProven(): Boolean = true
+}
+```
+
+`DeterministicReading(fields, usable, complete)` is the honest statement of what a rule settled:
+`usable` means there is something worth keeping, `complete` means nothing needs asking. A page of
+figures that reconciles is complete; a spoken sentence never is.
+
+`reading` is nullable on `commit`/`queueForReview` because the bus carries the *answer* back, not the
+question — see §6.4 for the two ways to recover the input when you need it.
+
+### 12.3 The ladder: the model is a parameter, not a second flow
+
+`LlmLevel` is eight rungs over two independent questions — *how much is sent* and *what fills itself
+in* — rather than eight names to memorise:
+
+| | asks nothing | asks what is missing | asks all the head fields | asks everything |
+|---|---|---|---|---|
+| **applies nothing** | `NONE` | `ASSIST_SUGGEST` | `HEAD_SUGGEST` | `ALL_SUGGEST` |
+| **applies head fields** | — | `ASSIST_AUTO` | `HEAD_AUTO` | `BODY_SUGGEST` |
+| **applies everything** | — | — | — | `FULL` |
+
+`FieldWeight` splits a record into `HEAD` (the fields that identify it — amount, vendor, title) and
+`BODY` (the fine detail — line items, per-hour figures), because those fail differently: a wrong
+vendor is visible at a glance, while a list of plausible rows with invented amounts reads as data.
+`AskScope` is what leaves the device; `applies(weight)` is what lands on the record without being
+accepted first. A rung that asks but does not apply *offers* — which is what `:core:suggestions` is
+for.
+
+`RecordFlowPolicy.decide` switches on `level.asks` alone, so the offline behaviour is not a reduced
+copy of anything: it is the same call with a level that asks nothing.
+
+### 12.4 Declaring what you can honour
+
+```kotlin
+val SCAN_FLOW_SUPPORT = FlowSupport(
+    source = RecordSource.SCAN,
+    supported = LlmLevel.entries.toSet(),
+    default = LlmLevel.FULL,
+    suggestsAnswers = true,
+    weights = setOf(FieldWeight.HEAD, FieldWeight.BODY)
+)
+```
+
+Declare only what you can actually keep. A satellite with nowhere to hold a proposal cannot offer the
+rungs that make one, and a flow with no fine detail declares `weights = setOf(FieldWeight.HEAD)` so
+its settings card draws one checkbox rather than two. A stored level the flow cannot honour falls
+back to its declared default and says so loudly in the log — that only happens when a rung is
+withdrawn from under a saved setting, which somebody should see rather than have accommodated
+quietly.
+
+`ui/RecordFlowLevelCard` renders the two questions as checkboxes rather than eight compound labels,
+and draws only what the passed `FlowSupport` admits.
+
+### 12.5 A worked example
+
+`vox-notes`' voice flow is the shortest honest implementation — a note's text *is* the record, so
+nothing has to be extracted and `NotesSettings.VOICE_FLOW_SUPPORT` offers exactly one rung:
+
+```kotlin
+class NoteVoiceFlow(private val container: NotesContainer) : RecordFlowSpec<VoxCommand, SpokenNote, Unit> {
+    override val source = RecordSource.VOICE
+    override val support = NotesSettings.VOICE_FLOW_SUPPORT
+    override val taskId = ""                       // nothing is ever asked
+
+    override suspend fun read(input: VoxCommand) = DeterministicReading(
+        fields = SpokenNote(input.title, input.text.orEmpty().trim(), input.category),
+        usable = ..., complete = ...               // whole on arrival
+    )
+    override suspend fun prompt(reading: ..., asks: AskScope): String? = null
+    override suspend fun parse(reply: String): Unit? = null
+    override suspend fun commit(reading: ..., parsed: Unit?, applies: ...): Long? { ... }
+    override suspend fun queueForReview(reading: ..., parsed: Unit?) = Unit
+}
+```
+
+Written as a flow even though it never asks anything, because the shape is what is shared rather than
+the work: a reader looking for where a spoken note becomes a note should find it in the same place as
+its equivalents in the other apps.
+
+### 12.6 Scanning: `:core:docread`
+
+A scan's `read` step is where `:core:docread` belongs. It reads a document's rows and totals as
+**combinations** rather than in sequence: a footer pattern proposes what the totals are, an items
+pattern proposes what the rows are, and the pair is accepted only when the rows sum to one of those
+totals to the cent. Neither half can be checked alone.
+
+Two consequences worth knowing before you use it. Where no combination closes, the reading yields no
+items at all — an empty list is a record a person completes, an invented one is a record they must
+first notice is wrong. And the shapes themselves are data: `ReceiptTemplates` serves them from signed
+schema, tried before the compiled-in battery, which follows rather than being replaced by them.
+
+### 12.7 Reference
+
+- **The module**: `core/recordflow/src/main/java/com/voxapps/recordflow/` — `RecordFlow.kt`,
+  `RecordFlowSpec.kt`, `RecordFlowPolicy.kt`, `LlmLevel.kt`, `ui/RecordFlowLevelCard.kt`.
+- **Proposals**: `core/suggestions/src/main/java/com/voxapps/suggestions/` — `SuggestionStore`,
+  `FieldSuggestion`, `SuggestableField` (each app declares what of its own record may be suggested).
+- **Document reading**: `core/docread/src/main/java/com/voxapps/docread/` — `ScanReading.of` is the
+  entry point; `LineItemBattery`, `InvoiceTotalsReconciler`, `ReceiptTemplates` are the parts.
+- **The seven implementations**: `NoteScanFlow`, `NoteVoiceFlow` (`vox-notes`), `CalendarScanFlow`,
+  `CalendarVoiceFlow` (`vox-calendar`), `ExpenseScanFlow`, `ExpenseVoiceFlow`,
+  `NotificationExpenseFlow` (`vox-expenses`) — all under each app's `domain/llm/`.

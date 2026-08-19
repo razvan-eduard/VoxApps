@@ -258,15 +258,29 @@ Standalone, encrypted on-device expense tracker (`com.voxapps.expenses`, Room + 
 through Commander (`create`/`read`), scanned from a receipt via Vox Vision, captured automatically from
 bank/payment notifications, or entered by hand.
 
-- **Three capture paths, three prompts** — voice (`ExpenseParsePromptBuilder`), receipt OCR
+- **Three capture paths, one shape** — voice (`ExpenseParsePromptBuilder`), receipt OCR
   (`ExpenseScanCleanupPromptBuilder` — one focused cleanup pass extracting vendor, bank, and per-item
-  net/VAT/gross when printed; the receipt's printed totals are read deterministically before any model
-  runs — the largest labelled total becomes the headline amount, and an invoice's own charges and
-  previous balance land as optional extra fields on the record), and notification
+  net/VAT/gross when printed), and notification
   capture (`NotificationExpenseParsePromptBuilder` — a deliberately narrower extraction: title/amount/
   currency/vendor/category plus an `isPayment` triage flag, since notification text isn't guaranteed to
   even be a transaction) — all three route through Commander's generic LLM hook, just with different
-  `task` IDs and prompts suited to how much structure each source actually has
+  `task` IDs and prompts suited to how much structure each source actually has. All three enter and
+  leave through the same shared template (`:core:recordflow`) — what differs is the question asked,
+  not what happens to the answer
+- **How much the model is asked to do is a setting, per path** — two questions rather than a list of
+  names: how much of the capture is sent, and how much of the reply fills itself in versus waiting to
+  be accepted. At the offline end nothing leaves the device and the record is made from what the page
+  or the notification already proves; at the other end the model reads everything. The middle rungs
+  are the ones that matter for a receipt, because line items are where a row reading 51,38 for 51,33
+  is indistinguishable from a right one — so they can be offered rather than written. Each app draws
+  only the rungs it can honestly keep
+- **A scanned page is read before it is sent** (`:core:docread`) — the rows and the totals have to
+  prove each other: a set of rows is accepted only when it sums, to the cent, to a figure the document
+  itself prints. Where nothing closes, no items are emitted at all, because an empty list is a record
+  you complete and an invented one is a record you must first notice is wrong. A document that prints
+  several honest totals — a restaurant bill labels every suggested-tip column "Total", each above what
+  was actually charged — is settled by that arithmetic rather than by taking the largest. An invoice's
+  own charges and previous balance land as optional extra fields on the record
 - **Rescan suggestions** — re-running OCR/AI cleanup on an already-saved expense (e.g. after attaching
   a clearer photo) never overwrites fields silently: each field the rescan corrected shows up as its
   own dismissible suggestion chip next to the current value, so you approve or reject them individually
