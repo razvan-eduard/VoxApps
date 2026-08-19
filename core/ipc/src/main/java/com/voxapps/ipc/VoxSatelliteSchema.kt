@@ -53,6 +53,33 @@ data class VoxSatelliteSchema(
         const val INPUT_PLACEHOLDER = "{{INPUT}}"
 
         /**
+         * The contract as it follows from a satellite's own voice flow.
+         *
+         * Written this way rather than by hand because the two say the same thing: whether anything
+         * is asked at all is the flow's level, the question is the flow's prompt, and the identifier
+         * a reply comes back under is the flow's task. Composing it here keeps a satellite from
+         * declaring one thing to Commander and doing another locally — which is exactly what having
+         * two descriptions of one arrangement invites.
+         */
+        fun of(
+            asksModel: Boolean,
+            promptTemplate: String?,
+            taskId: String,
+            fieldSchemaVersion: Int = 0
+        ): VoxSatelliteSchema = if (asksModel && !promptTemplate.isNullOrBlank()) {
+            VoxSatelliteSchema(
+                needsExtractionPass = true,
+                promptTemplate = promptTemplate,
+                fieldSchemaVersion = fieldSchemaVersion,
+                taskId = taskId
+            )
+        } else {
+            // Nothing to run a second pass with, so nothing is promised: the empty template and
+            // task are the contract's own way of saying no delivery of that shape happens.
+            VoxSatelliteSchema(needsExtractionPass = false)
+        }
+
+        /**
          * Lenient parse; returns null if the payload is blank, not valid JSON, or missing the
          * required [needsExtractionPass] field — a missing declaration is a malformed contract, not
          * an implicit `false` (see class doc comment).
