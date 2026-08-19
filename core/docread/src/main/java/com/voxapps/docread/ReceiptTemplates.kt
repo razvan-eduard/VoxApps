@@ -162,15 +162,30 @@ object ReceiptTemplates {
     }
 
     /**
-     * The row patterns, in file order.
+     * The row patterns: the fetched ones in file order, then the compiled-in set.
      *
      * Order is the whole priority mechanism: the first combination that reconciles wins, so a
      * pattern demanding a quantity, a unit price and a value must be offered before one that matches
-     * any line ending in a number. Falls back to the compiled-in set, which is what every install
-     * ships with and what runs before the first fetch succeeds.
+     * any line ending in a number. A published file goes first because it is the more specific
+     * answer — written for documents someone has actually seen.
+     *
+     * The compiled-in set follows rather than being replaced by it. A schema that lists patterns
+     * used to stand in for the battery entirely, which quietly made every install with a published
+     * file blind to shapes the library itself had learned to read — a pattern added here reached
+     * only installs whose fetch had never succeeded. Appending costs nothing by the battery's own
+     * rule: a template that does not reconcile emits nothing, so the worst an extra one can do is
+     * be tried and lose.
      */
     fun items(context: Context): List<LineItemBattery.Template> =
-        value(context)?.let { compiled(it).items }?.takeIf { it.isNotEmpty() } ?: LineItemBattery.BUILT_IN
+        itemsAfter(value(context)?.let { compiled(it).items }.orEmpty())
+
+    /** The rule itself, apart from where the file came from — which is the half worth pinning. */
+    internal fun itemsAfter(fetched: List<LineItemBattery.Template>): List<LineItemBattery.Template> {
+        // By id, so a published file can still restate a built-in pattern to reorder or correct it
+        // without the original then being tried again underneath.
+        val fetchedIds = fetched.map { it.id }.toSet()
+        return fetched + LineItemBattery.BUILT_IN.filterNot { it.id in fetchedIds }
+    }
 
     fun footers(context: Context): List<CompiledFooter> =
         value(context)?.let { compiled(it).footers } ?: emptyList()
