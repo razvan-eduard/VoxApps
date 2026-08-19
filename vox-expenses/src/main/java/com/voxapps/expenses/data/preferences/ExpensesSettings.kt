@@ -355,10 +355,14 @@ data class ExpensesSettings(
         /**
          * What this app can do with a spoken expense.
          *
-         * One rung, and the declaration is the honest state rather than a ceiling: reading an amount
-         * out of speech on the device is possible — `:core:textmatch` finds currency-marked figures
-         * — but this flow does not do it yet, and a scale offering "only what could not be worked
-         * out" while working nothing out would be a promise about nothing.
+         * One rung, and the limit is not the transport — the utterance now comes back with the answer
+         * (`VoxLlmResult.input`), so a rule on the device could read it. The limit is that no rule
+         * safely can. The only candidate is the amount, and a single currency-marked figure does not
+         * mean the total: in "three loaves at ten each" the one marked figure is the per-unit price.
+         * Telling those apart is the distributive/cumulative distinction — see
+         * [com.voxapps.expenses.domain.llm.DistributiveCumulativeRule], which is most of what the
+         * prompt teaches — and it is carried by language, not by arithmetic. A rule with a known
+         * mislabel class is a guess, so there is nothing below the fullest rung to offer.
          */
         val VOICE_FLOW_SUPPORT = FlowSupport(
             source = RecordSource.VOICE,

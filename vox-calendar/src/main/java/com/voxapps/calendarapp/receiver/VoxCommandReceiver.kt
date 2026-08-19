@@ -8,7 +8,10 @@ import com.voxapps.backup.VoxBackupDispatch
 import com.voxapps.backup.VoxImportMode
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
+import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseRequestSender
+import com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow
+import com.voxapps.recordflow.RecordFlow
 import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
 import com.voxapps.calendarapp.domain.llm.LlmTasks
 import com.voxapps.ipc.VoxCommand
@@ -52,26 +55,33 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        // Read inside the coroutine, not in onReceive: getSnapshot() falls back to a
-                        // blocking DataStore read until its cache warms, and a broadcast can be what
-                        // cold-starts this process — so on main it was a guaranteed disk read on the
-                        // main thread. OP_GET_SCHEMA below already had it in the right place.
-                        val settings = container.settingsRepository.getSnapshot()
-                        val layerNames = container.calendarRepository.layers.first().map { it.name }
-                        val todoListNames = container.toDoRepository.lists.first().map { it.title }
-                        CalendarEventParseRequestSender.send(
-                            context = context.applicationContext,
-                            queue = container.pendingLlmRequestQueue,
-                            // command.category carries the explicitly-named target layer, if any — the
-                            // manifest's nluHint reuses this field the same way vox-expenses reuses it
-                            // for "target category name". Fold it into the raw text as an explicit hint
-                            // rather than adding a new VoxCommand field for it.
-                            rawText = command.category?.takeIf { it.isNotBlank() }
-                                ?.let { "$text (calendar: $it)" }
-                                ?: text,
-                            existingLayers = layerNames,
-                            existingTodoLists = todoListNames,
-                            languageCode = settings.language
+                        // Inside the coroutine, not in onReceive: the flow reads DataStore, which
+                        // falls back to a blocking read until its cache warms, and a broadcast can
+                        // be what cold-starts this process.
+                        //
+                        // command.category carries the explicitly-named target layer, if any — the
+                        // manifest's nluHint reuses this field the same way vox-expenses reuses it
+                        // for "target category name". Folded into the raw text as an explicit hint
+                        // rather than adding a new VoxCommand field for it.
+                        val spoken = command.category?.takeIf { it.isNotBlank() }
+                            ?.let { "$text (calendar: $it)" }
+                            ?: text
+                        // Through the flow rather than composing here: the same entry every other
+                        // capture in this app goes through, leaving this receiver only the question
+                        // of how a request travels.
+                        RecordFlow.dispatch(
+                            spec = CalendarVoiceFlow(container),
+                            input = spoken,
+                            level = CalendarSettings.VOICE_FLOW_SUPPORT.default,
+                            send = { task, prompt ->
+                                CalendarEventParseRequestSender.send(
+                                    context = context.applicationContext,
+                                    queue = container.pendingLlmRequestQueue,
+                                    task = task,
+                                    promptText = prompt,
+                                    rawText = spoken
+                                )
+                            }
                         )
                     } finally {
                         pending.finish()

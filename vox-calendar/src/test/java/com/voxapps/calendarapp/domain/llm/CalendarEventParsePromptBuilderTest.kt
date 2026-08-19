@@ -1,5 +1,6 @@
 package com.voxapps.calendarapp.domain.llm
 
+import com.voxapps.ipc.VoxSatelliteSchema
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -8,25 +9,18 @@ class CalendarEventParsePromptBuilderTest {
 
     @Test
     fun `includes today's date and the raw request text`() {
-        val prompt = CalendarEventParsePromptBuilder.build(
-            rawText = "dentist in a week",
-            existingLayers = emptyList(),
-            existingTodoLists = emptyList(),
-            languageCode = "en",
-            today = LocalDate.of(2026, 7, 12)
-        )
+        val prompt = CalendarEventParsePromptBuilder
+            .buildTemplate(emptyList(), emptyList(), "en", today = LocalDate.of(2026, 7, 12))
+            .replace(VoxSatelliteSchema.INPUT_PLACEHOLDER, "dentist in a week")
         assertTrue(prompt.contains("2026-07-12"))
         assertTrue(prompt.contains("dentist in a week"))
     }
 
     @Test
     fun `lists existing layers verbatim so the LLM can copy a name exactly`() {
-        val prompt = CalendarEventParsePromptBuilder.build(
-            rawText = "meeting tomorrow",
-            existingLayers = listOf("Personal", "Work"),
-            existingTodoLists = emptyList(),
-            languageCode = "en"
-        )
+        val prompt = CalendarEventParsePromptBuilder
+            .buildTemplate(listOf("Personal", "Work"), emptyList(), "en")
+            .replace(VoxSatelliteSchema.INPUT_PLACEHOLDER, "meeting tomorrow")
         assertTrue(prompt.contains("Personal"))
         assertTrue(prompt.contains("Work"))
         assertTrue(prompt.contains("NEVER translate/re-spell"))
@@ -34,7 +28,7 @@ class CalendarEventParsePromptBuilderTest {
 
     @Test
     fun `asks for JSON-only output with the expected shape`() {
-        val prompt = CalendarEventParsePromptBuilder.build("x", emptyList(), emptyList(), "en")
+        val prompt = CalendarEventParsePromptBuilder.buildTemplate(emptyList(), emptyList(), "en")
         assertTrue(prompt.contains("JSON"))
         assertTrue(prompt.contains("no markdown"))
         assertTrue(prompt.contains("\"startDate\""))

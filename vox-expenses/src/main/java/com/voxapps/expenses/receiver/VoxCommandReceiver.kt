@@ -8,7 +8,10 @@ import com.voxapps.backup.VoxBackupDispatch
 import com.voxapps.backup.VoxImportMode
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.domain.llm.ExpenseParsePromptBuilder
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseParseRequestSender
+import com.voxapps.expenses.domain.llm.ExpenseVoiceFlow
+import com.voxapps.recordflow.RecordFlow
 import com.voxapps.expenses.domain.llm.GeneratedParsedSchema
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.ipc.VoxCommand
@@ -51,17 +54,26 @@ class VoxCommandReceiver : BroadcastReceiver() {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        // Read inside the coroutine — getSnapshot() blocks on DataStore until its
+                        // Inside the coroutine — the flow reads DataStore, which blocks until its
                         // cache warms, and a broadcast can be what cold-starts this process.
-                        val settings = container.settingsRepository.getSnapshot()
-                        val categoryNames = container.expensesRepository.categories.first().map { it.name }
-                        ExpenseParseRequestSender.send(
-                            context = context.applicationContext,
-                            queue = container.pendingLlmRequestQueue,
-                            rawText = text,
-                            existingCategories = categoryNames,
-                            defaultCurrency = settings.defaultCurrency,
-                            languageCode = settings.language
+                        //
+                        // Through the flow rather than composing here: this is the same entry every
+                        // other capture in this app goes through, and what it decides — whether
+                        // there is anything to ask at all — is the rung's business, not this
+                        // receiver's. All that is left here is how the question travels.
+                        RecordFlow.dispatch(
+                            spec = ExpenseVoiceFlow(context.applicationContext, container),
+                            input = text,
+                            level = ExpensesSettings.VOICE_FLOW_SUPPORT.default,
+                            send = { task, prompt ->
+                                ExpenseParseRequestSender.send(
+                                    context = context.applicationContext,
+                                    queue = container.pendingLlmRequestQueue,
+                                    task = task,
+                                    promptText = prompt,
+                                    rawText = text
+                                )
+                            }
                         )
                     } finally {
                         pending.finish()

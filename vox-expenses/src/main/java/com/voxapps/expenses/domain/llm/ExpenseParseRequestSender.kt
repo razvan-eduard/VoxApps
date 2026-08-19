@@ -8,26 +8,26 @@ import com.voxapps.logging.Logger
 private const val TAG = "ExpenseParseRequestSender"
 
 /**
- * Fires the generic-LLM-hook request that turns a raw spoken utterance into structured expense
- * fields (see [ExpenseParsePromptBuilder]). Mirrors vox-notes' CategoryMergeRequestSender/
- * ScanRequestSender in shape. Routed through [VoxLlmRequestQueue] for durable, retryable delivery;
- * the async reply arrives later via [com.voxapps.expenses.receiver.LlmResultReceiver].
+ * Gets a spoken-expense question to Commander and no further.
+ *
+ * What to ask is [com.voxapps.expenses.domain.llm.ExpenseVoiceFlow]'s, and arrives already composed;
+ * this only knows how it travels — durably and retryably through [VoxLlmRequestQueue], since the
+ * reply comes back much later via [com.voxapps.expenses.receiver.LlmResultReceiver] and a request
+ * lost in between is a spoken expense nobody ever hears about again.
  */
 object ExpenseParseRequestSender {
     suspend fun send(
         context: Context,
         queue: VoxLlmRequestQueue,
-        rawText: String,
-        existingCategories: List<String>,
-        defaultCurrency: String,
-        languageCode: String
+        task: String,
+        promptText: String,
+        rawText: String
     ) {
-        val promptText = ExpenseParsePromptBuilder.build(rawText, existingCategories, defaultCurrency, languageCode)
         Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for voice-expense parsing")
         queue.enqueueAndSend(
             context = context,
             sourcePackage = context.packageName,
-            task = LlmTasks.EXPENSE_PARSE,
+            task = task,
             promptText = promptText,
             targetPackage = COMMANDER_PACKAGE,
             data = listOf(rawText)

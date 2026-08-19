@@ -44,19 +44,22 @@ data class CapturedNotification(
  * it waits in the review queue — which is also how the memory learns, since approving an entry
  * confirms its template and the next message of that shape needs no one.
  *
- * **Only the dispatching half runs through this yet.** A reply still lands in
- * [com.voxapps.expenses.receiver.LlmResultReceiver]'s own branch, which carries decisions this class
- * does not have and must not lose: what counts as a retryable failure rather than a final "not a
- * payment", the refusal to auto-accept an answer that names neither a title nor a vendor, and the
- * location prefill. Those move here when they can be exercised end to end; until then [parse] and
- * the answered path of [commit] exist for the level machinery and are not the live delivery route.
+ * Both halves run through here. What stays outside is what is about the *request* rather than the
+ * record: whether a failed reply is worth retrying, and marking the notification handled — both
+ * belong to the queue that sent it, not to what is written afterwards.
  */
 class NotificationExpenseFlow(
     private val context: Context,
     private val container: ExpensesContainer,
     /** What was resolved before the question was asked, kept aside so the reply can be reunited with
      *  it. Null while dispatching, since nothing has been asked yet. */
-    private val suppressed: ScanPreParse? = null
+    private val suppressed: ScanPreParse? = null,
+    /**
+     * The bank this app resolved deterministically, carried through the request rather than trusted
+     * to come back: the prompt asks the model to echo it character-for-character, which is exactly
+     * the kind of instruction a model drops or garbles.
+     */
+    private val knownBank: String? = null
 ) : RecordFlowSpec<CapturedNotification, CapturedNotification, NotificationExpenseParseResultParser.Parsed> {
 
     override val source = RecordSource.NOTIFICATION
@@ -109,7 +112,24 @@ class NotificationExpenseFlow(
             reply,
             presetAmount = suppressed?.total,
             presetIsPayment = suppressed?.isPaymentKnown == true
-        )
+        )?.let { answer ->
+            // A vendor read from the notification's own characters outranks anything produced for
+            // it, and with the vendor suppressed from the prompt a model-invented title names
+            // whatever text was left — the card, the bank. So the title is composed, not modelled.
+            val vendor = suppressed?.vendor ?: return@let answer
+            answer.copy(
+                vendor = vendor,
+                title = NotificationPreParse.composeTitle(vendor, answer.category)
+            )
+        }?.let { answer ->
+            // A direction inherited from the template memory outranks the model's: a human
+            // classified this exact sentence shape, twice.
+            when (suppressed?.direction?.lowercase()) {
+                "incoming" -> answer.copy(direction = TransactionDirection.INCOMING)
+                "outgoing" -> answer.copy(direction = TransactionDirection.OUTGOING)
+                else -> answer
+            }
+        }
 
     /**
      * Nothing here is deliberate on anyone's part — no one pressed anything — so a record is only
@@ -134,13 +154,21 @@ class NotificationExpenseFlow(
             totalAmount = parsed?.totalAmount ?: f?.amount ?: return null,
             currency = parsed?.currency ?: settings.defaultCurrency,
             vendor = parsed?.vendor ?: f?.vendor,
-            bank = parsed?.bank ?: f?.bank,
+            bank = knownBank ?: parsed?.bank ?: f?.bank,
             location = null,
             category = parsed?.category ?: category?.name,
             date = null,
             time = null,
             items = emptyList()
         )
+        // The parser already refuses a payment without an amount; this is the other half of that
+        // gate. A reply naming neither a title nor a vendor identifies nothing, and filing it
+        // unseen leaves a record its owner can only puzzle over — so it waits for a person instead.
+        if (parsed != null && record.title.isNullOrBlank() && record.vendor.isNullOrBlank()) {
+            Logger.d(TAG, "The answer identifies nothing — queued rather than filed")
+            queueForReview(reading, parsed)
+            return null
+        }
         val newId = com.voxapps.expenses.receiver.LlmResultReceiver().createExpenseFromParsed(
             appContext = context.applicationContext,
             container = container,

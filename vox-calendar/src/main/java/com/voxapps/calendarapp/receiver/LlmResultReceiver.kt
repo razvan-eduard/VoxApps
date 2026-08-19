@@ -6,6 +6,7 @@ import android.content.Intent
 import android.widget.Toast
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
+import com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParseResultParser
 import com.voxapps.recordflow.RecordFlow
@@ -78,22 +79,32 @@ class LlmResultReceiver : BroadcastReceiver() {
 
             task == LlmTasks.CALENDAR_EVENT_PARSE -> {
                 val rawJson = result.rawJson
-                val parsed = if (result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null) {
-                    CalendarEventParseResultParser.parse(rawJson) ?: run {
-                        Logger.w(TAG, "Calendar event parse: could not parse LLM result (missing title, or a date was required but missing). rawJson=$rawJson")
-                        null
-                    }
-                } else {
-                    Logger.w(TAG, "Calendar event parse failed: ${result.error}")
-                    null
-                }
+                val succeeded = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
+                if (!succeeded) Logger.w(TAG, "Calendar event parse failed: ${result.error}")
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // The utterance this reply is about, from whichever side still has it: the
+                        // reply itself when Commander composed the request from a cached template,
+                        // and this app's own queue when it composed the request. Read before
+                        // markFulfilled, which deletes the row that holds it.
+                        val spokenInput = result.input?.takeIf { it.isNotBlank() }
+                            ?: container.pendingLlmRequestQueue.originalInput(requestId)
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
-                        if (parsed != null) {
-                            Logger.d(TAG, "Calendar event parse: creating ${parsed.kind} '${parsed.title}' layer=${parsed.layer} list=${parsed.listName}")
-                            routeParsed(container, parsed)
+                        if (succeeded) {
+                            // Through the flow, same as a scanned page: reading the answer and
+                            // deciding what becomes of it is the flow's, and marking the request
+                            // handled is this receiver's.
+                            val spec = CalendarVoiceFlow(container)
+                            RecordFlow.deliver(
+                                spec = spec,
+                                // Re-read rather than carried: what a rule settles from a sentence is
+                                // the same on both sides of the round trip, so the sentence is what
+                                // has to survive it. Here that settles nothing — see the flow.
+                                reading = spokenInput?.let { spec.read(it) },
+                                level = CalendarSettings.VOICE_FLOW_SUPPORT.default,
+                                reply = rawJson!!
+                            )
                         }
                     } finally {
                         pending.finish()
