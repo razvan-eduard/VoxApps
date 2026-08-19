@@ -21,10 +21,19 @@ private const val TAG = "ExpenseVoiceFlow"
  * does have something to ask, and its question is written as a *template* rather than a sentence —
  * Commander hears the words and puts them in, which is why [promptTemplate] exists at all.
  *
- * The rung is fixed at the fullest for now, and the declaration says so rather than implying more.
- * Narrowing it would mean reading an amount out of speech on the device, which
- * `:core:textmatch` can do and this flow does not yet — a real next step, and not something to
- * promise before it is there.
+ * The sentence does reach [read] on both routes — this app's own queue holds it when this app asked,
+ * and `VoxLlmResult.input` carries it back when Commander asked from a cached template. It is still
+ * read for nothing, and that is the honest state rather than an oversight.
+ *
+ * The one thing a rule could settle is the amount, and it cannot. A single currency-marked figure is
+ * not the total: in "three loaves at ten each" the marked figure is the per-unit price, and telling
+ * that from a cumulative one is the distributive/cumulative distinction — see
+ * [DistributiveCumulativeRule], which is most of what this prompt teaches. That distinction is
+ * carried by language, so a rule for it would need per-language markers, and a rule with a known
+ * mislabel class is a guess wearing a rule's clothes. Hence one rung.
+ *
+ * What the recovered sentence is good for is checking rather than extracting: a figure the answer
+ * reports that nobody spoke was invented. That is a guard for every rung, not a rung of its own.
  */
 class ExpenseVoiceFlow(
     private val context: Context,
@@ -35,15 +44,12 @@ class ExpenseVoiceFlow(
     override val support: FlowSupport = ExpensesSettings.VOICE_FLOW_SUPPORT
     override val taskId = LlmTasks.EXPENSE_PARSE
 
-    /** Nothing is established here yet — the words are Commander's to hear. */
+    /** The words, established as nothing — see the class note for why no rule may touch them. */
     override suspend fun read(input: String): DeterministicReading<String> =
         DeterministicReading(fields = input, usable = input.isNotBlank(), complete = false)
 
     override suspend fun prompt(reading: DeterministicReading<String>, asks: AskScope): String =
-        buildTemplate().replace(
-            com.voxapps.ipc.VoxSatelliteSchema.INPUT_PLACEHOLDER,
-            reading.fields
-        )
+        buildTemplate().replace(com.voxapps.ipc.VoxSatelliteSchema.INPUT_PLACEHOLDER, reading.fields)
 
     /** The same question with the words left out, for the transport that supplies them. */
     override suspend fun promptTemplate(asks: AskScope): String = buildTemplate()

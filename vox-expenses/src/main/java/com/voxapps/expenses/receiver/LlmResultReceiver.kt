@@ -32,6 +32,7 @@ import com.voxapps.expenses.domain.llm.ScanPreParse
 import com.voxapps.expenses.domain.location.resolveCurrentCityName
 import com.voxapps.recordflow.RecordFlow
 import com.voxapps.expenses.domain.llm.ExpenseScanFlow
+import com.voxapps.expenses.domain.llm.ExpenseVoiceFlow
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParseResultParser
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
@@ -105,6 +106,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                         // covered here were suppressed in the prompt, so their absence from the
                         // reply is by design rather than a failure to find them.
                         val preParse = container.scanPreParseRepository.take(requestId)
+                        // The utterance this reply is about, from whichever side still has it: the
+                        // reply itself when Commander composed the request from a cached template,
+                        // and this app's own queue when it composed the request. Read before
+                        // markFulfilled below, which deletes the row that holds it.
+                        val spokenInput = result.input?.takeIf { it.isNotBlank() }
+                            ?: container.pendingLlmRequestQueue.originalInput(requestId)
                         val parsed = if (isSuccess) {
                             ExpenseParseResultParser
                                 .parse(rawJson!!, requireTotalAmount = preParse?.total == null)
@@ -120,8 +127,8 @@ class LlmResultReceiver : BroadcastReceiver() {
                         } else if (parsed != null) {
                             // Through the flow rather than straight to the writer: the rung decides
                             // how much of this answer lands on the record and how much is offered on
-                            // it instead, and only the flow knows that. A voice reply has no such
-                            // scale of its own yet, so it keeps going the direct way.
+                            // it instead, and only the flow knows that. Which flow differs; that
+                            // they both end here does not.
                             val newId = if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP) {
                                 val settings = container.settingsRepository.getSnapshot()
                                 val outcome = RecordFlow.deliver(
@@ -134,7 +141,17 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 )
                                 (outcome as? RecordFlow.Outcome.Committed)?.recordId ?: 0L
                             } else {
-                                createExpenseFromParsed(context.applicationContext, container, parsed, storedImageName, preParse)
+                                val spec = ExpenseVoiceFlow(context.applicationContext, container)
+                                val outcome = RecordFlow.deliver(
+                                    spec = spec,
+                                    // Re-read rather than carried: what a rule settles from a
+                                    // sentence is the same on both sides of the round trip, so the
+                                    // sentence is what has to survive it, not the reading.
+                                    reading = spokenInput?.let { spec.read(it) },
+                                    level = ExpensesSettings.VOICE_FLOW_SUPPORT.default,
+                                    reply = rawJson!!
+                                )
+                                (outcome as? RecordFlow.Outcome.Committed)?.recordId ?: 0L
                             }
                             if (isPendingScanCreate && newId > 0) {
                                 linkPendingScanAttachments(container, newId, pendingFileNames, pendingGroupId)
@@ -300,120 +317,27 @@ class LlmResultReceiver : BroadcastReceiver() {
                             ProcessedNotificationKeysStore(context.applicationContext).markProcessed(notificationKey)
                         }
                         // Reunite the reply with what was resolved before it was asked —
-                        // suppressed fields are absent from the JSON by design (see
-                        // NotificationPreParse), and the deterministic value outranks anything
-                        // the model produced anyway: it was read from the notification's own
-                        // characters. In here rather than at the branch top because the store
-                        // read is a suspend, and onReceive's synchronous part must stay off IO.
+                        // suppressed fields are absent from the JSON by design, and the
+                        // deterministic value outranks anything the model produced anyway: it was
+                        // read from the notification's own characters. In here rather than at the
+                        // branch top because the store read is a suspend, and onReceive's
+                        // synchronous part must stay off IO.
                         val preParse = if (isParseSuccess) container.scanPreParseRepository.take(requestId) else null
-                        val parsed = if (isParseSuccess) {
-                            NotificationExpenseParseResultParser.parse(
-                                rawJson!!,
-                                presetAmount = preParse?.total,
-                                presetIsPayment = preParse?.isPaymentKnown == true
-                            )
-                                ?.let { p ->
-                                    val vendor = preParse?.vendor ?: return@let p
-                                    // Title composed, not modelled: with the vendor suppressed
-                                    // from the prompt, a model-invented title names whatever text
-                                    // remained (the card, the bank) — see NotificationPreParse.
-                                    p.copy(
-                                        vendor = vendor,
-                                        title = com.voxapps.expenses.domain.llm.NotificationPreParse
-                                            .composeTitle(vendor, p.category)
-                                    )
-                                }
-                                ?.let { p ->
-                                    // A direction inherited from the template memory outranks the
-                                    // model's: a human classified this exact template, twice.
-                                    when (preParse?.direction?.lowercase()) {
-                                        "incoming" -> p.copy(direction = com.voxapps.expenses.data.TransactionDirection.INCOMING)
-                                        "outgoing" -> p.copy(direction = com.voxapps.expenses.data.TransactionDirection.OUTGOING)
-                                        else -> p
-                                    }
-                                }
-                        } else null
-                        if (parsed == null) return@launch
+                        if (!isParseSuccess) return@launch
 
-                        val settings = container.settingsRepository.getSnapshot()
-                        // Belt-and-suspenders past the JSON-parse layer's own optCleanString guard —
-                        // this is the only guard for fields not sourced from raw JSON.
-                        val cleanTitle = FieldCleaner.clean(parsed.title, "title", "NotificationExpense")
-                        val cleanVendor = FieldCleaner.clean(parsed.vendor, "vendor", "NotificationExpense")
-                        val cleanBank = knownBankName ?: FieldCleaner.clean(parsed.bank, "bank", "NotificationExpense")
-                        val cleanCategory = FieldCleaner.clean(parsed.category, "category", "NotificationExpense")
-                        // The parser already refuses a payment without an amount; this is the
-                        // other half of that gate. A reply naming neither a title nor a vendor
-                        // identifies nothing — auto-accepting it files an anonymous record the
-                        // user can only puzzle over. Free-text model output earns auto-accept
-                        // only when it carries something recognizable; otherwise it goes to the
-                        // pending-review list, where approving it is a human call.
-                        val identifiable = !cleanTitle.isNullOrBlank() || !cleanVendor.isNullOrBlank()
-                        if (settings.autoAcceptNotificationExpenses && identifiable) {
-                            // Same insert path as ExpensesStateManager.approveNotificationExpense —
-                            // skips the pending-review queue entirely. It's still a normal, editable
-                            // expense row afterward, just created without an explicit Approve tap.
-                            val localModeActive = settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
-                                settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
-                            val newExpenseId = container.expensesRepository.addParsedExpense(
-                                title = cleanTitle,
-                                totalAmount = parsed.totalAmount,
-                                currencyCode = parsed.currency ?: settings.defaultCurrency,
-                                vendor = cleanVendor,
-                                bank = cleanBank,
-                                // Same GPS-derived prefill the voice/scan path uses — a payment
-                                // notification fires where the card was used, so the current city
-                                // is exactly as meaningful here. Notification text itself carries
-                                // no address, so there is no parsed value to prefer over it.
-                                location = if (settings.locationPrefillEnabled) {
-                                    com.voxapps.expenses.domain.location.resolveCurrentCityName(
-                                        context.applicationContext, container.settingsRepository
-                                    )
-                                } else null,
-                                comments = null,
-                                dateTime = System.currentTimeMillis(),
-                                spokenCategory = cleanCategory,
-                                defaultCategoryId = settings.defaultVoiceCategoryId,
-                                autoCreate = settings.autoCreateVoiceCategory,
-                                direction = parsed.direction,
-                                nearDuplicateCheckEnabled = localModeActive && !settings.automaticProtectionReviewOnly,
-                                nearDuplicateConfig = settings.toNearDuplicateConfig(),
-                                correctionsEnabled = settings.fieldCorrectionMemoryEnabled,
-                                correctionsThreshold = settings.fieldCorrectionThreshold,
-                                correctionsApplyMode = settings.fieldCorrectionApplyMode,
-                                source = ExpenseSource.NOTIFICATION
-                            )
-                            // An auto-created record is NOT a confirmation — the model's output is
-                            // unreviewed. The link lets a later human edit-save of this record act
-                            // as one; see TemplateDirectionMemory.
-                            preParse?.templateHash?.let { hash ->
-                                if (newExpenseId > 0) container.templateDirectionMemory.linkRecord(newExpenseId, hash)
-                            }
-                            stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
-                            maybeRequestScopedDuplicateCheck(context, container, settings.duplicateCheckModeAutomatic, newExpenseId, settings.toNearDuplicateConfig())
-                            // See the EXPENSE_PARSE branch's comment above — same
-                            // goAsync()/process-death race for the widget refresh. This is the path
-                            // a bank/card notification (e.g. Pluxee, a bank app) actually takes when
-                            // autoAcceptNotificationExpenses is on, so it's the one most exposed to
-                            // the race: nothing keeps this process (woken only for the broadcast, no
-                            // foreground UI) alive past pending.finish() otherwise.
-                            ExpensesWidget().updateAll(context.applicationContext)
-                        } else {
-                            container.pendingNotificationExpenseRepository.addPending(
-                                PendingNotificationExpense(
-                                    id = System.nanoTime(),
-                                    title = cleanTitle,
-                                    totalAmount = parsed.totalAmount,
-                                    currency = parsed.currency ?: settings.defaultCurrency,
-                                    vendor = cleanVendor,
-                                    category = cleanCategory,
-                                    bank = cleanBank,
-                                    direction = parsed.direction,
-                                    capturedAt = System.currentTimeMillis(),
-                                    templateHash = preParse?.templateHash
-                                )
-                            )
-                        }
+                        // The rest is the flow's: it reads the answer against what was suppressed,
+                        // and either files the expense or leaves it in the review queue. What stays
+                        // here is about the request rather than the record.
+                        RecordFlow.deliver(
+                            spec = com.voxapps.expenses.domain.llm.NotificationExpenseFlow(
+                                context.applicationContext, container, preParse, knownBankName
+                            ),
+                            reading = null,
+                            level = ExpensesSettings.notificationLevelOf(
+                                container.settingsRepository.getSnapshot().notificationModelUse
+                            ),
+                            reply = rawJson!!
+                        )
                     } finally {
                         pending.finish()
                     }

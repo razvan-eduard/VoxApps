@@ -20,7 +20,8 @@ import kotlinx.coroutines.flow.first
  * declines everything else, which is right for a page and useless for a sentence.
  *
  * So the question is the whole of it, written as a template because Commander is what hears the
- * words.
+ * words. [read] does receive the sentence on both routes and settles nothing from it — the sentence
+ * survives the round trip so that a rule *could* be applied here, not because one may be.
  */
 class CalendarVoiceFlow(
     private val container: CalendarContainer

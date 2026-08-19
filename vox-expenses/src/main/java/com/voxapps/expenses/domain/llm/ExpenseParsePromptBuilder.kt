@@ -9,17 +9,11 @@ import com.voxapps.ipc.VoxSatelliteSchema
  */
 object ExpenseParsePromptBuilder {
     /**
-     * Today's self-contained call: builds a fully-rendered prompt with [rawText] baked in. Used by
-     * the fallback path (no cached [VoxSatelliteSchema] yet) — Expenses still self-serves via its own
-     * generic-LLM-hook request in that case, exactly as before.
-     */
-    fun build(rawText: String, existingCategories: List<String>, defaultCurrency: String, languageCode: String): String =
-        buildPrompt(rawText, existingCategories, defaultCurrency, languageCode)
-
-    /**
-     * The cacheable version: same prompt, but with [VoxSatelliteSchema.INPUT_PLACEHOLDER] in place of
-     * a literal utterance — this is what [VoxIpc.OP_GET_SCHEMA] returns for Commander to cache and
-     * later substitute into per-command, entirely locally (see the collapsed voice-command plan).
+     * The question, with [VoxSatelliteSchema.INPUT_PLACEHOLDER] where the utterance goes.
+     *
+     * One shape for both routes: [VoxIpc.OP_GET_SCHEMA] hands it to Commander to cache and fill in
+     * locally per command, and when this app is handed the words instead its own flow substitutes
+     * them the same way. Whichever route a spoken expense takes, it is asked the same thing.
      */
     fun buildTemplate(existingCategories: List<String>, defaultCurrency: String, languageCode: String): String =
         buildPrompt(VoxSatelliteSchema.INPUT_PLACEHOLDER, existingCategories, defaultCurrency, languageCode)
