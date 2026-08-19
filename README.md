@@ -209,10 +209,12 @@ the scan tabular, so the extracted text follows the printed rows.
 
 ### 💸 Vox Expenses
 
-Encrypted on-device expense tracker. Three ways in — voice, receipt-scan OCR (invoice totals read
-deterministically from the printed text), or automatic capture from bank/payment notifications
+Encrypted on-device expense tracker. Three ways in — voice, receipt-scan OCR (a document's rows and
+totals have to prove each other before any model is asked: rows are accepted only when they sum, to
+the cent, to a figure the page itself prints), or automatic capture from bank/payment notifications
 (deterministically pre-parsed, matched against learned notification templates, durably queued and
-retried) — plus manual entry; rescanning a receipt shows each corrected field as its own suggestion
+retried) — plus manual entry, all three through one shared record-creation template that makes the
+model optional rather than a separate code path; rescanning a receipt shows each corrected field as its own suggestion
 instead of silently overwriting anything; transaction direction (Total vs. Received in Reports), a
 user-configurable duplicate-rule engine (email-filter-style: any field, AND/OR, multiple rules,
 Off/Local/Local+AI/AI protection modes), spelling-correction memory and WHEN/THEN re-map rules learned
@@ -285,11 +287,13 @@ companion app also has its own local Backup & Restore screen, interchangeable wi
   Expenses, Calendar, and Hub.
 - [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) — deep-dive on `vox-commander`'s
   architecture, wake word/STT/NLU/TTS engines, intent routing, the cross-app Vox contract (including the
-  durable pending-request queue LLM broadcasts now go through), and the monorepo's project structure.
+  durable pending-request queue LLM broadcasts now go through), record creation and document reading
+  (`:core:recordflow`, `:core:docread`), and the monorepo's project structure.
 - [`docs/SATELLITE_APP_GUIDE.md`](docs/SATELLITE_APP_GUIDE.md) — hands-on developer guide for building
   a new satellite app: Gradle/manifest setup, the full `:core:ipc` contract reference, the generic LLM
-  hook (and its durable-delivery queue), collapsed extraction (`@VoxExtractionSchema`/KSP), the security
-  model, and a debugging checklist.
+  hook (and its durable-delivery queue), collapsed extraction (`@VoxExtractionSchema`/KSP), the shared
+  record-creation contract every capture path implements (`:core:recordflow` — including the ladder that
+  makes the model a parameter), the security model, and a debugging checklist.
 - [`docs/BUILD_TIME_DEPENDENCIES.md`](docs/BUILD_TIME_DEPENDENCIES.md) — monorepo-wide reference for
   every native/ML dependency that's a binary version-check or vendored/patched/compiled from source at
   build time (Vosk, NewPipe Extractor, Whisper.cpp, llama.cpp, OpenWakeWord, OpenCV, PaddleOCR
