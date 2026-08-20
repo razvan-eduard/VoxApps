@@ -66,6 +66,54 @@ class NotificationPathHonoursTheSettingTest {
         assertTrue("nothing is sent before the flow has decided", dispatch in 0 until send)
     }
 
+    /** The flow's own statements, for the two rules below. */
+    private fun flowSource(): String =
+        listOf(
+            "src/main/java/com/voxapps/expenses/domain/llm/NotificationExpenseFlow.kt",
+            "vox-expenses/src/main/java/com/voxapps/expenses/domain/llm/NotificationExpenseFlow.kt"
+        ).map(::File).first { it.exists() }.readText()
+
+    /**
+     * Auto-accept is asked about on the half of the flow that files the record.
+     *
+     * The policy consults `autoAcceptWhenProven` when a capture is *dispatched*, and a reply
+     * arriving later never passes through the policy at all — so a delivery half that does not ask
+     * files every answered notification whatever the setting says. That is what happened, and a
+     * behavioural test cannot catch it without a device, a database and a broadcast.
+     */
+    @Test
+    fun `the record is filed only when auto-accept allows it`() {
+        val text = flowSource()
+        val commit = text.indexOf("override suspend fun commit(")
+        val create = text.indexOf("createExpenseFromParsed", commit)
+        val asks = text.indexOf("autoAcceptWhenProven()", commit)
+
+        assertTrue("commit has to ask before it files", asks in 0 until create)
+        assertTrue(
+            "and queue when the answer is not allowed to file itself",
+            text.indexOf("queueForReview(reading, parsed)", commit) in 0 until create
+        )
+    }
+
+    /**
+     * A model saying nothing for a field says it with an empty string as readily as by omitting it.
+     * `?:` catches only the omission, so a reply carrying "vendor": "" overwrote a vendor the device
+     * had already read from the notification's own characters, and the record then looked anonymous
+     * enough to be held back from a user who had asked for it to be filed.
+     */
+    @Test
+    fun `a blank field from the model falls back to what the device read`() {
+        val text = flowSource()
+        assertTrue(
+            "the fallback has to treat blank as absent",
+            text.contains("fun String?.orRead(")
+        )
+        assertFalse(
+            "a raw elvis on a model field lets an empty string through",
+            Regex("""parsed\?\.(vendor|title|category|currency)\s*\?:""").containsMatchIn(text)
+        )
+    }
+
     @Test
     fun `only the none setting keeps the sentence on the device`() {
         assertEquals(
