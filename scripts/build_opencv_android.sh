@@ -41,13 +41,6 @@ OUTPUT_DIR="$PROJECT_ROOT/vendor/ppocr-sdk/opencv"
 VISION_JNI_DIR="$PROJECT_ROOT/vox-vision/src/main/jniLibs"
 
 ANDROID_HOME="${ANDROID_HOME:-$(vox_android_sdk)}"
-# Always resolved, never defaulted from the environment. `${ANDROID_NDK_HOME:-...}` looks harmless
-# and is how the pin was silently bypassed: CI images export that variable pointing at whichever NDK
-# they preinstall, so the resolver was never called and OpenCV compiled with 27.3 while the pin said
-# 27.1. vox_android_ndk honours a deliberate VOX_NDK override itself.
-ANDROID_NDK_HOME="$(vox_android_ndk)" || exit 1
-export ANDROID_NDK_HOME
-
 # Stamped with the built commit SHA on success (see bottom of this script) — skipping only on
 # "output exists" (no version check) would silently keep serving a stale build after someone bumps
 # the vendor/opencv submodule pin, since nothing else would force a rebuild.
@@ -82,6 +75,16 @@ if have_output; then
         echo "OpenCV build output exists but is stale (built for $(cat "$BUILT_COMMIT_FILE" 2>/dev/null || echo "unknown"), submodule now at $CURRENT_COMMIT) — rebuilding."
     fi
 fi
+
+# Resolved here rather than at the top, because everything above this line can finish without a
+# compiler and a run that rebuilds nothing must not demand one — a cache hit restores the output and
+# skips out above, and asking for the NDK first turned that into a hard failure.
+#
+# Always resolved, never defaulted from the environment: `${ANDROID_NDK_HOME:-...}` looks harmless
+# and is how the pin was silently bypassed, since CI images export that variable pointing at
+# whichever NDK they preinstall. vox_android_ndk honours a deliberate VOX_NDK override itself.
+ANDROID_NDK_HOME="$(vox_android_ndk)" || exit 1
+export ANDROID_NDK_HOME
 
 echo "NDK: $ANDROID_NDK_HOME"
 PREBUILT_BASE="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt"

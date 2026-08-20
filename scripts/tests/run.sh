@@ -375,7 +375,19 @@ for wf in .github/workflows/release-*.yml; do
     grep -q 'check pairing' "$wf" || missing="$missing native-pairing"
     grep -q 'release sbom' "$wf" || missing="$missing sbom"
     grep -q 'attest-build-provenance' "$wf" || missing="$missing attestation"
-    grep -q 'check smoke' "$wf" || missing="$missing smoke-gate"
+    # Vision is the one exemption, and it has to say so where the gate would have been. The gate
+    # boots an x86_64 image and reaches arm64-v8a libraries through translation; vision is the only
+    # app carrying OpenCV, and OpenCV does not survive that — the process dies about a second after
+    # launch while the same APK runs on real arm64. No hosted runner can boot a real arm64 AVD
+    # (Linux arm64 has no emulator package, arm64 macOS cannot nest the VM), so there is nowhere to
+    # move it to. An exemption that is merely absent is indistinguishable from one somebody deleted,
+    # so the absence must be argued in the file.
+    if [ "$name" = "release-vision" ]; then
+        grep -q 'check smoke' "$wf" && missing="$missing unexpected-smoke-gate"
+        grep -q 'No smoke test here' "$wf" || missing="$missing unexplained-smoke-exemption"
+    else
+        grep -q 'check smoke' "$wf" || missing="$missing smoke-gate"
+    fi
     # A test step that swallows its own failure is a gate in name only.
     if grep -E 'gradlew.*[tT]est' "$wf" | grep -qE '\|\| (echo|true)'; then
         missing="$missing softened-tests"
