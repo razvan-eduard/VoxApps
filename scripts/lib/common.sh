@@ -68,16 +68,40 @@ vox_android_sdk() {
 
 # The newest installed NDK, or the one the environment names. `find -L`: on a runner the SDK path
 # can be a tree of symlinks, and an unfollowed find matches nothing.
+# The one NDK this repo compiles with, from gradle/libs.versions.toml — the same file the OpenCV
+# script already reads onnxruntime's version out of.
+vox_ndk_version() {
+    grep -m1 '^ndk = ' "$PROJECT_ROOT/gradle/libs.versions.toml" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/'
+}
+
+# Where that NDK lives.
+#
+# This used to take whichever NDK sorted newest on the machine, which is why the same commit built
+# different binaries on a laptop and on a runner. Taking the newest is the one thing it must not do:
+# a native library that changes without the source changing makes every comparison meaningless, and
+# a crash that appears only on one machine has nowhere to be traced to.
+#
+# An explicit ANDROID_NDK_HOME still wins — someone pointing at a specific NDK is being deliberate,
+# and that is the same intent as the pin. Anything else is refused by name rather than substituted,
+# because a build that quietly used a different compiler is the failure this exists to prevent.
 vox_android_ndk() {
-    local sdk latest candidate
+    local sdk want candidate
     for candidate in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_ROOT:-}"; do
         [ -n "$candidate" ] && [ -d "$candidate" ] && { printf '%s' "$candidate"; return 0; }
     done
+    want=$(vox_ndk_version)
     sdk=$(vox_android_sdk) || return 1
+    if [ -n "$want" ]; then
+        [ -d "$sdk/ndk/$want" ] && { printf '%s' "$sdk/ndk/$want"; return 0; }
+        echo "ERROR: NDK $want is not installed (gradle/libs.versions.toml pins it)." >&2
+        echo "       sdkmanager --install 'ndk;$want'" >&2
+        echo "       or set ANDROID_NDK_HOME to override deliberately." >&2
+        return 1
+    fi
     if [ -d "$sdk/ndk" ]; then
-        latest=$(find -L "$sdk/ndk" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; 2>/dev/null \
+        candidate=$(find -L "$sdk/ndk" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; 2>/dev/null \
                  | sort -V | tail -1)
-        [ -n "$latest" ] && { printf '%s' "$sdk/ndk/$latest"; return 0; }
+        [ -n "$candidate" ] && { printf '%s' "$sdk/ndk/$candidate"; return 0; }
     fi
     [ -d "$sdk/ndk-bundle" ] && { printf '%s' "$sdk/ndk-bundle"; return 0; }
     return 1

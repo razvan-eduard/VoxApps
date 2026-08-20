@@ -57,10 +57,11 @@ jobs:
     # rather than in gradle.properties so a laptop is not asked to reserve 6 GB for every build.
     env:
       GRADLE_HEAP: -Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
-      # Declared once and used twice — to install the toolchain, and as part of the OpenCV cache
-      # key. Native output built by one NDK is not interchangeable with another's, so the version
-      # that produced a cache entry has to be the version that can restore it.
-      NDK_VERSION: 27.1.12297006
+      # Used twice here — to install the toolchain, and as part of the OpenCV cache key, since
+      # native output built by one NDK is not interchangeable with another's and the version that
+      # produced a cache entry has to be the version that can restore it. Read from
+      # gradle/libs.versions.toml rather than written here, so a release and a CI run cannot compile
+      # the same library with different compilers, which is what they were doing.
       CMAKE_VERSION: 3.22.1
 
     steps:
@@ -84,6 +85,13 @@ jobs:
       # pinned submodule commit (read out of the tree without cloning the submodule), the script
       # that does the building, and the NDK that compiles it. A miss costs one long run; every push
       # after it restores.
+      # Read rather than restated: gradle/libs.versions.toml is what scripts/lib/common.sh resolves
+      # the NDK from, so a CI run and a release cannot compile the same library with different
+      # compilers — which is exactly what they were doing, 27.1 here against whatever the release
+      # runner happened to carry.
+      - name: Resolve the pinned NDK
+        run: echo "NDK_VERSION=$(grep -m1 '^ndk = ' gradle/libs.versions.toml | sed 's/.*"\(.*\)".*/\1/')" >> "$GITHUB_ENV"
+
       - name: Resolve the pinned OpenCV commit
         id: opencv_pin
         run: echo "sha=$(git ls-tree HEAD vendor/opencv | awk '{print $3}')" >> "$GITHUB_OUTPUT"

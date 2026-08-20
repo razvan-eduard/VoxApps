@@ -101,8 +101,10 @@ fi
 
 # --- 3. BUILD EXECUTION ---
 NDK_PATH=$(vox_android_ndk) || {
-    log_error "❌ No Android NDK found."
-    log_error "   Set ANDROID_NDK_HOME, or install an NDK under \$ANDROID_HOME/ndk."
+    # vox_android_ndk has already said which version is wanted and how to get it; repeating
+    # "install an NDK" here would contradict it, since any NDK is exactly what will not do.
+    log_error "❌ The pinned Android NDK is not available."
+    log_error "   The line above says which version and how to install it."
     exit 1
 }
 

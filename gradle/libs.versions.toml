@@ -27,6 +27,18 @@ datastorePreferences = "1.2.1"
 reorderable = "3.1.0"
 work = "2.11.2"
 onnxruntime = "1.28.0"
+# The NDK every native build in this repo compiles with, and the one place that decides it.
+#
+# It has to be decided in one place because native output from one NDK is not interchangeable with
+# another's, and until now two answers coexisted: ci.yml declared and installed 27.1.12297006 and
+# keyed its OpenCV cache on it, while the release workflows installed nothing and let the resolver
+# take whichever NDK sorted newest on the runner — 27.3.13750724 in practice. So the library CI
+# tested and the library that shipped were built by different compilers. Measured: every OpenCV .so
+# differs in hash and size between a local build (NDK 30) and the published APK.
+#
+# 27.1.12297006 is the value kept, because it is the deliberate one — the version the tests have
+# been run against. `scripts/lib/common.sh` reads it, and refuses to substitute another.
+ndk = "27.1.12297006"
 opencv = "4.5.3"
 camerax = "1.6.1"
 glanceAppwidget = "1.1.1"
