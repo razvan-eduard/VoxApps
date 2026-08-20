@@ -90,9 +90,9 @@ vox_ndk_version() {
 # different compiler is the failure this exists to prevent.
 vox_android_ndk() {
     local sdk want candidate
-    for candidate in "${VOX_NDK:-}"; do
-        [ -n "$candidate" ] && [ -d "$candidate" ] && { printf '%s' "$candidate"; return 0; }
-    done
+    if [ -n "${VOX_NDK:-}" ] && [ -d "${VOX_NDK}" ]; then
+        printf '%s' "$VOX_NDK"; return 0
+    fi
     want=$(vox_ndk_version)
     sdk=$(vox_android_sdk) || return 1
     # Only once the pin has had its say: an ambient NDK that happens to be the pinned one is fine.
