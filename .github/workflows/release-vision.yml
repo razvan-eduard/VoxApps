@@ -64,6 +64,17 @@ jobs:
         with:
           accept-android-licenses: true
 
+      # This step did not exist, and its absence is why the OpenCV that shipped was not the OpenCV
+      # that was tested: with nothing installed, scripts/lib/common.sh took whichever NDK the runner
+      # happened to carry (27.3), while ci.yml and the Commander release both build with the pinned
+      # one. Native output from one NDK is not interchangeable with another's, so the same commit
+      # produced different libraries depending on where it was built.
+      - name: Install the pinned NDK and CMake
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          NDK_VERSION=$(grep -m1 '^ndk = ' gradle/libs.versions.toml | sed 's/.*"\(.*\)".*/\1/')
+          sdkmanager --install "ndk;${NDK_VERSION}" "cmake;3.22.1"
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 

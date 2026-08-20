@@ -79,7 +79,9 @@ jobs:
       - name: Install NDK and CMake for the llama build
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+          # From gradle/libs.versions.toml, so this cannot drift from what the scripts resolve.
+          NDK_VERSION=$(grep -m1 '^ndk = ' gradle/libs.versions.toml | sed 's/.*"\(.*\)".*/\1/')
+          sdkmanager --install "ndk;${NDK_VERSION}" "cmake;3.22.1"
 
       - name: Check out the OpenCL build inputs
         run: |

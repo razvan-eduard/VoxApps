@@ -84,7 +84,9 @@ jobs:
         if: steps.versions.outputs.has_update == 'true' && steps.dedup.outputs.proceed == 'true'
         run: |
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "ndk;27.1.12297006" "cmake;3.22.1"
+          # From gradle/libs.versions.toml, so this cannot drift from what the scripts resolve.
+          NDK_VERSION=$(grep -m1 '^ndk = ' gradle/libs.versions.toml | sed 's/.*"\(.*\)".*/\1/')
+          sdkmanager --install "ndk;${NDK_VERSION}" "cmake;3.22.1"
 
       # The llama build itself is CPU-only and needs none of this — but `assembleDebug` runs
       # preBuild, which also compiles whisper (autoCompileWhisper), and that build wants the
