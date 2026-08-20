@@ -237,7 +237,15 @@ commands in, only OCR text out.
 - **Table mode** — a scan request can declare its document tabular (Vox Expenses does, for
   invoices); an additive reconstruction pass rebuilds the printed rows and columns behind a marker in
   the OCR output, and the plain text follows printed row order, so downstream parsing sees the table
-  the paper actually shows.
+  the paper actually shows. The reconstruction rides *below* the marker rather than replacing the
+  reading-order text: both are offered to whoever reads the result, because a reconstruction that
+  fragmented a row can leave the plain text the better of the two.
+- **A page that did not read is developed again** — when a table-mode reading's own arithmetic fails
+  to close, the same photograph is re-recognised as a binarised and then an inverted variant, stopping
+  at the first that closes (`ReadingCascade`, `ScanVariants`). Inversion only helps white-on-dark
+  print, so it is tried last. The judge inside Vision uses the built-in patterns only — deliberately
+  stricter than the acceptance gate in the app that asked for the scan, since OCR and that gate live
+  in different modules on purpose.
 - Recognized text is cleaned up and titled via Commander's generic LLM hook, then forwarded to Vox
   Notes as a new note (see [Vox Vision's scan-to-note flow](TECHNICAL_DOCUMENTATION.md#vox-vision-ocr-satellite))
 - Works fully standalone (its own launcher icon) or as a **pending-request target** launched directly
@@ -245,8 +253,8 @@ commands in, only OCR text out.
 - **"Send photo to AI" + "Photo detail for AI"** (Settings, off by default) — opt-in multimodal photo
   attachment for satellites that support it; resolution (Low/Medium/High, 768/1024/1536px) is the only
   control that affects LLM token cost, not JPEG quality
-- Settings is grouped into labeled section banners (General/Appearance/Advanced), same shared pattern
-  as every other app in the family.
+- Settings follows the family convention: the menu is banded, and each final page is a column of
+  titled cards.
 
   <img width="388" height="850" alt="Settings labeled sections" src="../vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/3_settings_sections.png" />
 
