@@ -13,8 +13,8 @@ android {
         applicationId = "com.voxapps.notes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.20"
+        versionCode = 21
+        versionName = "0.21"
         ndk { abiFilters += "arm64-v8a" }
     }
 
