@@ -81,21 +81,35 @@ vox_ndk_version() {
 # a native library that changes without the source changing makes every comparison meaningless, and
 # a crash that appears only on one machine has nowhere to be traced to.
 #
-# An explicit ANDROID_NDK_HOME still wins — someone pointing at a specific NDK is being deliberate,
-# and that is the same intent as the pin. Anything else is refused by name rather than substituted,
-# because a build that quietly used a different compiler is the failure this exists to prevent.
+# The pin outranks ANDROID_NDK_HOME, which is the opposite of what looks polite. That variable is
+# not usually a decision: CI images export it pointing at whichever NDK they happen to preinstall,
+# and honouring it there is precisely how a release compiled OpenCV with 27.3 while every test ran
+# against 27.1. A deliberate override says so out loud, with VOX_NDK.
+#
+# Anything else is refused by name rather than substituted, because a build that quietly used a
+# different compiler is the failure this exists to prevent.
 vox_android_ndk() {
     local sdk want candidate
-    for candidate in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_ROOT:-}"; do
+    for candidate in "${VOX_NDK:-}"; do
         [ -n "$candidate" ] && [ -d "$candidate" ] && { printf '%s' "$candidate"; return 0; }
     done
     want=$(vox_ndk_version)
     sdk=$(vox_android_sdk) || return 1
+    # Only once the pin has had its say: an ambient NDK that happens to be the pinned one is fine.
+    if [ -n "$want" ]; then
+        for candidate in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_ROOT:-}"; do
+            case "$candidate" in *"$want") [ -d "$candidate" ] && { printf '%s' "$candidate"; return 0; };; esac
+        done
+    else
+        for candidate in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_ROOT:-}"; do
+            [ -n "$candidate" ] && [ -d "$candidate" ] && { printf '%s' "$candidate"; return 0; }
+        done
+    fi
     if [ -n "$want" ]; then
         [ -d "$sdk/ndk/$want" ] && { printf '%s' "$sdk/ndk/$want"; return 0; }
         echo "ERROR: NDK $want is not installed (gradle/libs.versions.toml pins it)." >&2
         echo "       sdkmanager --install 'ndk;$want'" >&2
-        echo "       or set ANDROID_NDK_HOME to override deliberately." >&2
+        echo "       or set VOX_NDK to a specific NDK to override deliberately." >&2
         return 1
     fi
     if [ -d "$sdk/ndk" ]; then
