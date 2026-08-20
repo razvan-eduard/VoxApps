@@ -136,8 +136,8 @@ and taking them is cheaper than re-solving what they cover:
 | `:core:backup` | Export/import, the biometric gate, snapshot-replace import, attachment zips |
 | `:core:services` | `ServiceEntry`/`ProbeSpec` for anything with an API key or endpoint, and `SchemaRepo`/`RemoteSchema` if your app ships schemas |
 | `:core:datahygiene` | Normalisation, duplicate rules, the WHEN/THEN re-map engine, merge-quality scoring (§6.6, §6.7) |
-| `:core:textmatch` | Deterministic extraction (template skeletons, date/amount extractors, vocabulary classification) plus fuzzy name matching |
-| `:core:fieldmemory` | Learned field-correction memory over `:core:textmatch`'s diff — quarantines on disagreement |
+| `:core:textmatch` | Deterministic extraction (template skeletons, date/amount extractors, vocabulary classification, the two-field pre-parse a machine-sent message yields) plus fuzzy name matching |
+| `:core:fieldmemory` | Two memories, both taught only by a human: learned field corrections over `:core:textmatch`'s diff, and a verdict per message template — two unanimous confirmations before it answers, permanent quarantine on the first disagreement. The verdict is an opaque string, so the app that owns the meaning maps it |
 | `:core:recordflow` | The shape every record-creation path takes, and the ladder that makes the model optional (§12) |
 | `:core:suggestions` | A proposal a record can hold until someone accepts it — the "offer it, don't apply it" half of that ladder |
 | `:core:docread` | Reading a scanned document deterministically: rows and totals that prove each other before any model is asked |
