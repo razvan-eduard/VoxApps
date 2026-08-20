@@ -41,7 +41,12 @@ OUTPUT_DIR="$PROJECT_ROOT/vendor/ppocr-sdk/opencv"
 VISION_JNI_DIR="$PROJECT_ROOT/vox-vision/src/main/jniLibs"
 
 ANDROID_HOME="${ANDROID_HOME:-$(vox_android_sdk)}"
-ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$(vox_android_ndk)}"
+# Always resolved, never defaulted from the environment. `${ANDROID_NDK_HOME:-...}` looks harmless
+# and is how the pin was silently bypassed: CI images export that variable pointing at whichever NDK
+# they preinstall, so the resolver was never called and OpenCV compiled with 27.3 while the pin said
+# 27.1. vox_android_ndk honours a deliberate VOX_NDK override itself.
+ANDROID_NDK_HOME="$(vox_android_ndk)" || exit 1
+export ANDROID_NDK_HOME
 
 # Stamped with the built commit SHA on success (see bottom of this script) — skipping only on
 # "output exists" (no version check) would silently keep serving a stale build after someone bumps
