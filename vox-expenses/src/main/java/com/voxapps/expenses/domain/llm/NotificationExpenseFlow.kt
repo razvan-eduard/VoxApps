@@ -17,6 +17,18 @@ import kotlinx.coroutines.flow.first
 private const val TAG = "NotificationExpenseFlow"
 
 /**
+ * What the model said, unless it said nothing.
+ *
+ * Blank counts as nothing, which is the whole point: a model with no answer for a field supplies an
+ * empty string as readily as it omits the key, and `?:` catches only the omission. A reply carrying
+ * `"vendor": ""` therefore used to overwrite a vendor the device had already read out of the
+ * notification's own characters — leaving a record anonymous enough to be held back from a user who
+ * had asked for it to be filed.
+ */
+private fun String?.orRead(fallback: String?): String? =
+    this?.takeIf { it.isNotBlank() } ?: fallback
+
+/**
  * What a captured notification yields before anything is asked: the figures, and whatever a person
  * has already taught about this exact sentence shape.
  */
@@ -150,22 +162,35 @@ class NotificationExpenseFlow(
         // One record shape, whether the fields came from the page's own characters or from an
         // answer — the writing path is the same one every other capture goes through.
         val record = ExpenseParseResultParser.Parsed(
-            title = parsed?.title ?: title(f?.vendor, f?.bank, category?.name),
+            title = parsed?.title.orRead(title(f?.vendor, f?.bank, category?.name)),
             totalAmount = parsed?.totalAmount ?: f?.amount ?: return null,
-            currency = parsed?.currency ?: settings.defaultCurrency,
-            vendor = parsed?.vendor ?: f?.vendor,
-            bank = knownBank ?: parsed?.bank ?: f?.bank,
+            currency = parsed?.currency.orRead(settings.defaultCurrency),
+            vendor = parsed?.vendor.orRead(f?.vendor),
+            bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
             location = null,
-            category = parsed?.category ?: category?.name,
+            category = parsed?.category.orRead(category?.name),
             date = null,
             time = null,
             items = emptyList()
         )
-        // The parser already refuses a payment without an amount; this is the other half of that
-        // gate. A reply naming neither a title nor a vendor identifies nothing, and filing it
-        // unseen leaves a record its owner can only puzzle over — so it waits for a person instead.
-        if (parsed != null && record.title.isNullOrBlank() && record.vendor.isNullOrBlank()) {
-            Logger.d(TAG, "The answer identifies nothing — queued rather than filed")
+        // Two conditions, and the record is filed only when both hold.
+        //
+        // The parser already refuses a payment without an amount; identifiable is the other half of
+        // that gate. A reply naming neither a title nor a vendor identifies nothing, and filing it
+        // unseen leaves a record its owner can only puzzle over.
+        //
+        // And the setting decides whether an answer may be filed at all without being seen. It is
+        // asked here rather than left to the policy because only the delivery half of this flow
+        // reaches this point: the policy consults autoAcceptWhenProven when a capture is dispatched,
+        // and a reply arriving later never passes through it. Losing that made every answered
+        // notification file itself whatever the setting said.
+        val identifiable = !record.title.isNullOrBlank() || !record.vendor.isNullOrBlank()
+        if (parsed != null && !(identifiable && autoAcceptWhenProven())) {
+            Logger.d(
+                TAG,
+                if (!identifiable) "The answer identifies nothing — queued rather than filed"
+                else "Auto-accept is off — queued for approval"
+            )
             queueForReview(reading, parsed)
             return null
         }
@@ -197,13 +222,14 @@ class NotificationExpenseFlow(
         container.pendingNotificationExpenseRepository.addPending(
             PendingNotificationExpense(
                 id = System.currentTimeMillis(),
-                title = parsed?.title ?: title(f?.vendor, f?.bank, category?.name),
+                title = parsed?.title.orRead(title(f?.vendor, f?.bank, category?.name))
+                    ?: title(f?.vendor, f?.bank, category?.name),
                 totalAmount = amount,
-                currency = parsed?.currency ?: settings.defaultCurrency,
-                vendor = parsed?.vendor ?: f?.vendor,
-                category = parsed?.category ?: category?.name,
+                currency = parsed?.currency.orRead(settings.defaultCurrency) ?: settings.defaultCurrency,
+                vendor = parsed?.vendor.orRead(f?.vendor),
+                category = parsed?.category.orRead(category?.name),
                 capturedAt = System.currentTimeMillis(),
-                bank = parsed?.bank ?: f?.bank,
+                bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
                 // The queue's own default, and the thing approving the entry confirms. A starting
                 // position for the reviewer, not a claim about the message.
                 direction = f?.direction ?: TransactionDirection.OUTGOING,

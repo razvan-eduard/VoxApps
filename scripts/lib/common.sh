@@ -109,6 +109,7 @@ vox_android_ndk() {
         [ -d "$sdk/ndk/$want" ] && { printf '%s' "$sdk/ndk/$want"; return 0; }
         echo "ERROR: NDK $want is not installed (gradle/libs.versions.toml pins it)." >&2
         echo "       sdkmanager --install 'ndk;$want'" >&2
+        echo "       or Android Studio: SDK Manager > SDK Tools > NDK (Side by side) > $want" >&2
         echo "       or set VOX_NDK to a specific NDK to override deliberately." >&2
         return 1
     fi
