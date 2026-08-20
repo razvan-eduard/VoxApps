@@ -212,29 +212,25 @@ jobs:
       # "just build it and see" dispatch tagged the commit and cut a release at whatever version
       # happened to be current, walking straight around the guard that exists to prevent exactly
       # that. Building and testing still run: that is what a dispatch is for.
-      # The one question no APK inspection can answer: does this build install and survive a
-      # cold launch? Runs before anything publishes, so a red smoke means no release at all.
-      # The x86_64 Android 11 image executes the arm64-v8a libraries through its ARM binary
-      # translation — proof of link-and-launch; real hardware stays the ground truth. The
-      # emulator is a VM, so KVM must be opened up first or it never boots.
-      - name: Enable KVM
-        if: steps.check_bump.outputs.changed != 'false'
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Smoke test on an emulator
-        if: steps.check_bump.outputs.changed != 'false'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          # One line: the action runs each script line as its own `sh -c`, so logic lives in
-          # scripts/smoke_launch_check.sh and this only names it.
-          script: ./scripts/vox check smoke VoxVision-*.apk com.voxapps.vision
+      # No smoke test here, and it is not an omission.
+      #
+      # The gate the other five apps run boots an x86_64 Android image and executes their arm64-v8a
+      # libraries through its ARM binary translation. Vision is the only app carrying OpenCV — nine
+      # of its fifteen native libraries — and OpenCV does not survive that translation: the load
+      # crashes the process about a second after launch, while the same APK launches and reads
+      # documents on real arm64. That was measured against an arm64 AVD and is why
+      # instrumented-tests.yml is scoped to Commander; the same reasoning belongs here, and did not
+      # arrive with the gate.
+      #
+      # Running it on real arm64 in CI is not an option that was passed over. It does not exist:
+      # a Linux arm64 runner has no Android emulator to install ("Dependant package with key
+      # emulator not found" — Google publishes none for that host), and a hosted arm64 macOS runner
+      # cannot nest the VM an AVD needs (HV_UNSUPPORTED). Tested, not assumed.
+      #
+      # So the choice is a gate that cannot execute what it is testing, or none. A gate that fails
+      # on a configuration no user runs does not add safety — it withholds releases and teaches
+      # people to override it. Vision's launch is proved on real hardware instead:
+      #     ANDROID_SERIAL=<arm64 avd> ./gradlew :vox-vision:connectedDebugAndroidTest
 
       # A published tag is an address installed APKs still resolve — the DLC downloader builds its
       # URLs from the version it was compiled with. Moving such a tag to a different commit
