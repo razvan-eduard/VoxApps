@@ -531,5 +531,13 @@
   "flow_send_everything_desc": "Documentul întreg, pentru cel mai bun răspuns posibil.",
   "scan_fill_head": "Completează automat câmpurile principale",
   "scan_fill_body": "Completează automat pozițiile",
-  "flow_cannot_suggest": "Aplicația n-are unde ține o sugestie, deci răspunsul se scrie."
+  "flow_cannot_suggest": "Aplicația n-are unde ține o sugestie, deci răspunsul se scrie.",
+  "notification_assumed_direction_label": "Când încă nu se știe nimic",
+  "notification_assumed_direction_desc": "Fără model întrebat, o formă de mesaj pe care n-ai confirmat-o niciodată nu spune nimic despre direcția banilor. Dacă presupui, se salvează pe loc — corectezi o dată pe înregistrare și forma e învățată; corectezi de două ori și răspunde singură.",
+  "notification_assume_nothing": "Nu presupune nimic",
+  "notification_assume_nothing_desc": "O formă neconfirmată te așteaptă în aprobare.",
+  "notification_assume_outgoing": "Presupune bani ieșiți",
+  "notification_assume_outgoing_desc": "Se salvează ca plată. Cazul obișnuit.",
+  "notification_assume_incoming": "Presupune bani intrați",
+  "notification_assume_incoming_desc": "Se salvează ca sumă încasată, pentru un cont care mai ales primește."
 }

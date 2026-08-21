@@ -531,5 +531,13 @@
   "flow_send_everything_desc": "Le document entier, pour la meilleure réponse possible.",
   "scan_fill_head": "Remplir automatiquement les champs principaux",
   "scan_fill_body": "Remplir automatiquement les lignes",
-  "flow_cannot_suggest": "Cette app n'a pas où garder une suggestion ; la réponse est donc écrite."
+  "flow_cannot_suggest": "Cette app n'a pas où garder une suggestion ; la réponse est donc écrite.",
+  "notification_assumed_direction_label": "Quand rien n'est encore connu",
+  "notification_assumed_direction_desc": "Sans modèle interrogé, une forme de message que vous n'avez jamais confirmée ne dit rien du sens de l'argent. Avec une hypothèse, l'enregistrement se fait aussitôt — corrigez-le une fois et la forme est apprise ; deux fois et elle répond seule.",
+  "notification_assume_nothing": "Ne rien supposer",
+  "notification_assume_nothing_desc": "Une forme non confirmée vous attend en révision.",
+  "notification_assume_outgoing": "Supposer une sortie",
+  "notification_assume_outgoing_desc": "Enregistré comme paiement. Le cas habituel.",
+  "notification_assume_incoming": "Supposer une entrée",
+  "notification_assume_incoming_desc": "Enregistré comme montant reçu, pour un compte qui reçoit surtout."
 }

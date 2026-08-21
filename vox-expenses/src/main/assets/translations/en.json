@@ -531,5 +531,13 @@
   "flow_send_everything_desc": "The whole document, for the best answer it can give.",
   "scan_fill_head": "Fill in the main fields automatically",
   "scan_fill_body": "Fill in the line items automatically",
-  "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written."
+  "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written.",
+  "notification_assumed_direction_label": "When nothing is known yet",
+  "notification_assumed_direction_desc": "With no model asked, a message shape you have never confirmed says nothing about which way the money went. Assume, and it is saved right away — correct it once on the record and that shape is taught; correct it twice and it answers on its own.",
+  "notification_assume_nothing": "Assume nothing",
+  "notification_assume_nothing_desc": "An unconfirmed shape waits for you in review.",
+  "notification_assume_outgoing": "Assume money left",
+  "notification_assume_outgoing_desc": "Saved as a payment. The usual case.",
+  "notification_assume_incoming": "Assume money arrived",
+  "notification_assume_incoming_desc": "Saved as an incoming amount, for an account that mostly receives."
 }

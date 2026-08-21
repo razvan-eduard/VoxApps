@@ -45,6 +45,8 @@ interface ExpensesSettingsRepository {
     suspend fun setScanModelUse(mode: String)
     /** See [ExpensesSettings.notificationModelUse]; unknown values are ignored rather than stored. */
     suspend fun setNotificationModelUse(mode: String)
+    /** See [ExpensesSettings.notificationAssumedDirection]; unknown values are ignored. */
+    suspend fun setNotificationAssumedDirection(mode: String)
     suspend fun setAttachPhotoOnRetry(enabled: Boolean)
     suspend fun setAutoRescanOnFirstAttachment(enabled: Boolean)
     suspend fun setAutoOpenScannedExpense(enabled: Boolean)

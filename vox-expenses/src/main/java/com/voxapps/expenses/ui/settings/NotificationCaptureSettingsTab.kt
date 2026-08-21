@@ -113,6 +113,7 @@ fun NotificationCaptureSettingsTab(
     bankingSourcePackages: Set<String>,
     autoAcceptNotificationExpenses: Boolean,
     notificationModelUse: String,
+    notificationAssumedDirection: String,
     stateManager: ExpensesStateManager,
     settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
@@ -383,6 +384,46 @@ fun NotificationCaptureSettingsTab(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Only where it can act. With the text going to a model, the model answers the direction
+        // and this never runs — showing it there would offer a choice with no effect.
+        if (notificationModelUse == ExpensesSettings.NOTIFICATION_MODEL_NONE) {
+            SettingsSectionCard(languageManager.getString("notification_assumed_direction_label")) {
+                Text(
+                    languageManager.getString("notification_assumed_direction_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val assumptions = listOf(
+                    ExpensesSettings.ASSUME_NOTHING to "notification_assume_nothing",
+                    ExpensesSettings.ASSUME_OUTGOING to "notification_assume_outgoing",
+                    ExpensesSettings.ASSUME_INCOMING to "notification_assume_incoming"
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for ((mode, key) in assumptions) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { stateManager.setNotificationAssumedDirection(mode) },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = notificationAssumedDirection == mode,
+                                onClick = { stateManager.setNotificationAssumedDirection(mode) }
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    languageManager.getString(key + "_desc"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }

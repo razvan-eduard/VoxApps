@@ -80,18 +80,34 @@ class NotificationExpenseFlow(
 
     override suspend fun read(input: CapturedNotification): DeterministicReading<CapturedNotification> {
         val hasAmount = input.amount != null && input.amount > 0.0
+        val assumed = assumedDirection()
         return DeterministicReading(
             fields = input,
             // Below this there is no record to write and nothing to review — which is what makes a
             // promotional message harmless rather than something to be filtered out by rules.
             usable = hasAmount,
-            // Proved means: how much, and that money went out. A direction nobody has confirmed is
-            // exactly the thing this flow refuses to assume.
-            complete = hasAmount &&
-                input.knownPayment &&
-                input.direction == TransactionDirection.OUTGOING
+            // Proved means: how much, and which way the money went. A shape a person has taught
+            // says so itself; otherwise this flow assumes nothing and waits — unless the user has
+            // said what to assume, which is the only thing that lets an untaught shape through.
+            complete = hasAmount && when {
+                input.knownPayment -> input.direction == TransactionDirection.OUTGOING
+                else -> assumed != null
+            }
         )
     }
+
+    /**
+     * What to write when nothing has been taught, or null to wait for a person.
+     *
+     * Only ever consulted for a shape the memory has no verdict on: a taught template outranks it,
+     * and so does a direction the model returned. The assumption is safe to offer only because it
+     * is not final — [commit] links the record to the shape that produced it, so correcting the
+     * direction once is the confirmation that shape never had.
+     */
+    private suspend fun assumedDirection(): TransactionDirection? =
+        ExpensesSettings.assumedDirectionOf(
+            container.settingsRepository.getSnapshot().notificationAssumedDirection
+        )
 
     override suspend fun prompt(reading: DeterministicReading<CapturedNotification>, asks: AskScope): String {
         val f = reading.fields
@@ -171,7 +187,15 @@ class NotificationExpenseFlow(
             category = parsed?.category.orRead(category?.name),
             date = null,
             time = null,
-            items = emptyList()
+            items = emptyList(),
+            // Named rather than defaulted. Three sources, in order of what they are worth: a
+            // direction the model returned, then one a person taught for this shape, then the
+            // assumption — and if there is none, the type's own default stands, which is the case
+            // this flow only reaches for a shape already confirmed as outgoing.
+            direction = parsed?.direction
+                ?: f?.direction
+                ?: assumedDirection()
+                ?: TransactionDirection.OUTGOING
         )
         // Two conditions, and the record is filed only when both hold.
         //
