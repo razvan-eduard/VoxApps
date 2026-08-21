@@ -50,6 +50,11 @@ import com.voxapps.expenses.data.RemapRuleEntity
 import com.voxapps.expenses.data.RemapRuleJson
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.localization.LanguageManager
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Spacer
 
 /** The green the editor uses for a selected field's border and glow. */
 private val SelectedGlow = Color(0xFF4CAF50)
@@ -215,65 +220,6 @@ private val FuzzStepColors = listOf(Color(0xFF4CAF50), Color(0xFFFFA000), Color(
 private fun fuzzLevelColor(level: Int): Color =
     FuzzStepColors.getOrElse(level - 1) { FuzzStepColors.last() }
 
-/** Lookalike substitutions in the OCR/notification-garble style — the exact mangling fuzzy
- *  matching exists to absorb, so demonstration text reads like the real failure it forgives. */
-private val GarbleMap = mapOf(
-    'o' to '0', 'i' to '1', 'l' to '1', 'e' to '3', 'a' to '4',
-    's' to '5', 'b' to '8', 't' to '7', 'g' to '9', 'z' to '2'
-)
-
-private fun garbleChar(c: Char): Char {
-    GarbleMap[c.lowercaseChar()]?.let { return it }
-    if (c.isDigit()) return if (c == '9') '0' else c + 1
-    val shifted = c.lowercaseChar() - 1
-    return if (c.isUpperCase()) shifted.uppercaseChar() else shifted
-}
-
-/**
- * Variants of [word] that fuzz [level] would still accept — flashed over the trigger field so a
- * chosen level is demonstrated on the user's own text instead of described in the abstract. Two
- * examples per stage, one per thing the stage tolerates: level 0 shows case variants (exact
- * matching is case- and diacritic-insensitive), level 1 two different small typos, levels 2 and 3
- * a lookalike garble at that level's edit budget PLUS the word embedded in a longer name via
- * [containedTemplate] — containment starts matching at level 2. Garbles stay within the exact
- * length-relative Levenshtein budget the matcher grants the level, so every flashed example sits
- * at the boundary of what would still be rewritten.
- */
-private fun fuzzExamples(word: String, level: Int, containedTemplate: String): List<String> {
-    val trimmed = word.trim()
-    if (trimmed.isEmpty()) return emptyList()
-    return when (level) {
-        0 -> listOf(trimmed.uppercase(), trimmed.lowercase())
-            .filter { it != trimmed }
-            .distinct()
-            .ifEmpty { listOf(trimmed.uppercase()) }
-        1 -> listOf(
-            garbled(trimmed, 0.15, fromEnd = false),
-            garbled(trimmed, 0.15, fromEnd = true)
-        ).distinct()
-        else -> listOf(
-            garbled(trimmed, if (level == 2) 0.3 else 0.45, fromEnd = false),
-            containedTemplate.format(trimmed)
-        )
-    }
-}
-
-private fun garbled(word: String, ratio: Double, fromEnd: Boolean): String {
-    val edits = maxOf(1, (word.length * ratio).toInt())
-    val mutable = word.indices.filter { word[it].isLetterOrDigit() }
-    if (mutable.isEmpty()) return word
-    val chars = word.toCharArray()
-    val step = mutable.size.toDouble() / edits
-    (0 until edits)
-        .map { i ->
-            val slot = minOf(mutable.size - 1, (i * step + step / 2).toInt())
-            mutable[if (fromEnd) mutable.size - 1 - slot else slot]
-        }
-        .toSet()
-        .forEach { idx -> chars[idx] = garbleChar(chars[idx]) }
-    return String(chars)
-}
-
 /**
  * The three-dot fuzziness selector: taps cycle 0→1→2→3→0. Each dot wears its step's risk color
  * when lit. Every user tap also floats the new level's name up from the dots and fades it — the
@@ -340,6 +286,39 @@ private fun FuzzDots(
  * value grayed; tapped, it expands into a live input with a green border and glow. [expanded]
  * content for non-text values (the category picklist) replaces the text field when provided.
  */
+/**
+ * The button that grows a rule: it offers only what the rule does not already use, and disappears
+ * once nothing is left to add.
+ *
+ * A rule is written by naming the few fields that matter, so the fields it does not name should not
+ * be on screen competing for attention. This is what replaces having them all drawn and greyed.
+ */
+@Composable
+private fun AddPropertyButton(
+    label: String,
+    available: List<Pair<String, String>>,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (available.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        TextButton(onClick = { open = true }) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.size(6.dp))
+            Text(label)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            available.forEach { (id, text) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = { onPick(id); open = false }
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun RuleFieldSlot(
     label: String,
@@ -453,6 +432,14 @@ private fun RemapRuleEditSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            AddPropertyButton(
+                label = languageManager.getString("remap_rule_add_property"),
+                available = ExpenseRemapFields.matchFields
+                    .filterNot { it.id in matchValues }
+                    .map { it.id to languageManager.getString(it.labelKey) },
+                onPick = { matchValues = matchValues + (it to "") }
+            )
+
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     languageManager.getString("remap_rule_when_fields_label"),
@@ -465,9 +452,21 @@ private fun RemapRuleEditSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            ExpenseRemapFields.matchFields.forEach { field ->
-                val selected = field.id in matchValues
-                val triggerText = matchValues[field.id].orEmpty()
+            // Only what the rule actually uses. Drawing every field greyed out put the whole
+            // vocabulary on screen at once and made a two-field rule look like a form left mostly
+            // blank; a rule is easier to read when it shows what it says and nothing else.
+            ExpenseRemapFields.matchFields.filter { it.id in matchValues }.forEach { field ->
+                val selected = true
+                val isAmount = field.id == ExpenseRemapFields.ID_AMOUNT
+                // Stored as cents so two spellings of one figure are one trigger; shown as the
+                // figure, because nobody thinks in cents. What is typed is kept as typed while the
+                // box has focus — canonicalising every keystroke would fight the person mid-number.
+                var amountText by remember(field.id) {
+                    mutableStateOf(
+                        matchValues[field.id]?.toLongOrNull()?.let { c -> "%.2f".format(c / 100.0) }.orEmpty()
+                    )
+                }
+                val triggerText = if (isAmount) amountText else matchValues[field.id].orEmpty()
                 // Level demonstration flash: cycling the dots pulses a garbled-but-still-matching
                 // variant of the typed trigger over the field, then fades it away — the typed word
                 // itself is never touched.
@@ -499,7 +498,15 @@ private fun RemapRuleEditSheet(
                                 matchValues = matchValues - field.id
                                 fuzzLevels = fuzzLevels - field.id
                             },
-                            onValueChange = { matchValues = matchValues + (field.id to it) },
+                            onValueChange = { typed ->
+                                if (isAmount) {
+                                    amountText = typed
+                                    matchValues = matchValues + (field.id to
+                                        (ExpenseRemapFields.amountKeyOf(typed) ?: ""))
+                                } else {
+                                    matchValues = matchValues + (field.id to typed)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                         flash?.let { (examples, level) ->
@@ -535,7 +542,9 @@ private fun RemapRuleEditSheet(
                             }
                         }
                     }
-                    FuzzDots(
+                    // No fuzziness on a figure: 160 and 168 are not a near miss, they are a
+                    // different transaction, and a level that forgave one edit would say otherwise.
+                    if (!isAmount) FuzzDots(
                         level = fuzzLevels[field.id] ?: 0,
                         // Gray until the trigger box carries text — a level without a word to
                         // fuzz around demonstrates nothing and matches nothing.
@@ -543,7 +552,7 @@ private fun RemapRuleEditSheet(
                         onCycle = {
                             val next = ((fuzzLevels[field.id] ?: 0) + 1) % 4
                             fuzzLevels = fuzzLevels + (field.id to next)
-                            flash = fuzzExamples(
+                            flash = com.voxapps.textmatch.FuzzExamples.forLevel(
                                 triggerText,
                                 next,
                                 languageManager.getString("remap_fuzz_contained_example")
@@ -561,7 +570,7 @@ private fun RemapRuleEditSheet(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.alpha(if (hasTrigger) 1f else 0.4f)
             )
-            ExpenseRemapFields.setFields(categories).forEach { field ->
+            ExpenseRemapFields.setFields(categories).filter { it.id in setValues }.forEach { field ->
                 RuleFieldSlot(
                     label = languageManager.getString(field.labelKey),
                     value = if (field.id == ExpenseRemapFields.ID_CATEGORY_ID) {
@@ -600,6 +609,14 @@ private fun RemapRuleEditSheet(
             }
 
             HorizontalDivider()
+            AddPropertyButton(
+                label = languageManager.getString("remap_rule_add_property"),
+                available = ExpenseRemapFields.setFields(categories)
+                    .filterNot { it.id in setValues }
+                    .map { it.id to languageManager.getString(it.labelKey) },
+                onPick = { setValues = setValues + (it to "") }
+            )
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
                     Text(languageManager.getString("cancel"))

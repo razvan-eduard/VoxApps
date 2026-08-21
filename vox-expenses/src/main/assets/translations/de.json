@@ -539,5 +539,6 @@
   "notification_assume_outgoing": "Ausgang annehmen",
   "notification_assume_outgoing_desc": "Wird als Zahlung gespeichert. Der übliche Fall.",
   "notification_assume_incoming": "Eingang annehmen",
-  "notification_assume_incoming_desc": "Wird als Eingang gespeichert, für ein Konto, das überwiegend empfängt."
+  "notification_assume_incoming_desc": "Wird als Eingang gespeichert, für ein Konto, das überwiegend empfängt.",
+  "remap_rule_add_property": "Eigenschaft hinzufügen"
 }

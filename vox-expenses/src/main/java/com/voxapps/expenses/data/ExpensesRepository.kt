@@ -556,7 +556,10 @@ class ExpensesRepository(
             val active = remapRuleDao.getAll().filter { it.enabled }.map { it.toRemapRule() }
             if (active.isNotEmpty()) {
                 val draft = ExpenseRemapFields.engine(cats).apply(
-                    ExpenseRemapFields.Draft(effTitle, effVendor, effBank, effLocation, effComments, spokenCategory), active
+                    ExpenseRemapFields.Draft(
+                        totalAmount, effTitle, effVendor, effBank, effLocation, effComments, spokenCategory
+                    ),
+                    active
                 )
                 effTitle = draft.title; effVendor = draft.vendor; effBank = draft.bank
                 effLocation = draft.location; effComments = draft.comments

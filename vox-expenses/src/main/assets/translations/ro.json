@@ -539,5 +539,6 @@
   "notification_assume_outgoing": "Presupune bani ieșiți",
   "notification_assume_outgoing_desc": "Se salvează ca plată. Cazul obișnuit.",
   "notification_assume_incoming": "Presupune bani intrați",
-  "notification_assume_incoming_desc": "Se salvează ca sumă încasată, pentru un cont care mai ales primește."
+  "notification_assume_incoming_desc": "Se salvează ca sumă încasată, pentru un cont care mai ales primește.",
+  "remap_rule_add_property": "Adaugă proprietate"
 }

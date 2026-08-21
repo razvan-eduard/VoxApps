@@ -539,5 +539,6 @@
   "notification_assume_outgoing": "Supposer une sortie",
   "notification_assume_outgoing_desc": "Enregistré comme paiement. Le cas habituel.",
   "notification_assume_incoming": "Supposer une entrée",
-  "notification_assume_incoming_desc": "Enregistré comme montant reçu, pour un compte qui reçoit surtout."
+  "notification_assume_incoming_desc": "Enregistré comme montant reçu, pour un compte qui reçoit surtout.",
+  "remap_rule_add_property": "Ajouter une propriété"
 }
