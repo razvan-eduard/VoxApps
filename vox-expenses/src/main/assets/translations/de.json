@@ -531,5 +531,13 @@
   "flow_send_everything_desc": "Das ganze Dokument, für die bestmögliche Antwort.",
   "scan_fill_head": "Hauptfelder automatisch ausfüllen",
   "scan_fill_body": "Positionen automatisch ausfüllen",
-  "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben."
+  "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben.",
+  "notification_assumed_direction_label": "Wenn noch nichts bekannt ist",
+  "notification_assumed_direction_desc": "Ohne Modell sagt eine nie bestätigte Nachrichtenform nichts darüber, wohin das Geld ging. Mit einer Annahme wird sofort gespeichert — korrigierst du sie einmal am Eintrag, ist die Form gelernt; beim zweiten Mal antwortet sie selbst.",
+  "notification_assume_nothing": "Nichts annehmen",
+  "notification_assume_nothing_desc": "Eine unbestätigte Form wartet auf deine Prüfung.",
+  "notification_assume_outgoing": "Ausgang annehmen",
+  "notification_assume_outgoing_desc": "Wird als Zahlung gespeichert. Der übliche Fall.",
+  "notification_assume_incoming": "Eingang annehmen",
+  "notification_assume_incoming_desc": "Wird als Eingang gespeichert, für ein Konto, das überwiegend empfängt."
 }

@@ -6,6 +6,7 @@ import com.voxapps.recordflow.LlmLevel
 import com.voxapps.recordflow.RecordSource
 
 import androidx.compose.runtime.Immutable
+import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
@@ -101,6 +102,18 @@ data class ExpensesSettings(
      * and let a person confirm it", which is what the pending-review queue already exists for.
      */
     val notificationModelUse: String = NOTIFICATION_MODEL_FULL,
+    /**
+     * Which way to assume the money went when no model is asked and no template has been taught —
+     * see [ASSUME_NOTHING] and its siblings.
+     *
+     * Off by default, because assuming is exactly what the offline path was built not to do. What
+     * makes it offerable at all is that the assumption is not final: the record is written linked to
+     * the message shape that produced it, so correcting its direction once is the confirmation that
+     * shape never had, and the second correction settles it for good. An assumption a person can
+     * overturn by editing the thing in front of them is a different proposition from one buried in a
+     * setting.
+     */
+    val notificationAssumedDirection: String = ASSUME_NOTHING,
     val scheduledMergeInterval: String = INTERVAL_OFF,
     val scheduledExpenseDedupInterval: String = INTERVAL_OFF,
     val homeCurrency: String = DEFAULT_CURRENCY,
@@ -334,6 +347,29 @@ data class ExpensesSettings(
         const val NOTIFICATION_MODEL_NONE = "NONE"
 
         val NOTIFICATION_MODEL_CHOICES = listOf(NOTIFICATION_MODEL_FULL, NOTIFICATION_MODEL_NONE)
+
+        /** Nothing is assumed: an unconfirmed shape waits for a person. The original behaviour. */
+        const val ASSUME_NOTHING = "NOTHING"
+
+        /** Money left the account unless a template says otherwise — the common case by far. */
+        const val ASSUME_OUTGOING = "OUTGOING"
+
+        /** Money arrived. For an account that mostly receives. */
+        const val ASSUME_INCOMING = "INCOMING"
+
+        val ASSUMED_DIRECTION_CHOICES = listOf(ASSUME_NOTHING, ASSUME_OUTGOING, ASSUME_INCOMING)
+
+        /**
+         * The stored setting as a direction, or null for "assume nothing".
+         *
+         * A taught template always outranks this: the assumption answers only where nobody has said
+         * anything yet.
+         */
+        fun assumedDirectionOf(stored: String): TransactionDirection? = when (stored) {
+            ASSUME_OUTGOING -> TransactionDirection.OUTGOING
+            ASSUME_INCOMING -> TransactionDirection.INCOMING
+            else -> null
+        }
 
         /**
          * What this app can honestly do with a captured notification.

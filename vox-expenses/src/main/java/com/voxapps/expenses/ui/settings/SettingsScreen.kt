@@ -379,6 +379,7 @@ fun SettingsScreen(
                 bankingSourcePackages = settings.bankingSourcePackages,
                 autoAcceptNotificationExpenses = settings.autoAcceptNotificationExpenses,
                     notificationModelUse = settings.notificationModelUse,
+                    notificationAssumedDirection = settings.notificationAssumedDirection,
                 stateManager = stateManager,
                 settingsRepo = settingsRepo,
                 modifier = mod

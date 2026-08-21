@@ -180,6 +180,7 @@ class ExpensesStateManager(
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanModelUse(mode: String) { scope.launch { settingsRepo.setScanModelUse(mode) } }
     fun setNotificationModelUse(mode: String) { scope.launch { settingsRepo.setNotificationModelUse(mode) } }
+    fun setNotificationAssumedDirection(mode: String) { scope.launch { settingsRepo.setNotificationAssumedDirection(mode) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
     fun setAutoRescanOnFirstAttachment(enabled: Boolean) { scope.launch { settingsRepo.setAutoRescanOnFirstAttachment(enabled) } }
     fun setAutoOpenScannedExpense(enabled: Boolean) { scope.launch { settingsRepo.setAutoOpenScannedExpense(enabled) } }

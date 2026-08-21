@@ -36,6 +36,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val AUTO_CREATE_VOICE_CATEGORY = booleanPreferencesKey("auto_create_voice_category")
         val SCAN_MODEL_USE = stringPreferencesKey("scan_model_use")
         val NOTIFICATION_MODEL_USE = stringPreferencesKey("notification_model_use")
+        val NOTIFICATION_ASSUMED_DIRECTION = stringPreferencesKey("notification_assumed_direction")
         val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
         val SCHEDULED_EXPENSE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_expense_dedup_interval")
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
@@ -115,6 +116,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             notificationModelUse = prefs[Keys.NOTIFICATION_MODEL_USE]
                 ?.takeIf { it in ExpensesSettings.NOTIFICATION_MODEL_CHOICES }
                 ?: ExpensesSettings.NOTIFICATION_MODEL_FULL,
+            notificationAssumedDirection = prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION]
+                ?.takeIf { it in ExpensesSettings.ASSUMED_DIRECTION_CHOICES }
+                ?: ExpensesSettings.ASSUME_NOTHING,
             scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
@@ -248,6 +252,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setNotificationModelUse(mode: String) {
         if (mode !in ExpensesSettings.NOTIFICATION_MODEL_CHOICES) return
         dataStore.edit { it[Keys.NOTIFICATION_MODEL_USE] = mode }
+    }
+
+    override suspend fun setNotificationAssumedDirection(mode: String) {
+        if (mode !in ExpensesSettings.ASSUMED_DIRECTION_CHOICES) return
+        dataStore.edit { it[Keys.NOTIFICATION_ASSUMED_DIRECTION] = mode }
     }
 
     override suspend fun setScheduledExpenseDedupInterval(interval: String) {
@@ -516,6 +525,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] = settings.autoCreateVoiceCategory
             prefs[Keys.SCAN_MODEL_USE] = settings.scanModelUse
             prefs[Keys.NOTIFICATION_MODEL_USE] = settings.notificationModelUse
+            prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION] = settings.notificationAssumedDirection
             prefs[Keys.SCHEDULED_MERGE_INTERVAL] = settings.scheduledMergeInterval
             prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] = settings.scheduledExpenseDedupInterval
             prefs[Keys.HOME_CURRENCY] = settings.homeCurrency
