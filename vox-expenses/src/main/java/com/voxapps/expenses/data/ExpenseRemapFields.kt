@@ -29,9 +29,12 @@ object ExpenseRemapFields {
     const val ID_LOCATION = ExpenseRuleFields.ID_LOCATION
     const val ID_COMMENTS = ExpenseRuleFields.ID_COMMENTS
     const val ID_CATEGORY = "category"
+    const val ID_AMOUNT = "totalAmount"
     const val ID_CATEGORY_ID = ExpenseRuleFields.ID_CATEGORY_ID
 
     data class Draft(
+        /** Match-only, and never written — see the class note on why facts are not re-mapped. */
+        val totalAmount: Double? = null,
         val title: String?,
         val vendor: String?,
         val bank: String?,
@@ -41,7 +44,26 @@ object ExpenseRemapFields {
         val categoryId: Long? = null
     )
 
+    /**
+     * An amount as text the engine can compare.
+     *
+     * The engine matches normalized strings, so a number needs one spelling or 160 and 160.00 are
+     * different triggers. Cents, as a plain integer: no separator to disagree about, no rounding to
+     * argue with, and equality means the same thing on both sides. The editor writes the user's
+     * typing through the same function, so what is stored is what a record will be compared against.
+     */
+    fun amountKey(value: Double?): String? =
+        value?.takeIf { it > 0.0 }?.let { Math.round(it * 100).toString() }
+
+    /** Parses what a person typed — "160", "160.5", "160,50" — into [amountKey]'s form. */
+    fun amountKeyOf(typed: String): String? =
+        amountKey(typed.trim().replace(',', '.').toDoubleOrNull())
+
     val matchFields: List<RemapMatchField<Draft>> = listOf(
+        // Triggering on an amount is not re-mapping it: the rule reads the figure and writes
+        // something descriptive. Setting one would be a falsification, which is why this field
+        // appears here and has no counterpart in setFields.
+        RemapMatchField(ID_AMOUNT, "duplicate_rule_field_amount") { amountKey(it.totalAmount) },
         RemapMatchField(ID_TITLE, "duplicate_rule_field_title") { it.title },
         RemapMatchField(ID_VENDOR, "duplicate_rule_field_vendor") { it.vendor },
         RemapMatchField(ID_BANK, "duplicate_rule_field_bank") { it.bank },

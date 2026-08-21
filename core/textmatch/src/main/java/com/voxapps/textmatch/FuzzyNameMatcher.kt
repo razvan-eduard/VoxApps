@@ -60,13 +60,28 @@ object FuzzyNameMatcher {
         ) {
             return true
         }
-        val ratio = when (level) {
-            1 -> 0.15
-            2 -> 0.3
-            else -> 0.45
-        }
-        return levenshtein(normA, normB) <= maxOf(1, (maxOf(normA.length, normB.length) * ratio).toInt())
+        return levenshtein(normA, normB) <= editBudget(maxOf(normA.length, normB.length), level)
     }
+
+    /**
+     * The share of a string [level] forgives, and the edits that comes to over [length].
+     *
+     * Public because a level is not only applied, it is also *shown*: the rule editor flashes
+     * spellings that would still match, so the person choosing a level sees it on their own text.
+     * Generating those from a second copy of this arithmetic is how a demonstration comes to lie —
+     * change the budget here and the examples keep promising matches that no longer happen. One
+     * declaration, two readers; see `FuzzExamples`.
+     */
+    fun budgetRatio(level: Int): Double = when (level) {
+        1 -> 0.15
+        2 -> 0.3
+        else -> 0.45
+    }
+
+    fun editBudget(length: Int, level: Int): Int = maxOf(1, (length * budgetRatio(level)).toInt())
+
+    /** Below this level, a name embedded in a longer one is not a match — see [namesMatchLeveled]. */
+    const val CONTAINMENT_FROM_LEVEL = 2
 
     fun resolve(spokenName: String?, candidates: List<Candidate>, defaultId: Long?): Resolved {
         val spoken = spokenName?.trim()?.takeIf { it.isNotEmpty() }

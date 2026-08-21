@@ -539,5 +539,6 @@
   "notification_assume_outgoing": "Assume money left",
   "notification_assume_outgoing_desc": "Saved as a payment. The usual case.",
   "notification_assume_incoming": "Assume money arrived",
-  "notification_assume_incoming_desc": "Saved as an incoming amount, for an account that mostly receives."
+  "notification_assume_incoming_desc": "Saved as an incoming amount, for an account that mostly receives.",
+  "remap_rule_add_property": "Add property"
 }
