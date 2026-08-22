@@ -78,17 +78,37 @@ class NotificationExpenseFlow(
     override val support: FlowSupport = ExpensesSettings.NOTIFICATION_FLOW_SUPPORT
     override val taskId = LlmTasks.NOTIFICATION_EXPENSE_PARSE
 
+    /**
+     * Whether this capture ended up anywhere, and where.
+     *
+     * [com.voxapps.recordflow.RecordFlow.Outcome] cannot answer this on its own: a commit that
+     * queued for review returns null, which reads as `Discarded` from outside even though the
+     * capture was kept. The distinction only matters to a caller about to do something
+     * irreversible to the source notification, so it is recorded here rather than widened into
+     * the shared contract — and NOTHING is the answer until something says otherwise.
+     */
+    enum class Kept { NOTHING, REVIEW, RECORD }
+
+    var kept: Kept = Kept.NOTHING
+        private set
+
     override suspend fun read(input: CapturedNotification): DeterministicReading<CapturedNotification> {
         val hasAmount = input.amount != null && input.amount > 0.0
-        val assumed = assumedDirection()
+        val settings = container.settingsRepository.getSnapshot()
+        val assumed = ExpensesSettings.assumedDirectionOf(settings.notificationAssumedDirection)
         return DeterministicReading(
             fields = input,
-            // Below this there is no record to write and nothing to review — which is what makes a
-            // promotional message harmless rather than something to be filtered out by rules.
-            usable = hasAmount,
+            // An amount is what tells a payment from an advertisement, so by default a message
+            // without one is nothing to keep — that, rather than a list of rules, is what makes a
+            // promotional message harmless. Some senders do announce a payment and leave the sum
+            // out, though, and for those the capture is worth keeping unfinished; it is opt-in
+            // because the cost of being wrong is every promotion landing in review.
+            usable = hasAmount || settings.captureAmountlessPayments,
             // Proved means: how much, and which way the money went. A shape a person has taught
             // says so itself; otherwise this flow assumes nothing and waits — unless the user has
             // said what to assume, which is the only thing that lets an untaught shape through.
+            // Never complete without a figure, whatever else is known: an assumption may supply a
+            // direction, but nothing here may supply the sum.
             complete = hasAmount && when {
                 input.knownPayment -> input.direction == TransactionDirection.OUTGOING
                 else -> assumed != null
@@ -225,6 +245,7 @@ class NotificationExpenseFlow(
             imageName = null,
             preParse = null
         )
+        kept = Kept.RECORD
         // The same link the model path writes, so editing the record still teaches its template.
         f?.templateHash?.let { container.templateDirectionMemory.linkRecord(newId, it) }
         Logger.d(
@@ -241,7 +262,9 @@ class NotificationExpenseFlow(
     ) {
         val settings = container.settingsRepository.getSnapshot()
         val f = reading?.fields
-        val amount = parsed?.totalAmount ?: f?.amount ?: return
+        // No early return on a missing amount any more: the entry is exactly what the review list
+        // is for, and the figure is the one thing a person supplies there in a second.
+        val amount = parsed?.totalAmount ?: f?.amount
         val category = container.expensesRepository.defaultCategory()
         container.pendingNotificationExpenseRepository.addPending(
             PendingNotificationExpense(
@@ -260,6 +283,7 @@ class NotificationExpenseFlow(
                 templateHash = f?.templateHash
             )
         )
+        kept = Kept.REVIEW
         Logger.d(TAG, "Queued for review: $amount")
     }
 

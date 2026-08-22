@@ -27,6 +27,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import com.voxapps.expenses.domain.recurring.RecurringPaymentRepository
 import org.junit.Before
 import org.junit.Test
 
@@ -38,6 +39,7 @@ class ExpensesExportImportHandlerTest {
     private lateinit var expensesRepo: ExpensesRepository
     private lateinit var attachmentDao: AttachmentDao
     private lateinit var duplicateRuleDao: DuplicateRuleDao
+    private lateinit var recurringPaymentRepo: RecurringPaymentRepository
     private lateinit var handler: ExpensesExportImportHandler
 
     @Before
@@ -48,9 +50,11 @@ class ExpensesExportImportHandlerTest {
         expensesRepo = mockk()
         attachmentDao = mockk(relaxed = true)
         duplicateRuleDao = mockk(relaxed = true)
+        recurringPaymentRepo = mockk(relaxed = true)
+        coEvery { recurringPaymentRepo.snapshot() } returns emptyList()
         handler = ExpensesExportImportHandler(
             context, settingsRepo, sessionManager, expensesRepo, attachmentDao, duplicateRuleDao,
-            "The expenses are locked. Unlock the app."
+            recurringPaymentRepo, "The expenses are locked. Unlock the app."
         )
 
         every { settingsRepo.getSnapshot() } returns ExpensesSettings(isBiometricRequired = false)

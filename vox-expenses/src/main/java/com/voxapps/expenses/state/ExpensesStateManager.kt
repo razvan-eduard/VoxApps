@@ -59,6 +59,7 @@ class ExpensesStateManager(
     private val pendingCategoryMergeRepo: PendingCategoryMergeRepository,
     private val expenseDeduplicationRepo: ExpenseDeduplicationRepository,
     private val pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
+    private val recurringPaymentRepo: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository,
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
     private val templateDirectionMemory: com.voxapps.expenses.domain.llm.TemplateDirectionMemory,
@@ -180,6 +181,7 @@ class ExpensesStateManager(
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanModelUse(mode: String) { scope.launch { settingsRepo.setScanModelUse(mode) } }
     fun setNotificationModelUse(mode: String) { scope.launch { settingsRepo.setNotificationModelUse(mode) } }
+    fun setCaptureAmountlessPayments(enabled: Boolean) { scope.launch { settingsRepo.setCaptureAmountlessPayments(enabled) } }
     fun setNotificationAssumedDirection(mode: String) { scope.launch { settingsRepo.setNotificationAssumedDirection(mode) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
     fun setAutoRescanOnFirstAttachment(enabled: Boolean) { scope.launch { settingsRepo.setAutoRescanOnFirstAttachment(enabled) } }
@@ -520,12 +522,48 @@ class ExpensesStateManager(
 
     val pendingNotificationExpenses: Flow<List<PendingNotificationExpense>> = pendingNotificationExpenseRepo.pendingFlow
 
-    fun approveNotificationExpense(entry: PendingNotificationExpense, context: Context? = null) {
+    /** Everything noticed about payments that come back — observations first, then arrangements. */
+    val recurringPayments: Flow<List<com.voxapps.expenses.data.RecurringPayment>> =
+        recurringPaymentRepo.all
+
+    /** What has repeated often enough to be worth asking about, at the threshold you chose. */
+    suspend fun recurringProposals(): List<com.voxapps.expenses.data.RecurringPayment> =
+        recurringPaymentRepo.proposals(settingsRepo.getSnapshot().recurringProposalThreshold)
+
+    /** Arrangements that have gone quiet for as many cycles as it took to propose them. */
+    suspend fun recurringGoneQuiet(): List<com.voxapps.expenses.data.RecurringPayment> =
+        recurringPaymentRepo.stale(settingsRepo.getSnapshot().recurringProposalThreshold)
+
+    fun confirmRecurringPayment(id: Long) { scope.launch { recurringPaymentRepo.confirm(id) } }
+
+    /** Also the answer to "this has stopped": dismissing is what a person says once, and it is not
+     *  asked again. */
+    fun dismissRecurringPayment(id: Long) { scope.launch { recurringPaymentRepo.dismiss(id) } }
+
+    fun setDismissNotificationOnCapture(enabled: Boolean) { scope.launch { settingsRepo.setDismissNotificationOnCapture(enabled) } }
+
+    fun setRecurringProposalThreshold(times: Int) { scope.launch { settingsRepo.setRecurringProposalThreshold(times) } }
+
+    fun setRecurringRemindersEnabled(enabled: Boolean) { scope.launch { settingsRepo.setRecurringRemindersEnabled(enabled) } }
+
+    /**
+     * Files a reviewed capture.
+     *
+     * An entry that never carried an amount cannot be filed as it stands, and the screen does not
+     * offer to — an expense of nothing is not a record, it is a gap wearing one. The figure the
+     * reviewer typed arrives as [amountOverride], and this refuses rather than inventing a zero.
+     */
+    fun approveNotificationExpense(
+        entry: PendingNotificationExpense,
+        context: Context? = null,
+        amountOverride: Double? = null
+    ) {
+        val amount = amountOverride ?: entry.totalAmount ?: return
         scope.launch {
             val settings = settingsRepo.getSnapshot()
             val id = expensesRepo.addParsedExpense(
                 title = entry.title,
-                totalAmount = entry.totalAmount,
+                totalAmount = amount,
                 currencyCode = entry.currency,
                 vendor = entry.vendor,
                 bank = entry.bank,

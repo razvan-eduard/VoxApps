@@ -38,6 +38,18 @@ const val DUPLICATE_ENTRY_RESULT = -2L
 const val NEAR_DUPLICATE_MERGED_RESULT = -3L
 
 /**
+ * The row was already there — [Expense.uid] is unique, and something tried to write the same record
+ * twice.
+ *
+ * Its own answer rather than a failure, because it is not one: the second write was refused exactly
+ * as intended and the record the user wanted is present. Reporting it as "couldn't save" told people
+ * their payment had been lost while it sat in the list in front of them. A capture can be answered
+ * twice — the request queue re-sends a stored row rather than multiplying it, so one notification can
+ * come back with two replies — and the duplicate insert is how that is caught.
+ */
+const val ALREADY_PRESENT_RESULT = -4L
+
+/**
  * Single write point over the Room DAOs.
  */
 class ExpensesRepository(
@@ -51,7 +63,10 @@ class ExpensesRepository(
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
     private val pendingFieldSuggestionDao: PendingFieldSuggestionDao,
-    private val fieldCorrectionMemory: FieldCorrectionMemory
+    private val fieldCorrectionMemory: FieldCorrectionMemory,
+    /** Notices that payments to a vendor keep coming back. Nothing it records changes this record;
+     *  it only counts, and only a person turns a count into an arrangement. */
+    private val recurringPayments: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository? = null
 ) {
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
@@ -389,6 +404,21 @@ class ExpensesRepository(
             val id = expenseDao.insert(candidate)
             if (id > 0) {
                 Logger.d("ExpensesRepository", "DB Insert SUCCESS - ID: $id")
+                // Counted after the write, never before: a payment that failed to store is not a
+                // payment, and evidence gathered from one would propose an arrangement built on a
+                // record nobody has. Failure here must not lose the expense either, which is why it
+                // is guarded — noticing a pattern is worth nothing beside keeping what was spent.
+                if (candidate.direction == TransactionDirection.OUTGOING) {
+                    runCatching {
+                        recurringPayments?.observe(
+                            vendor = candidate.vendor,
+                            atMillis = candidate.dateTime,
+                            amount = candidate.totalAmount,
+                            currency = candidate.currencyCode,
+                            categoryId = candidate.categoryId
+                        )
+                    }.onFailure { Logger.w("ExpensesRepository", "Recurrence bookkeeping failed: ${it.message}") }
+                }
                 if (items.isNotEmpty()) {
                     lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = id, position = index) })
                 }
@@ -407,6 +437,11 @@ class ExpensesRepository(
                 Logger.e("ExpensesRepository", "DB Insert returned invalid ID: $id")
             }
             id
+        } catch (e: android.database.sqlite.SQLiteConstraintException) {
+            // A uid clash means this exact record is already stored; anything else that violates a
+            // constraint is a real failure and falls through to the generic arm below.
+            Logger.d("ExpensesRepository", "Insert refused — this record is already present")
+            ALREADY_PRESENT_RESULT
         } catch (e: Exception) {
             Logger.e("ExpensesRepository", "DB Insert FAILED", e)
             -1L

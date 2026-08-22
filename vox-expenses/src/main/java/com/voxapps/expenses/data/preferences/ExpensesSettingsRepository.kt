@@ -47,6 +47,14 @@ interface ExpensesSettingsRepository {
     suspend fun setNotificationModelUse(mode: String)
     /** See [ExpensesSettings.notificationAssumedDirection]; unknown values are ignored. */
     suspend fun setNotificationAssumedDirection(mode: String)
+    /** See [ExpensesSettings.captureAmountlessPayments]. */
+    suspend fun setCaptureAmountlessPayments(enabled: Boolean)
+    /** See [ExpensesSettings.dismissNotificationOnCapture]. */
+    suspend fun setDismissNotificationOnCapture(enabled: Boolean)
+    /** See [ExpensesSettings.recurringProposalThreshold]; 0 turns proposals off. */
+    suspend fun setRecurringProposalThreshold(times: Int)
+    /** See [ExpensesSettings.recurringRemindersEnabled]. */
+    suspend fun setRecurringRemindersEnabled(enabled: Boolean)
     suspend fun setAttachPhotoOnRetry(enabled: Boolean)
     suspend fun setAutoRescanOnFirstAttachment(enabled: Boolean)
     suspend fun setAutoOpenScannedExpense(enabled: Boolean)

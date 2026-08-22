@@ -114,6 +114,38 @@ data class ExpensesSettings(
      * setting.
      */
     val notificationAssumedDirection: String = ASSUME_NOTHING,
+    /**
+     * Whether a payment message that never says how much is captured at all.
+     *
+     * Off by default, and the default is the interesting part: an amount is what tells a payment
+     * from an advertisement, so without one every promotional message from a watched app becomes a
+     * thing to review. On, the capture is kept and waits for the one figure it lacks — which is
+     * worth it for the senders that announce a payment and leave the sum out ("Plata acceptata"),
+     * and not worth it otherwise.
+     */
+    val captureAmountlessPayments: Boolean = false,
+    /**
+     * How many times a payment must be seen before it is proposed as recurring — and, symmetrically,
+     * how many due dates may pass unpaid before dropping it is proposed.
+     *
+     * One number for both directions on purpose: the evidence it takes to stop believing something
+     * should be the evidence it took to start. Zero switches the whole proposal off.
+     */
+    /**
+     * Whether a captured notification is cleared from the shade once the app has kept it.
+     *
+     * Off by default, and deliberately: this removes a message the app did not write and cannot put
+     * back. Only a capture that actually landed somewhere — a filed expense or a review entry —
+     * qualifies; a message read and discarded stays where its sender put it.
+     */
+    val dismissNotificationOnCapture: Boolean = false,
+
+    val recurringProposalThreshold: Int = 2,
+
+    /** Whether a confirmed arrangement earns a notification a couple of days before it falls due.
+     *  Separate from the threshold above: noticing a pattern and being told about it are different
+     *  things to want, and one is far more intrusive than the other. */
+    val recurringRemindersEnabled: Boolean = true,
     val scheduledMergeInterval: String = INTERVAL_OFF,
     val scheduledExpenseDedupInterval: String = INTERVAL_OFF,
     val homeCurrency: String = DEFAULT_CURRENCY,
@@ -358,6 +390,9 @@ data class ExpensesSettings(
         const val ASSUME_INCOMING = "INCOMING"
 
         val ASSUMED_DIRECTION_CHOICES = listOf(ASSUME_NOTHING, ASSUME_OUTGOING, ASSUME_INCOMING)
+
+        /** Never propose; 2 is the smallest evidence worth calling a pattern. */
+        val RECURRING_THRESHOLD_CHOICES = listOf(0, 2, 3, 4)
 
         /**
          * The stored setting as a direction, or null for "assume nothing".

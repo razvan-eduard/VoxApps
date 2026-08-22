@@ -15,7 +15,13 @@ import org.json.JSONObject
 data class PendingNotificationExpense(
     val id: Long,
     val title: String?,
-    val totalAmount: Double,
+    /**
+     * Null where the message announced a payment without saying how much — "Plata acceptata" and
+     * its kind. The entry is still worth keeping: everything else about it is known, and the one
+     * missing figure is the thing a person can supply in a second. An entry cannot be approved
+     * until it has one.
+     */
+    val totalAmount: Double?,
     val currency: String,
     val vendor: String?,
     val category: String?,
@@ -76,7 +82,7 @@ class PendingNotificationExpenseRepository(context: Context) {
             val o = JSONObject()
             o.put("id", e.id)
             e.title?.let { o.put("title", it) }
-            o.put("totalAmount", e.totalAmount)
+            e.totalAmount?.let { o.put("totalAmount", it) }
             o.put("currency", e.currency)
             e.vendor?.let { o.put("vendor", it) }
             e.category?.let { o.put("category", it) }
@@ -96,7 +102,9 @@ class PendingNotificationExpenseRepository(context: Context) {
             PendingNotificationExpense(
                 id = o.optLong("id"),
                 title = if (o.has("title")) o.optString("title") else null,
-                totalAmount = o.optDouble("totalAmount"),
+                // Absent for an amountless capture; NaN for an entry written before this was
+                // nullable, since optDouble's own default is NaN rather than a missing key.
+                totalAmount = o.optDouble("totalAmount").takeIf { !it.isNaN() },
                 currency = o.optString("currency"),
                 vendor = if (o.has("vendor")) o.optString("vendor") else null,
                 category = if (o.has("category")) o.optString("category") else null,

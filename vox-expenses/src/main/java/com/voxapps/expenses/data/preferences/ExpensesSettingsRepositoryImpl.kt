@@ -37,6 +37,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val SCAN_MODEL_USE = stringPreferencesKey("scan_model_use")
         val NOTIFICATION_MODEL_USE = stringPreferencesKey("notification_model_use")
         val NOTIFICATION_ASSUMED_DIRECTION = stringPreferencesKey("notification_assumed_direction")
+        val CAPTURE_AMOUNTLESS_PAYMENTS = booleanPreferencesKey("capture_amountless_payments")
+        val DISMISS_NOTIFICATION_ON_CAPTURE = booleanPreferencesKey("dismiss_notification_on_capture")
+        val RECURRING_PROPOSAL_THRESHOLD = intPreferencesKey("recurring_proposal_threshold")
+        val RECURRING_REMINDERS_ENABLED = booleanPreferencesKey("recurring_reminders_enabled")
         val SCHEDULED_MERGE_INTERVAL = stringPreferencesKey("scheduled_merge_interval")
         val SCHEDULED_EXPENSE_DEDUP_INTERVAL = stringPreferencesKey("scheduled_expense_dedup_interval")
         val HOME_CURRENCY = stringPreferencesKey("home_currency")
@@ -119,6 +123,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             notificationAssumedDirection = prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION]
                 ?.takeIf { it in ExpensesSettings.ASSUMED_DIRECTION_CHOICES }
                 ?: ExpensesSettings.ASSUME_NOTHING,
+            captureAmountlessPayments = prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] ?: false,
+            dismissNotificationOnCapture = prefs[Keys.DISMISS_NOTIFICATION_ON_CAPTURE] ?: false,
+            recurringProposalThreshold = prefs[Keys.RECURRING_PROPOSAL_THRESHOLD]
+                ?.takeIf { it in ExpensesSettings.RECURRING_THRESHOLD_CHOICES } ?: 2,
+            recurringRemindersEnabled = prefs[Keys.RECURRING_REMINDERS_ENABLED] ?: true,
             scheduledMergeInterval = prefs[Keys.SCHEDULED_MERGE_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             scheduledExpenseDedupInterval = prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] ?: ExpensesSettings.INTERVAL_OFF,
             homeCurrency = prefs[Keys.HOME_CURRENCY] ?: ExpensesSettings.DEFAULT_CURRENCY,
@@ -252,6 +261,23 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setNotificationModelUse(mode: String) {
         if (mode !in ExpensesSettings.NOTIFICATION_MODEL_CHOICES) return
         dataStore.edit { it[Keys.NOTIFICATION_MODEL_USE] = mode }
+    }
+
+    override suspend fun setDismissNotificationOnCapture(enabled: Boolean) {
+        dataStore.edit { it[Keys.DISMISS_NOTIFICATION_ON_CAPTURE] = enabled }
+    }
+
+    override suspend fun setRecurringProposalThreshold(times: Int) {
+        if (times !in ExpensesSettings.RECURRING_THRESHOLD_CHOICES) return
+        dataStore.edit { it[Keys.RECURRING_PROPOSAL_THRESHOLD] = times }
+    }
+
+    override suspend fun setRecurringRemindersEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.RECURRING_REMINDERS_ENABLED] = enabled }
+    }
+
+    override suspend fun setCaptureAmountlessPayments(enabled: Boolean) {
+        dataStore.edit { it[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = enabled }
     }
 
     override suspend fun setNotificationAssumedDirection(mode: String) {
@@ -526,6 +552,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.SCAN_MODEL_USE] = settings.scanModelUse
             prefs[Keys.NOTIFICATION_MODEL_USE] = settings.notificationModelUse
             prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION] = settings.notificationAssumedDirection
+            prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = settings.captureAmountlessPayments
+            prefs[Keys.DISMISS_NOTIFICATION_ON_CAPTURE] = settings.dismissNotificationOnCapture
+            prefs[Keys.RECURRING_PROPOSAL_THRESHOLD] = settings.recurringProposalThreshold
+            prefs[Keys.RECURRING_REMINDERS_ENABLED] = settings.recurringRemindersEnabled
             prefs[Keys.SCHEDULED_MERGE_INTERVAL] = settings.scheduledMergeInterval
             prefs[Keys.SCHEDULED_EXPENSE_DEDUP_INTERVAL] = settings.scheduledExpenseDedupInterval
             prefs[Keys.HOME_CURRENCY] = settings.homeCurrency

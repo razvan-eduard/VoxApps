@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,7 +72,7 @@ import com.voxapps.design.settings.LogsTabStrings
 private enum class SettingsPage {
     MENU, GENERAL, SCANNING, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP,
     CLEANUP_DUPLICATES, CLEANUP_CORRECTIONS, CLEANUP_REMAP, CLEANUP_TEMPLATES,
-    CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, BACKUP, LOGS
+    CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, RECURRING, BACKUP, LOGS
 }
 
 /** Where each page's back arrow leads — the cleanup subpages return to their submenu, everything
@@ -98,6 +99,7 @@ fun SettingsScreen(
     val categories = (ui as? ExpensesUiState.Unlocked)?.categories ?: emptyList()
     val expenses = (ui as? ExpensesUiState.Unlocked)?.expenses?.map { it.expense } ?: emptyList()
     val spendingLimits by stateManager.spendingLimits.collectAsStateWithLifecycle(initialValue = emptyList())
+    val recurringPayments by stateManager.recurringPayments.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var page by remember { mutableStateOf(SettingsPage.MENU) }
 
@@ -108,6 +110,17 @@ fun SettingsScreen(
             val uri = IntentCompat.getParcelableExtra(result.data!!, RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
             stateManager.setNotificationsSoundUri(uri?.toString())
         }
+    }
+
+    val pickSound = {
+        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, languageManager.getString("notifications_sound_label"))
+            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, settings.notificationsSoundUri?.let { Uri.parse(it) })
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+        }
+        ringtonePickerLauncher.launch(intent)
     }
 
     val triggerPreview = { soundOnly: Boolean, overrideVolume: Int?, overrideLength: String?, overrideVibration: Boolean? ->
@@ -141,6 +154,7 @@ fun SettingsScreen(
         SettingsPage.CURRENCY -> languageManager.getString("currency_settings_title")
         SettingsPage.NOTIFICATION_CAPTURE -> languageManager.getString("notification_capture_title")
         SettingsPage.SPENDING_LIMITS -> languageManager.getString("spending_limits_title")
+        SettingsPage.RECURRING -> languageManager.getString("recurring_payments_title")
         SettingsPage.BACKUP -> languageManager.getString("backup_restore_title")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
@@ -217,6 +231,11 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SPENDING_LIMITS }
                 )
                 ListItem(
+                    headlineContent = { Text(languageManager.getString("recurring_payments_title")) },
+                    leadingContent = { Icon(Icons.Filled.Repeat, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.RECURRING }
+                )
+                ListItem(
                     headlineContent = { Text(languageManager.getString("backup_restore_title")) },
                     leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
@@ -287,29 +306,7 @@ fun SettingsScreen(
                 modifier = mod
             )
             SettingsPage.NOTIFICATIONS -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
-                NotificationSettingsCard(
-                    systemDefault = settings.notificationsSystemDefault,
-                    vibrationEnabled = settings.notificationsVibrationEnabled,
-                    soundUri = settings.notificationsSoundUri,
-                    volume = settings.notificationsVolume,
-                    length = settings.notificationsLength,
-                    onSystemDefaultChange = { stateManager.setNotificationsSystemDefault(it) },
-                    onVibrationChange = { stateManager.setNotificationsVibrationEnabled(it) },
-                    onVolumeChange = { stateManager.setNotificationsVolume(it) },
-                    onLengthChange = { stateManager.setNotificationsLength(it) },
-                    onPickSound = {
-                        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, languageManager.getString("notifications_sound_label"))
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, settings.notificationsSoundUri?.let { Uri.parse(it) })
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
-                        }
-                        ringtonePickerLauncher.launch(intent)
-                    },
-                    onPreview = triggerPreview,
-                    getString = { languageManager.getString(it) }
-                )
+                ExpensesNotificationCard(settings, stateManager, languageManager, pickSound, triggerPreview)
             }
             SettingsPage.VOICE -> VoiceSettingsTab(
                 settings = settings,
@@ -380,6 +377,8 @@ fun SettingsScreen(
                 autoAcceptNotificationExpenses = settings.autoAcceptNotificationExpenses,
                     notificationModelUse = settings.notificationModelUse,
                     notificationAssumedDirection = settings.notificationAssumedDirection,
+                    captureAmountlessPayments = settings.captureAmountlessPayments,
+                    dismissNotificationOnCapture = settings.dismissNotificationOnCapture,
                 stateManager = stateManager,
                 settingsRepo = settingsRepo,
                 modifier = mod
@@ -391,6 +390,32 @@ fun SettingsScreen(
                 stateManager = stateManager,
                 modifier = mod
             )
+            SettingsPage.RECURRING -> Column(
+                modifier = Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+            ) {
+                RecurringPaymentsSection(
+                    payments = recurringPayments,
+                    threshold = settings.recurringProposalThreshold,
+                    stateManager = stateManager,
+                    languageManager = languageManager,
+                    // The reminder is a notification, so it is configured like every other one this
+                    // app posts — same card, same sound, volume and vibration, since they are the
+                    // same settings underneath. The on/off for this particular reminder rides inside
+                    // it rather than sitting loose beside it.
+                    notificationSettings = {
+                        ExpensesNotificationCard(
+                            settings, stateManager, languageManager, pickSound, triggerPreview
+                        ) {
+                            RecurringReminderRow(
+                                enabled = settings.recurringRemindersEnabled,
+                                stateManager = stateManager,
+                                languageManager = languageManager
+                            )
+                        }
+                    }
+                )
+            }
             SettingsPage.BACKUP -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
                 BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
             }
@@ -417,4 +442,38 @@ fun SettingsScreen(
             )
         }
     }
+}
+
+/**
+ * This app's notification settings, wherever they are shown.
+ *
+ * One card, one set of values: sound, volume, vibration and length belong to the app rather than to
+ * any one alert, so the page for a particular reminder shows the same card rather than a second,
+ * quietly divergent copy. [extra] is where that page's own on/off row goes — see
+ * [com.voxapps.design.settings.NotificationSettingsCard].
+ */
+@Composable
+private fun ExpensesNotificationCard(
+    settings: ExpensesSettings,
+    stateManager: ExpensesStateManager,
+    languageManager: com.voxapps.expenses.domain.localization.LanguageManager,
+    onPickSound: () -> Unit,
+    onPreview: (Boolean, Int?, String?, Boolean?) -> Unit,
+    extra: @Composable () -> Unit = {}
+) {
+    NotificationSettingsCard(
+        systemDefault = settings.notificationsSystemDefault,
+        vibrationEnabled = settings.notificationsVibrationEnabled,
+        soundUri = settings.notificationsSoundUri,
+        volume = settings.notificationsVolume,
+        length = settings.notificationsLength,
+        onSystemDefaultChange = { stateManager.setNotificationsSystemDefault(it) },
+        onVibrationChange = { stateManager.setNotificationsVibrationEnabled(it) },
+        onVolumeChange = { stateManager.setNotificationsVolume(it) },
+        onLengthChange = { stateManager.setNotificationsLength(it) },
+        onPickSound = onPickSound,
+        onPreview = onPreview,
+        getString = { languageManager.getString(it) },
+        extra = extra
+    )
 }

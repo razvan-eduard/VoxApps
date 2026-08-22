@@ -89,6 +89,20 @@ class VoxLlmRequestQueue(
      *  whether Commander's reply was success or error, since either is a *definitive* answer, not a
      *  delivery failure; only a missing reply should ever be retried. Idempotent: a requestId with no
      *  matching row (already removed by a retry race, or never tracked) is a silent no-op. */
+    /**
+     * Whether [requestId] is still waiting for an answer.
+     *
+     * One request can be answered more than once: a re-captured notification re-sends the stored row
+     * rather than creating a second one, so the same id goes out twice and comes back twice. The
+     * first reply is the one that means something; a satellite can ask this before acting on a
+     * later one instead of discovering the repetition when its own database refuses the write.
+     *
+     * A null id — a task that never went through this queue — is treated as pending, since there is
+     * nothing here that could say otherwise.
+     */
+    suspend fun isPending(requestId: String?): Boolean =
+        requestId == null || dao.getByRequestId(requestId) != null
+
     suspend fun markFulfilled(requestId: String) {
         dao.deleteByRequestId(requestId)
     }

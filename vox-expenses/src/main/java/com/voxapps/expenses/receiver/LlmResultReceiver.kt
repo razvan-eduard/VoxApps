@@ -14,6 +14,7 @@ import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.ALREADY_PRESENT_RESULT
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.NearDuplicateConfig
 import com.voxapps.expenses.data.PendingFieldSuggestion
@@ -312,6 +313,16 @@ class LlmResultReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         if (isRetryableFailure) return@launch
+                        // Before the row is cleared, because clearing it is what tells a later reply
+                        // that this capture is already answered. One request can come back twice —
+                        // the queue re-sends a stored row rather than multiplying it — and only the
+                        // first reply means anything. Without this the second one reaches the insert
+                        // and is refused there by the unique uid: correct, but it reads to the user
+                        // as their payment having failed to save.
+                        if (!container.pendingLlmRequestQueue.isPending(requestId)) {
+                            Logger.d(TAG, "A second reply for a capture already answered — ignored")
+                            return@launch
+                        }
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (notificationKey != null) {
                             ProcessedNotificationKeysStore(context.applicationContext).markProcessed(notificationKey)
@@ -328,16 +339,28 @@ class LlmResultReceiver : BroadcastReceiver() {
                         // The rest is the flow's: it reads the answer against what was suppressed,
                         // and either files the expense or leaves it in the review queue. What stays
                         // here is about the request rather than the record.
+                        val flow = com.voxapps.expenses.domain.llm.NotificationExpenseFlow(
+                            context.applicationContext, container, preParse, knownBankName
+                        )
+                        val settings = container.settingsRepository.getSnapshot()
                         RecordFlow.deliver(
-                            spec = com.voxapps.expenses.domain.llm.NotificationExpenseFlow(
-                                context.applicationContext, container, preParse, knownBankName
-                            ),
+                            spec = flow,
                             reading = null,
-                            level = ExpensesSettings.notificationLevelOf(
-                                container.settingsRepository.getSnapshot().notificationModelUse
-                            ),
+                            level = ExpensesSettings.notificationLevelOf(settings.notificationModelUse),
                             reply = rawJson!!
                         )
+                        // Asked for last, and only for a capture that landed somewhere. The flow is
+                        // asked what it kept rather than the outcome: a commit that queued for review
+                        // returns null, which from out here is indistinguishable from having kept
+                        // nothing — and the difference decides whether a message you have not seen
+                        // disappears.
+                        if (
+                            notificationKey != null &&
+                            settings.dismissNotificationOnCapture &&
+                            flow.kept != com.voxapps.expenses.domain.llm.NotificationExpenseFlow.Kept.NOTHING
+                        ) {
+                            PaymentNotificationListenerService.dismissCaptured(notificationKey)
+                        }
                     } finally {
                         pending.finish()
                     }
@@ -537,6 +560,10 @@ class LlmResultReceiver : BroadcastReceiver() {
             withContext(Dispatchers.Main) {
                 Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
             }
+        } else if (newExpenseId == ALREADY_PRESENT_RESULT) {
+            // Silent, like the merge below: the record exists, and telling someone it could not be
+            // saved while it sits in their list is worse than saying nothing.
+            Logger.d(TAG, "A reply arrived for a capture that is already filed — nothing to do")
         } else if (newExpenseId <= 0 && newExpenseId != NEAR_DUPLICATE_MERGED_RESULT) {
             Logger.e(TAG, "Failed to save parsed expense to database. ID: $newExpenseId")
             withContext(Dispatchers.Main) {

@@ -138,6 +138,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.expensesRepository,
                     container.attachmentDao,
                     container.duplicateRuleDao,
+                    container.recurringPaymentRepository,
                     container.lockedMessage
                 )
                 val scope = command.exportScope ?: VoxIpc.EXPORT_SCOPE_BOTH
@@ -154,6 +155,7 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.expensesRepository,
                     container.attachmentDao,
                     container.duplicateRuleDao,
+                    container.recurringPaymentRepository,
                     container.lockedMessage
                 )
                 VoxBackupDispatch.dispatch(this) {
