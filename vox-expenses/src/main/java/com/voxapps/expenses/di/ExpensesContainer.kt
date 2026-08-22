@@ -39,6 +39,10 @@ class ExpensesContainer(context: Context) {
     val attachmentDao = database.attachmentDao()
     val duplicateRuleDao = database.duplicateRuleDao()
     val fieldCorrectionMemory = com.voxapps.fieldmemory.FieldCorrectionMemory(database.learnedFieldCorrectionDao())
+    val recurringPaymentRepository = com.voxapps.expenses.domain.recurring.RecurringPaymentRepository(
+        database.recurringPaymentDao()
+    )
+
     val expensesRepository = ExpensesRepository(
         database.expenseDao(),
         database.categoryDao(),
@@ -50,7 +54,8 @@ class ExpensesContainer(context: Context) {
         attachmentDao,
         duplicateRuleDao,
         database.pendingFieldSuggestionDao(),
-        fieldCorrectionMemory
+        fieldCorrectionMemory,
+        recurringPaymentRepository
     )
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
@@ -72,6 +77,7 @@ class ExpensesContainer(context: Context) {
         pendingCategoryMergeRepository,
         expenseDeduplicationRepository,
         pendingNotificationExpenseRepository,
+        recurringPaymentRepository,
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,
         templateDirectionMemory,

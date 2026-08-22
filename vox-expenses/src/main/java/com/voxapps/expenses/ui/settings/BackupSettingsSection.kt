@@ -42,7 +42,7 @@ fun BackupSettingsSection(settingsRepo: ExpensesSettingsRepository, settings: Ex
         ExpensesExportImportHandler(
             context, container.settingsRepository, container.sessionManager,
             container.expensesRepository, container.attachmentDao, container.duplicateRuleDao,
-            container.lockedMessage
+            container.recurringPaymentRepository, container.lockedMessage
         )
     }
 

@@ -190,7 +190,27 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // must stay eligible for the next attempt.
         if (outcome !is com.voxapps.recordflow.RecordFlow.Outcome.Asked) {
             processedKeys.markProcessed(sbn.key)
+            maybeDismiss(sbn.key, flow.kept, settings)
         }
+    }
+
+    /**
+     * Clears the source notification once its capture is safely somewhere, if that is what you asked
+     * for.
+     *
+     * Gated on what was kept rather than on the parse having succeeded: a message the app read and
+     * then threw away is a message you still need to see. Both keeping outcomes qualify — a record
+     * and a review entry are equally "the app has this now" — and the review queue is reachable from
+     * the same screen the setting lives on.
+     */
+    private fun maybeDismiss(
+        key: String,
+        kept: com.voxapps.expenses.domain.llm.NotificationExpenseFlow.Kept,
+        settings: com.voxapps.expenses.data.preferences.ExpensesSettings
+    ) {
+        if (!settings.dismissNotificationOnCapture) return
+        if (kept == com.voxapps.expenses.domain.llm.NotificationExpenseFlow.Kept.NOTHING) return
+        dismissCaptured(key)
     }
 
     /**
@@ -249,6 +269,26 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // OEM that rebind can be silently blocked entirely — "Service starting has been prevented by
         // iaware or trustsbase" — so it's not a reliable way to force anything).
         @Volatile private var activeInstance: PaymentNotificationListenerService? = null
+
+        /**
+         * Takes a captured notification out of the shade.
+         *
+         * Only the bound listener may cancel what it can see, so this goes through the live
+         * instance or does nothing at all. Doing nothing is the right failure: the notification
+         * stays where its sender put it, which is the state a person can still act on.
+         *
+         * Callers must have established that the capture was actually kept — this removes the only
+         * remaining copy of a message this app did not write, and there is no undo for it.
+         */
+        fun dismissCaptured(key: String) {
+            val service = activeInstance
+            if (service == null) {
+                Logger.d(TAG, "Nothing to dismiss: no bound listener")
+                return
+            }
+            runCatching { service.cancelNotification(key) }
+                .onFailure { Logger.w(TAG, "Could not dismiss the captured notification: ${it.message}") }
+        }
 
         /**
          * Re-evaluates every notification currently in the shade against [processNotification],

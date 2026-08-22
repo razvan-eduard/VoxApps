@@ -60,6 +60,9 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 import com.voxapps.design.settings.SettingsSectionCard
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.OutlinedTextField
 
 /** Cooldown after tapping "Force-check notifications now" — forceRecheckNow() is fire-and-forget
  *  with no completion signal, so this is a simple guard against a double-tap dispatching (and, with
@@ -114,6 +117,8 @@ fun NotificationCaptureSettingsTab(
     autoAcceptNotificationExpenses: Boolean,
     notificationModelUse: String,
     notificationAssumedDirection: String,
+    captureAmountlessPayments: Boolean,
+    dismissNotificationOnCapture: Boolean,
     stateManager: ExpensesStateManager,
     settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
@@ -390,6 +395,22 @@ fun NotificationCaptureSettingsTab(
             }
         }
 
+        SettingsSectionCard(languageManager.getString("capture_amountless_label")) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        languageManager.getString("capture_amountless_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = captureAmountlessPayments,
+                    onCheckedChange = { stateManager.setCaptureAmountlessPayments(it) }
+                )
+            }
+        }
+
         // Only where it can act. With the text going to a model, the model answers the direction
         // and this never runs — showing it there would offer a choice with no effect.
         if (notificationModelUse == ExpensesSettings.NOTIFICATION_MODEL_NONE) {
@@ -449,9 +470,33 @@ fun NotificationCaptureSettingsTab(
             }
         }
 
+        SettingsSectionCard(languageManager.getString("dismiss_on_capture_label")) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    languageManager.getString("dismiss_on_capture_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = dismissNotificationOnCapture,
+                    onCheckedChange = { stateManager.setDismissNotificationOnCapture(it) }
+                )
+            }
+        }
+
         if (pendingEntries.isNotEmpty()) {
             SettingsSectionCard(languageManager.getString("pending_notification_expenses_title")) {
                 pendingEntries.forEach { entry ->
+                    // A capture whose message never said how much: everything else is known, so the
+                    // entry is worth keeping and the one missing figure is asked for here rather
+                    // than the whole thing being thrown away.
+                    var typedAmount by remember(entry.id) { mutableStateOf("") }
+                    val amount = entry.totalAmount ?: typedAmount.trim().replace(',', '.').toDoubleOrNull()
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -459,13 +504,24 @@ fun NotificationCaptureSettingsTab(
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                formatAmount(entry.totalAmount, entry.currency) +
+                                (entry.totalAmount?.let { formatAmount(it, entry.currency) }
+                                    ?: languageManager.getString("notification_amount_unknown")) +
                                     (entry.bank?.let { " · $it" } ?: "") +
                                     (entry.category?.let { " · $it" } ?: "") +
                                     " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.capturedAt)),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (entry.totalAmount == null) {
+                                OutlinedTextField(
+                                    value = typedAmount,
+                                    onValueChange = { typedAmount = it },
+                                    label = { Text(languageManager.getString("notification_enter_amount")) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                )
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -477,7 +533,10 @@ fun NotificationCaptureSettingsTab(
                                     Text(languageManager.getString("dismiss_button"))
                                 }
                                 Button(
-                                    onClick = { stateManager.approveNotificationExpense(entry, context) },
+                                    onClick = { stateManager.approveNotificationExpense(entry, context, amount) },
+                                    // Nothing to approve until there is a figure: an expense of
+                                    // nothing is a gap wearing the shape of a record.
+                                    enabled = amount != null && amount > 0.0,
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text(languageManager.getString("approve_button"))

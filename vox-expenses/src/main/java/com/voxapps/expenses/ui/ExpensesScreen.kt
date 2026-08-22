@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
@@ -49,7 +50,9 @@ import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.data.RecurringPayment
 import com.voxapps.expenses.domain.llm.LlmTasks
+import com.voxapps.expenses.domain.recurring.PaymentPredictor
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.state.SortMode
@@ -84,6 +87,31 @@ fun ExpensesScreen(
     // either isn't installed.
     val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
+
+    val recurring by stateManager.recurringPayments.collectAsStateWithLifecycle(initialValue = emptyList())
+    val confirmedVendorKeys = remember(recurring) {
+        recurring.filter { it.confirmed }.map { it.vendorKey }.toSet()
+    }
+    // A filtered list is a question about what happened; a prediction is not an answer to it. Rather
+    // than guess which filters a payment that hasn't happened would satisfy, predictions appear only
+    // in the unfiltered list — where "what is coming" is a sensible thing to be told.
+    val filtered = state.dateFrom != null || state.dateTo != null ||
+        state.selectedBank != null || state.selectedVendor != null || state.selectedCategoryId != null
+    val predictedPayments = remember(recurring, state.expenses, filtered) {
+        if (filtered) emptyList() else PaymentPredictor.predict(
+            confirmed = recurring,
+            nowMillis = System.currentTimeMillis()
+        ) { payment ->
+            // The arrangement records its own last arrival, so this only ever fires when the ledger
+            // knows about a payment the arrangement missed — a restored backup, or a bookkeeping
+            // failure that was logged rather than thrown. Predicting a bill already paid is the one
+            // mistake worth a second check.
+            state.expenses.any {
+                it.expense.dateTime > payment.lastSeenAt &&
+                    RecurringPayment.vendorKeyOf(it.expense.vendor) == payment.vendorKey
+            }
+        }
+    }
 
     // Scan: single/stitch/batch (see VoxOcrRequest.captureMode) — one launch, one reply, handled
     // entirely by OcrResultReceiver.handlePendingScanCreate. No Compose-side state needed here at all
@@ -233,8 +261,20 @@ fun ExpensesScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Ahead of the payments that happened, because that is where they are in time.
+                    items(predictedPayments, key = { "predicted-${it.payment.id}" }) { predicted ->
+                        PredictedPaymentCard(
+                            predicted = predicted,
+                            categoryColorArgb = state.categories
+                                .firstOrNull { it.id == predicted.payment.categoryId }?.colorArgb
+                        )
+                    }
                     items(state.expenses, key = { it.expense.id }) { ewd ->
-                        ExpenseCard(expenseWithDetails = ewd, onClick = { onEditExpense(ewd) })
+                        ExpenseCard(
+                            expenseWithDetails = ewd,
+                            onClick = { onEditExpense(ewd) },
+                            recurring = RecurringPayment.vendorKeyOf(ewd.expense.vendor) in confirmedVendorKeys
+                        )
                     }
                 }
             }

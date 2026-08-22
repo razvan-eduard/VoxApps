@@ -26,10 +26,13 @@ import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.ExpenseRemapFields
 import com.voxapps.expenses.data.RemapRuleEntity
 import com.voxapps.expenses.data.RemapRuleJson
+import com.voxapps.expenses.data.RecurrenceFrequency
+import com.voxapps.expenses.data.RecurringPayment
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
 import com.voxapps.expenses.domain.llm.optTransactionDirection
+import com.voxapps.expenses.domain.recurring.RecurringPaymentRepository
 import com.voxapps.expenses.domain.llm.toJsonValue
 import com.voxapps.expenses.state.SessionManager
 import com.voxapps.ipc.VoxIpc
@@ -60,6 +63,7 @@ class ExpensesExportImportHandler(
     private val expensesRepo: ExpensesRepository,
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
+    private val recurringPaymentRepo: RecurringPaymentRepository,
     private val lockedMessage: String
 ) {
     suspend fun export(
@@ -114,6 +118,9 @@ class ExpensesExportImportHandler(
             )
             val duplicateRules = duplicateRuleDao.getAll()
             json.put("duplicateRules", JSONArray(duplicateRules.map { it.toJson() }))
+            // Dismissals ride along with confirmations: both are answers a person gave, and a restore
+            // that kept only the yesses would start proposing everything they had already refused.
+            json.put("recurringPayments", JSONArray(recurringPaymentRepo.snapshot().map { it.toJson() }))
 
             if (includePhotos) {
                 val names = expensesWithDetails.mapNotNull { it.expense.receiptImageName?.takeIf { n -> n.isNotBlank() } }
@@ -361,6 +368,25 @@ class ExpensesExportImportHandler(
             )
         }
 
+        if (root.has("recurringPayments")) {
+            val preExisting = recurringPaymentRepo.snapshot()
+            val imported = root.optJSONArray("recurringPayments") ?: JSONArray()
+
+            VoxSnapshotReplaceImporter.restore(
+                mode = importMode,
+                imported = (0 until imported.length()).map { imported.getJSONObject(it) },
+                preExisting = preExisting,
+                exportedAt = exportedAt,
+                createdAtOf = { it.createdAt },
+                insert = { p ->
+                    val importedCategoryId =
+                        if (p.has("categoryId") && !p.isNull("categoryId")) p.optLong("categoryId") else null
+                    recurringPaymentRepo.restore(p.toRecurringPayment(importedCategoryId?.let { importedIdToLocalId[it] }))
+                },
+                delete = { recurringPaymentRepo.delete(it) }
+            )
+        }
+
         var expensesCreated = 0
         if (root.has("expenses")) {
             val preExistingExpenses = expensesRepo.expensesSnapshot()
@@ -469,6 +495,45 @@ private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("position", position)
     put("createdAt", createdAt)
 }
+
+private fun RecurringPayment.toJson(): JSONObject = JSONObject().apply {
+    put("vendorKey", vendorKey)
+    put("vendorLabel", vendorLabel)
+    put("frequency", frequency.name)
+    put("interval", interval)
+    put("dueDayOfMonth", dueDayOfMonth)
+    put("expectedAmount", expectedAmount)
+    put("currency", currency)
+    put("categoryId", categoryId)
+    put("lastSeenAt", lastSeenAt)
+    put("occurrences", occurrences)
+    put("missedCycles", missedCycles)
+    put("confirmedAt", confirmedAt)
+    put("notifiedForDueAt", notifiedForDueAt)
+    put("dismissed", dismissed)
+    put("createdAt", createdAt)
+}
+
+/** Rebuilds an arrangement from backup. [localCategoryId] is resolved by the caller, since category
+ *  ids are reassigned on import and a stale one would colour the row after somebody else's category. */
+private fun JSONObject.toRecurringPayment(localCategoryId: Long?): RecurringPayment = RecurringPayment(
+    vendorKey = optString("vendorKey"),
+    vendorLabel = optString("vendorLabel"),
+    frequency = runCatching { RecurrenceFrequency.valueOf(optString("frequency")) }
+        .getOrDefault(RecurrenceFrequency.MONTHLY),
+    interval = optInt("interval", 1).coerceAtLeast(1),
+    dueDayOfMonth = optInt("dueDayOfMonth", 1),
+    expectedAmount = if (isNull("expectedAmount")) null else optDouble("expectedAmount"),
+    currency = if (isNull("currency")) null else optString("currency"),
+    categoryId = localCategoryId,
+    lastSeenAt = optLong("lastSeenAt"),
+    occurrences = optInt("occurrences", 1),
+    missedCycles = optInt("missedCycles", 0),
+    confirmedAt = if (isNull("confirmedAt")) null else optLong("confirmedAt"),
+    notifiedForDueAt = if (isNull("notifiedForDueAt")) null else optLong("notifiedForDueAt"),
+    dismissed = optBoolean("dismissed", false),
+    createdAt = optLong("createdAt", System.currentTimeMillis())
+)
 
 private fun SpendingLimit.toJson(): JSONObject = JSONObject().apply {
     put("categoryId", categoryId)

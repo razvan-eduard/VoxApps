@@ -20,8 +20,9 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
         ExpenseTombstone::class, PendingLlmRequestEntity::class,
         AttachmentEntity::class, DuplicateRuleEntity::class, PendingFieldSuggestion::class,
-        LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class],
-    version = 25,
+        LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class,
+        RecurringPayment::class],
+    version = 26,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -30,6 +31,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseLineItemDao(): ExpenseLineItemDao
     abstract fun spendingLimitDao(): SpendingLimitDao
+    abstract fun recurringPaymentDao(): RecurringPaymentDao
     abstract fun remapRuleDao(): RemapRuleDao
     abstract fun remapPatternSightingDao(): RemapPatternSightingDao
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
@@ -343,6 +345,23 @@ abstract class ExpensesDatabase : RoomDatabase() {
          * model-free scan fail on exactly the installs that upgraded into the feature.
          */
         /** The invoice's net and tax, beside the total it already stored. */
+        private val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS recurring_payments (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "vendorKey TEXT NOT NULL, vendorLabel TEXT NOT NULL, " +
+                        "frequency TEXT NOT NULL, interval INTEGER NOT NULL, " +
+                        "dueDayOfMonth INTEGER NOT NULL, expectedAmount REAL, currency TEXT, " +
+                        "categoryId INTEGER, lastSeenAt INTEGER NOT NULL, " +
+                        "occurrences INTEGER NOT NULL, missedCycles INTEGER NOT NULL, " +
+                        "confirmedAt INTEGER, notifiedForDueAt INTEGER, " +
+                        "dismissed INTEGER NOT NULL, createdAt INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_recurring_payments_vendorKey ON recurring_payments (vendorKey)")
+            }
+        }
+
         private val MIGRATION_24_25 = object : Migration(24, 25) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE expenses ADD COLUMN netAmount REAL")
@@ -413,7 +432,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate

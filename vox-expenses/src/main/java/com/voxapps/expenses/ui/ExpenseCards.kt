@@ -19,8 +19,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
@@ -28,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.Icon
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.expenses.ExpensesApplication
@@ -35,6 +41,7 @@ import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
+import com.voxapps.expenses.domain.recurring.PredictedPayment
 import java.text.DateFormat
 import java.util.Date
 
@@ -45,7 +52,11 @@ private val ExpenseRed = Color(0xFFD32F2F)
 
 /** A single expense row: title/vendor, category dot, formatted total, and date. */
 @Composable
-fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
+fun ExpenseCard(
+    expenseWithDetails: ExpenseWithDetails,
+    onClick: () -> Unit,
+    recurring: Boolean = false
+) {
     val expense = expenseWithDetails.expense
     val category = expenseWithDetails.category
 
@@ -84,6 +95,16 @@ fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The arrival of a recurring payment keeps saying so — it is an ordinary expense
+                    // now, but knowing it is the monthly one is most of what you wanted to know.
+                    if (recurring) {
+                        Icon(
+                            Icons.Filled.Repeat,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                        )
+                    }
                     if (!expense.receiptImageName.isNullOrBlank()) {
                         Icon(
                             Icons.Filled.Image,
@@ -122,6 +143,86 @@ fun ExpenseCard(expenseWithDetails: ExpenseWithDetails, onClick: () -> Unit) {
                 text = formatAmount(expense.totalAmount, expense.currencyCode),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * A payment that is expected but has not arrived.
+ *
+ * Drawn as an outline with nothing inside it — no card, no elevation, a dashed contour. That is the
+ * whole point of the treatment: a real expense is a solid surface because something happened, and
+ * this one has to be legible at a glance as the absence of that. It is deliberately not clickable
+ * either; there is no record here to open, and offering an editor would invite a person to fill in a
+ * payment that has not been made.
+ */
+@Composable
+fun PredictedPaymentCard(predicted: PredictedPayment, categoryColorArgb: Long?) {
+    val outline = if (predicted.overdue) MaterialTheme.colorScheme.error
+    else MaterialTheme.colorScheme.outline
+    val languageManager = LocalLanguageManager.current
+    val dashes = with(LocalDensity.current) { floatArrayOf(6.dp.toPx(), 5.dp.toPx()) }
+    val corner = with(LocalDensity.current) { 12.dp.toPx() }
+    val strokeWidth = with(LocalDensity.current) { 1.5.dp.toPx() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                drawRoundRect(
+                    color = outline,
+                    cornerRadius = CornerRadius(corner, corner),
+                    style = Stroke(width = strokeWidth, pathEffect = PathEffect.dashPathEffect(dashes))
+                )
+            }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (categoryColorArgb != null) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(CategoryColors.fromStored(categoryColorArgb).copy(alpha = 0.5f))
+                )
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = if (categoryColorArgb != null) 10.dp else 0.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Repeat,
+                        contentDescription = null,
+                        tint = outline,
+                        modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                    )
+                    Text(
+                        text = predicted.vendorLabel,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(predicted.dueAtMillis)).let {
+                        languageManager.getString(
+                            if (predicted.overdue) "recurring_overdue_since" else "recurring_expected_on"
+                        ).format(it)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = outline
+                )
+            }
+            // The figure is last month's, and it is labelled as a guess rather than shown as a total:
+            // a bill that has not arrived has no amount, and printing one as if it had would put a
+            // number nobody owes next to numbers somebody paid.
+            Text(
+                text = predicted.expectedAmount
+                    ?.let { "≈ " + formatAmount(it, predicted.currency ?: "") }
+                    ?: "—",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
     }
