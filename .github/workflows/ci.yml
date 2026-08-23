@@ -75,7 +75,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # vox-vision and :vendor:ppocr-sdk import org.opencv.* from vendor/ppocr-sdk/opencv/java,
       # which is not in git — build_opencv_android.sh generates it. Unlike the whisper build this
