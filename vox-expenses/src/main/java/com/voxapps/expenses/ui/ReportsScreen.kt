@@ -159,7 +159,7 @@ fun ReportsScreen(
                     val max = byCategory.maxOf { it.amount }.coerceAtLeast(0.01)
                     LazyColumn(modifier = Modifier.fillMaxWidth()) {
                         items(byCategory) { entry ->
-                            val label = entry.category?.name ?: languageManager.getString("none")
+                            val label = entry.category?.labelled() ?: languageManager.getString("none")
                             Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(label, style = MaterialTheme.typography.bodyMedium)

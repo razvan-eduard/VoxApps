@@ -17,7 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import com.voxapps.design.category.VoxCategoryFields
 import com.voxapps.design.icon.VoxIconPickerDialog
+import com.voxapps.expenses.ui.rememberCategoryFieldStrings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -47,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.draw.alpha
-import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.preferences.ExpensesSettings
@@ -77,7 +78,6 @@ fun CategoriesSettingsTab(
     var addingNew by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var newIcon by remember { mutableStateOf<String?>(null) }
-    var pickingNewIcon by remember { mutableStateOf(false) }
     /** The category whose icon is being chosen, or null while none is. */
     var iconEditing by remember { mutableStateOf<Category?>(null) }
     var pendingDeleteCategory by remember { mutableStateOf<Category?>(null) }
@@ -174,34 +174,14 @@ fun CategoriesSettingsTab(
 
             if (addingNew) {
                 var newColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { pickingNewIcon = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(newIcon ?: "＋", fontSize = if (newIcon != null) 22.sp else 15.sp)
-                    }
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text(languageManager.getString("category_name")) },
-                        modifier = Modifier.weight(1f).padding(start = 8.dp)
-                    )
-                }
-                VoxColorSwatchPicker(
-                    selectedColor = newColor,
-                    onColorSelected = { newColor = it },
-                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
-                    customColorDialogTitle = languageManager.getString("custom_color_title"),
-                    customColorUseLabel = languageManager.getString("use_color_button"),
-                    customColorCancelLabel = languageManager.getString("cancel"),
-                    customColorHueLabel = languageManager.getString("hue_label"),
-                    customColorSaturationLabel = languageManager.getString("saturation_label"),
-                    customColorBrightnessLabel = languageManager.getString("brightness_label")
+                VoxCategoryFields(
+                    name = newName,
+                    onNameChange = { newName = it },
+                    icon = newIcon,
+                    onIconChange = { newIcon = it },
+                    color = newColor,
+                    onColorChange = { newColor = it },
+                    strings = rememberCategoryFieldStrings()
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
@@ -361,16 +341,4 @@ fun CategoriesSettingsTab(
         )
     }
 
-    if (pickingNewIcon) {
-        VoxIconPickerDialog(
-            title = languageManager.getString("category_icon_title"),
-            selected = newIcon,
-            onPick = { picked -> newIcon = picked; pickingNewIcon = false },
-            onDismiss = { pickingNewIcon = false },
-            noneLabel = languageManager.getString("category_icon_none"),
-            customLabel = languageManager.getString("category_icon_custom"),
-            confirmLabel = languageManager.getString("save"),
-            cancelLabel = languageManager.getString("cancel")
-        )
-    }
 }

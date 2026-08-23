@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.voxapps.expenses.ui.labelled
 import com.voxapps.datahygiene.RemapValueKey
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.design.settings.RuleCardsSection
@@ -138,7 +139,7 @@ fun RemapRulesSection(
                     RemapRuleJson.decode(rule.setJson).forEach { (id, v) ->
                         append(
                             if (id == ExpenseRemapFields.ID_CATEGORY_ID)
-                                categories.firstOrNull { it.id == v.toLongOrNull() }?.name ?: v
+                                categories.firstOrNull { it.id == v.toLongOrNull() }?.labelled() ?: v
                             else v
                         )
                         append(' ')
@@ -200,7 +201,7 @@ private fun summary(rule: RemapRuleEntity, categories: List<Category>, languageM
     }
     val setPart = set.entries.joinToString(", ") { (id, v) ->
         val display = if (id == ExpenseRemapFields.ID_CATEGORY_ID) {
-            categories.firstOrNull { it.id == v.toLongOrNull() }?.name ?: v
+            categories.firstOrNull { it.id == v.toLongOrNull() }?.labelled() ?: v
         } else v
         "${fieldLabel(id, languageManager)} → \"$display\""
     }
@@ -574,7 +575,7 @@ private fun RemapRuleEditSheet(
                 RuleFieldSlot(
                     label = languageManager.getString(field.labelKey),
                     value = if (field.id == ExpenseRemapFields.ID_CATEGORY_ID) {
-                        categories.firstOrNull { it.id == setValues[field.id]?.toLongOrNull() }?.name ?: ""
+                        categories.firstOrNull { it.id == setValues[field.id]?.toLongOrNull() }?.labelled() ?: ""
                     } else setValues[field.id] ?: "",
                     selected = field.id in setValues && hasTrigger,
                     enabled = hasTrigger,
@@ -586,7 +587,7 @@ private fun RemapRuleEditSheet(
                             Picklist(
                                 items = categories,
                                 selected = categories.firstOrNull { it.id == setValues[field.id]?.toLongOrNull() },
-                                itemLabel = { it.name },
+                                itemLabel = { it.labelled() },
                                 onSelect = { setValues = setValues + (field.id to it.id.toString()) },
                                 noneLabel = languageManager.getString("none"),
                                 onNoneSelected = { setValues = setValues + (field.id to "") }

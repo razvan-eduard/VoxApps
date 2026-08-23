@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.voxapps.expenses.ui.labelled
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.preferences.ExpensesSettings
@@ -68,7 +69,7 @@ fun VoiceSettingsTab(
             Picklist(
                 items = categories,
                 selected = categories.firstOrNull { it.id == settings.defaultVoiceCategoryId },
-                itemLabel = { it.name },
+                itemLabel = { it.labelled() },
                 onSelect = { stateManager.setDefaultVoiceCategoryId(it.id) },
                 noneLabel = languageManager.getString("none"),
                 onNoneSelected = { stateManager.setDefaultVoiceCategoryId(null) }
