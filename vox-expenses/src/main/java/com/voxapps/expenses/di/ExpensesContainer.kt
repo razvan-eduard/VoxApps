@@ -42,6 +42,7 @@ class ExpensesContainer(context: Context) {
     val recurringPaymentRepository = com.voxapps.expenses.domain.recurring.RecurringPaymentRepository(
         database.recurringPaymentDao()
     )
+    val bankAccountDao = database.bankAccountDao()
 
     val expensesRepository = ExpensesRepository(
         database.expenseDao(),
@@ -54,7 +55,8 @@ class ExpensesContainer(context: Context) {
         attachmentDao,
         duplicateRuleDao,
         fieldCorrectionMemory,
-        recurringPaymentRepository
+        recurringPaymentRepository,
+        bankAccountDao
     )
 
     /** Proposals a record holds until someone accepts them — storage and lifecycle from

@@ -149,6 +149,8 @@ fun ExpensesRoot(
                             )
                             showReports -> ReportsScreen(
                                 expenses = state.expenses,
+                                state = state,
+                                stateManager = container.expensesStateManager,
                                 homeCurrency = container.settingsRepository.getSnapshot().homeCurrency,
                                 exchangeRateRepository = container.exchangeRateRepository,
                                 onBack = { showReports = false }

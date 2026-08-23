@@ -1,5 +1,7 @@
 package com.voxapps.expenses.ui
 
+import com.voxapps.expenses.state.ExpensesUiState
+import com.voxapps.expenses.state.ExpensesStateManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +61,9 @@ private data class CategoryTotal(val category: Category?, val amount: Double)
 @Composable
 fun ReportsScreen(
     expenses: List<ExpenseWithDetails>,
+    /** The same narrowing the list is under, so a report answers the question that is on screen. */
+    state: ExpensesUiState.Unlocked,
+    stateManager: ExpensesStateManager,
     homeCurrency: String,
     exchangeRateRepository: ExchangeRateRepository,
     onBack: () -> Unit
@@ -118,6 +123,15 @@ fun ReportsScreen(
                 FilterChip(selected = period == ReportPeriod.YEAR, onClick = { period = ReportPeriod.YEAR }, label = { Text(languageManager.getString("report_period_year")) })
                 FilterChip(selected = period == ReportPeriod.ALL_TIME, onClick = { period = ReportPeriod.ALL_TIME }, label = { Text(languageManager.getString("report_period_all_time")) })
             }
+
+            // The same control the list carries, on the same state: a report is about the records
+            // in front of you, so the two cannot be narrowed differently. The period chips above are
+            // the report's own question and stay separate from it.
+            ExpenseFilterBar(
+                state = state,
+                stateManager = stateManager,
+                modifier = Modifier.padding(horizontal = 0.dp)
+            )
 
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

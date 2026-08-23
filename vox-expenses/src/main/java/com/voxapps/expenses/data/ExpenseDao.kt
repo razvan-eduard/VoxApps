@@ -79,6 +79,10 @@ interface ExpenseDao {
 
     /** Resolves a peer-to-peer sync delta's uid back to this device's own local row id — needed
      *  before an update (preserve the local id) or a delete-by-uid (Room has no delete-by-uid). */
+    /** Lets go of a deleted account without touching the spending it paid for. */
+    @Query("UPDATE expenses SET bankAccountId = NULL WHERE bankAccountId = :accountId")
+    suspend fun clearBankAccount(accountId: Long)
+
     @Query("SELECT id FROM expenses WHERE uid = :uid")
     suspend fun getIdByUid(uid: String): Long?
 

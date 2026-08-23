@@ -76,7 +76,7 @@ object ExpenseScanCleanupRequestSender {
                 targetPackage = COMMANDER_PACKAGE,
                 attachmentUri = attachmentUri
             )
-            rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
+            rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems, accountFrom(container, plainText))
         }
     }
 
@@ -132,7 +132,7 @@ object ExpenseScanCleanupRequestSender {
             targetPackage = COMMANDER_PACKAGE,
             attachmentUri = attachmentUri
         )
-        rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
+        rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems, accountFrom(container, plainText))
     }
 
     /**
@@ -185,7 +185,7 @@ object ExpenseScanCleanupRequestSender {
                 targetPackage = COMMANDER_PACKAGE,
                 attachmentUri = attachmentUri
             )
-            rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems)
+            rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems, accountFrom(container, plainText))
         }
     }
 
@@ -194,13 +194,31 @@ object ExpenseScanCleanupRequestSender {
      * model to skip is absent from that reply by design, so the value has to survive the round trip
      * somewhere; without this the record falls back as though nothing had been found.
      */
+    /**
+     * The card or account the document names, settled here rather than asked of the model.
+     *
+     * On the way out, where the page's own text is still in hand: the reply comes back without it,
+     * and re-reading a document to recover a fact already read is work nobody needs done twice. See
+     * [com.voxapps.textmatch.extract.AccountIdentifiers] for why no model is involved at all.
+     */
+    private suspend fun accountFrom(container: ExpensesContainer, plainText: String): Long? {
+        val settings = container.settingsRepository.getSnapshot()
+        return container.expensesRepository.resolveBankAccount(
+            text = plainText,
+            autoCreate = settings.autoCreateAccountsFromScans,
+            defaultCurrency = settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency },
+            bankName = null
+        )
+    }
+
     private suspend fun rememberPreParse(
         container: ExpensesContainer,
         requestId: String,
         preParsed: DateTimeRegexParser.Result,
         preParsedTotal: Double?,
         totals: ReceiptTotalRegexParser.Result,
-        preParsedItems: List<TableItemsPreParse.Item>?
+        preParsedItems: List<TableItemsPreParse.Item>?,
+        accountId: Long?
     ) {
         container.scanPreParseRepository.put(
             requestId,
@@ -210,7 +228,8 @@ object ExpenseScanCleanupRequestSender {
                 total = preParsedTotal,
                 itemsJson = preParsedItems?.let { TableItemsPreParse.toJson(it) },
                 previousBalance = totals.previousBalance,
-                invoiceOwnTotal = totals.invoiceTotal
+                invoiceOwnTotal = totals.invoiceTotal,
+                bankAccountId = accountId
             )
         )
     }

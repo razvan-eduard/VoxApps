@@ -69,6 +69,14 @@ data class Expense(
     val currencyCode: String,
     val vendor: String? = null,
     val bank: String? = null,
+    /**
+     * The card or account this went through, where a message named one — see [BankAccount].
+     *
+     * Beside [bank] rather than instead of it: the bank is who the account is with, and a message
+     * can name either without the other. Null is ordinary, and means nothing in the text carried an
+     * account's format.
+     */
+    val bankAccountId: Long? = null,
     val location: String? = null,
     val dateTime: Long,
     val comments: String? = null,

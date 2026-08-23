@@ -125,6 +125,24 @@ data class ExpensesSettings(
      */
     val captureAmountlessPayments: Boolean = false,
     /**
+     * Whether a card or account read out of a capture becomes a record by itself.
+     *
+     * Two switches rather than one, because the two sources are trusted differently: a scanned
+     * document is something a person deliberately photographed, while a notification arrives on its
+     * own from any app that is allowed to send one. Both readings are equally certain — the formats
+     * either match or do not — so what these decide is not confidence, it is whether the app is
+     * allowed to add to a list without being asked. See [com.voxapps.textmatch.extract.AccountIdentifiers].
+     */
+    val autoCreateAccountsFromScans: Boolean = false,
+    val autoCreateAccountsFromNotifications: Boolean = false,
+    /**
+     * The currency a new account is given.
+     *
+     * An account holds one currency and most people hold one, so asking every time would be asking
+     * a question whose answer never changes. Empty means fall back to [defaultCurrency].
+     */
+    val defaultAccountCurrency: String = "",
+    /**
      * How many times a payment must be seen before it is proposed as recurring — and, symmetrically,
      * how many due dates may pass unpaid before dropping it is proposed.
      *

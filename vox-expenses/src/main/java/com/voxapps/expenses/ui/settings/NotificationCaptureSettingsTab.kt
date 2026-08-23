@@ -498,6 +498,25 @@ fun NotificationCaptureSettingsTab(
         }
 
         val provided = remember(settings) { FieldVocabularies.provided(context) }
+        // Beside the vocabularies but deliberately unlike them: an account is read from a format,
+        // never learned, so this card has no supplied list and nothing to switch off term by term.
+        val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+        BankAccountsSettingsCard(
+            accounts = accounts,
+            autoCreateFromScans = settings.autoCreateAccountsFromScans,
+            autoCreateFromNotifications = settings.autoCreateAccountsFromNotifications,
+            defaultCurrency = settings.defaultAccountCurrency,
+            knownCurrencies = remember(accounts, settings.defaultCurrency) {
+                (accounts.map { it.currencyCode } + settings.defaultCurrency)
+                    .filter { it.isNotBlank() }.distinct().sorted()
+            },
+            onAutoCreateFromScansChange = { stateManager.setAutoCreateAccountsFromScans(it) },
+            onAutoCreateFromNotificationsChange = { stateManager.setAutoCreateAccountsFromNotifications(it) },
+            onDefaultCurrencyChange = { stateManager.setDefaultAccountCurrency(it) },
+            onUpdate = { stateManager.updateBankAccount(it) },
+            onDelete = { stateManager.deleteBankAccount(it) }
+        )
+
         VocabularySettingsCard(
             provided = provided.banks,
             custom = settings.customBanks,

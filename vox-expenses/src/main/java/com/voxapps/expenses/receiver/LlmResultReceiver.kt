@@ -460,7 +460,18 @@ class LlmResultReceiver : BroadcastReceiver() {
         container: ExpensesContainer,
         parsed: ExpenseParseResultParser.Parsed,
         imageName: String?,
-        preParse: ScanPreParse? = null
+        preParse: ScanPreParse? = null,
+        /**
+         * The text the capture came from, for the one field no model is asked about.
+         *
+         * A card or account is read out of the raw characters rather than out of [parsed] — see
+         * [com.voxapps.textmatch.extract.AccountIdentifiers]. Null for a capture with no text behind
+         * it, which is every spoken one.
+         */
+        sourceText: String? = null,
+        /** An account already resolved by the caller — see [ScanPreParse.bankAccountId]. Takes
+         *  precedence over [sourceText], which is only read when nothing was settled earlier. */
+        knownAccountId: Long? = null
     ): Long {
         val settings: ExpensesSettings = container.settingsRepository.getSnapshot()
         val items = parsed.items.map {
@@ -515,7 +526,19 @@ class LlmResultReceiver : BroadcastReceiver() {
             // a scan (the receipt photo), never for voice, so it's already the exact signal needed.
             source = if (imageName != null) ExpenseSource.SCAN else ExpenseSource.VOICE,
             previousBalanceAmount = preParse?.previousBalance,
-            invoiceOwnAmount = preParse?.invoiceOwnTotal
+            invoiceOwnAmount = preParse?.invoiceOwnTotal,
+            // Resolved before the record is written so the two arrive together. The bank comes from
+            // the vocabulary reading of the same text; the account reader never sees a vocabulary.
+            bankAccountId = knownAccountId ?: container.expensesRepository.resolveBankAccount(
+                text = sourceText,
+                autoCreate = com.voxapps.expenses.domain.accounts.BankAccounts.shouldCreate(
+                    fromScan = imageName != null,
+                    scansEnabled = settings.autoCreateAccountsFromScans,
+                    notificationsEnabled = settings.autoCreateAccountsFromNotifications
+                ),
+                defaultCurrency = settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency },
+                bankName = parsed.bank
+            )
         )
         stageLocalReviewIfNeeded(container, settings, localModeActive, newExpenseId)
 

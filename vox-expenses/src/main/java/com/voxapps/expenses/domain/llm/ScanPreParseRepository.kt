@@ -30,6 +30,15 @@ data class ScanPreParse(
     /** True when the template is confirmed to produce real transactions — the reply is then
      *  parsed without the isPayment gate, which was suppressed from the prompt. */
     val isPaymentKnown: Boolean = false,
+    /**
+     * The account this capture's own text named, resolved before the question was asked.
+     *
+     * Carried as an id rather than as the text it came from: the reading is deterministic and needs
+     * no model, so it is settled on the way out and reunited with the reply on the way back — the
+     * same treatment [vendor] and [direction] get, and for the same reason. Storing the page text
+     * instead would keep a document in a preferences file to re-read a fact already known.
+     */
+    val bankAccountId: Long? = null,
     /** Deterministically-read line items (see [TableItemsPreParse]) as its compact JSON. */
     val itemsJson: String? = null,
     /** An invoice's carried balance and own-charges figures (see [ReceiptTotalRegexParser]). */
@@ -109,6 +118,7 @@ class ScanPreParseRepository(context: Context) {
             entry.direction?.let { o.put("direction", it) }
             entry.templateHash?.let { o.put("templateHash", it) }
             if (entry.isPaymentKnown) o.put("isPaymentKnown", true)
+            entry.bankAccountId?.let { o.put("bankAccountId", it) }
             entry.itemsJson?.let { o.put("itemsJson", it) }
             entry.previousBalance?.let { o.put("previousBalance", it) }
             entry.invoiceOwnTotal?.let { o.put("invoiceOwnTotal", it) }
@@ -133,6 +143,7 @@ class ScanPreParseRepository(context: Context) {
                     direction = if (o.has("direction")) o.optString("direction") else null,
                     templateHash = if (o.has("templateHash")) o.optString("templateHash") else null,
                     isPaymentKnown = o.optBoolean("isPaymentKnown", false),
+                    bankAccountId = if (o.has("bankAccountId")) o.optLong("bankAccountId") else null,
                     itemsJson = if (o.has("itemsJson")) o.optString("itemsJson") else null,
                     previousBalance = if (o.has("previousBalance")) o.optDouble("previousBalance") else null,
                     invoiceOwnTotal = if (o.has("invoiceOwnTotal")) o.optDouble("invoiceOwnTotal") else null,

@@ -1,5 +1,7 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.textmatch.extract.AccountIdentifiers
+import com.voxapps.expenses.domain.accounts.BankAccounts
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.datahygiene.NameCasing
@@ -67,6 +69,9 @@ val RECOGNIZED_NOT_INSERTED = setOf(
 /**
  * Single write point over the Room DAOs.
  */
+
+private const val TAG_ACCOUNTS = "BankAccounts"
+
 class ExpensesRepository(
     private val expenseDao: ExpenseDao,
     private val categoryDao: CategoryDao,
@@ -80,8 +85,78 @@ class ExpensesRepository(
     private val fieldCorrectionMemory: FieldCorrectionMemory,
     /** Notices that payments to a vendor keep coming back. Nothing it records changes this record;
      *  it only counts, and only a person turns a count into an arrangement. */
-    private val recurringPayments: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository? = null
+    private val recurringPayments: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository? = null,
+    private val bankAccountDao: BankAccountDao? = null
 ) {
+
+    // --- cards and accounts money moved through (see BankAccount) ---
+
+    val bankAccounts: Flow<List<BankAccount>> =
+        bankAccountDao?.observeAll() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    val accountCurrencies: Flow<List<String>> =
+        bankAccountDao?.observeCurrencies() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    suspend fun bankAccountsSnapshot(): List<BankAccount> = bankAccountDao?.getAll().orEmpty()
+
+    /**
+     * The account [text] names, creating it where that is allowed — the one route both inputs take.
+     *
+     * Returns null whenever the text names no account, names more than one, or names an unfamiliar
+     * one this source may not add. Null is the ordinary answer, not a failure: most captures never
+     * carry an account's format at all.
+     *
+     * A known account seen more fully than before is widened rather than duplicated, so a card first
+     * met as two digits in a notification becomes the full number once a receipt shows it, and the
+     * next two-digit message still finds it.
+     */
+    suspend fun resolveBankAccount(
+        text: String?,
+        autoCreate: Boolean,
+        defaultCurrency: String,
+        bankName: String?,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Long? {
+        val dao = bankAccountDao ?: return null
+        val existing = dao.getAll()
+        return when (val outcome = BankAccounts.resolve(text, existing)) {
+            is BankAccounts.Outcome.None -> null
+            is BankAccounts.Outcome.Known -> {
+                val ref = AccountIdentifiers.single(text)
+                if (ref != null && BankAccounts.widens(outcome.account, ref)) {
+                    dao.update(outcome.account.copy(digits = ref.digits, kind = ref.kind.name))
+                    Logger.d(TAG_ACCOUNTS, "Widened account ${outcome.account.id} to ${ref.kind}")
+                }
+                outcome.account.id
+            }
+            is BankAccounts.Outcome.Unknown -> {
+                if (!autoCreate) return null
+                val created = BankAccounts.newAccount(outcome.ref, defaultCurrency, bankName, nowMillis)
+                // IGNORE on conflict, so a race between two captures naming one card leaves one row
+                // rather than failing the second capture outright.
+                val id = dao.insert(created)
+                if (id > 0) id else dao.getAll().firstOrNull { it.asRef().sameAs(outcome.ref) }?.id
+            }
+        }
+    }
+
+    suspend fun addBankAccount(account: BankAccount): Long = bankAccountDao?.insert(account) ?: -1L
+
+    suspend fun updateBankAccount(account: BankAccount) {
+        bankAccountDao?.update(account)
+    }
+
+    /**
+     * Removes the account and lets go of the records that pointed at it.
+     *
+     * The records stay: an expense happened whether or not the account it went through is still
+     * listed, and deleting the row is a statement about the list rather than about the spending.
+     */
+    suspend fun deleteBankAccount(account: BankAccount) {
+        bankAccountDao ?: return
+        expenseDao.clearBankAccount(account.id)
+        bankAccountDao.delete(account)
+    }
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
         expenseDao.observeExpensesWithDetails().distinctUntilChanged()
@@ -406,7 +481,9 @@ class ExpensesRepository(
         // one has touched yet.
         manuallyEdited: Boolean = false,
         previousBalanceAmount: Double? = null,
-        invoiceOwnAmount: Double? = null
+        invoiceOwnAmount: Double? = null,
+        /** The card or account the source text named — see [com.voxapps.expenses.domain.accounts.BankAccounts]. */
+        bankAccountId: Long? = null
     ): Long {
         return try {
             val candidate = Expense(
@@ -417,6 +494,7 @@ class ExpensesRepository(
                 currencyCode = currencyCode,
                 vendor = vendor?.trim()?.takeIf { it.isNotEmpty() },
                 bank = bank?.trim()?.takeIf { it.isNotEmpty() },
+                bankAccountId = bankAccountId,
                 location = location?.trim()?.takeIf { it.isNotEmpty() },
                 dateTime = dateTime,
                 comments = comments?.trim()?.takeIf { it.isNotEmpty() },
@@ -636,7 +714,9 @@ class ExpensesRepository(
         correctionsApplyMode: String = ExpensesSettings.CORRECTION_APPLY_SUGGEST,
         source: ExpenseSource = ExpenseSource.VOICE,
         previousBalanceAmount: Double? = null,
-        invoiceOwnAmount: Double? = null
+        invoiceOwnAmount: Double? = null,
+        /** The card or account the source text named — see [com.voxapps.expenses.domain.accounts.BankAccounts]. */
+        bankAccountId: Long? = null
     ): Long {
         // Learned spelling corrections run before anything reads the text fields, so a learned
         // merchant mapping keyed on the clean vendor spelling still fires on a garbled arrival.
@@ -713,7 +793,8 @@ class ExpensesRepository(
             nearDuplicateConfig = nearDuplicateConfig,
             source = source,
             previousBalanceAmount = previousBalanceAmount,
-            invoiceOwnAmount = invoiceOwnAmount
+            invoiceOwnAmount = invoiceOwnAmount,
+            bankAccountId = bankAccountId
         )
 
         // Whatever correction text was NOT written into the row (all of it in SUGGEST mode, the

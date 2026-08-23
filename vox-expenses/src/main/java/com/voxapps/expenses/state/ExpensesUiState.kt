@@ -1,5 +1,7 @@
 package com.voxapps.expenses.state
 
+import com.voxapps.expenses.data.BankAccount
+import com.voxapps.design.filter.VoxRange
 import androidx.compose.runtime.Immutable
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.ExpenseWithDetails
@@ -28,6 +30,13 @@ sealed interface ExpensesUiState {
         val selectedBank: FilterValue? = null,
         val selectedLocation: FilterValue? = null,
         val selectedVendor: FilterValue? = null,
+        val selectedAmount: VoxRange? = null,
+        val amountBuckets: List<VoxRange> = emptyList(),
+        val selectedAccountId: Long? = null,
+        val selectedCardId: Long? = null,
+        val selectedCurrency: String? = null,
+        val bankAccounts: List<BankAccount> = emptyList(),
+        val availableCurrencies: List<String> = emptyList(),
         val availableBanks: List<String> = emptyList(),
         val availableLocations: List<String> = emptyList(),
         val availableVendors: List<String> = emptyList(),
