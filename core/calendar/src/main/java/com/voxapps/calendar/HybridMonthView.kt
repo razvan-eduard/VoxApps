@@ -80,6 +80,22 @@ fun <T : CalendarItem> HybridMonthView(
         }
     }
 
+    // 2b. A month that comes on screen takes the selection with it.
+    //
+    // The grid and the pager each move the other, so the month on screen can change without anything
+    // having touched the selection — which leaves the agenda below showing a day in the month that
+    // was left. Guarded on the selection already being in the displayed month, which is what makes
+    // this safe against the other direction: choosing a day outside the visible month moves the
+    // grid here (effect 3), and by the time this runs the two agree and it does nothing. That guard
+    // also covers first composition, where they agree by construction.
+    val displayedMonth = gridState.firstVisibleMonth.yearMonth
+    LaunchedEffect(displayedMonth) {
+        if (YearMonth.from(selectedDate) == displayedMonth) return@LaunchedEffect
+        onDateSelected(
+            CalendarDateUtils.startOfDayMillis(CalendarDateUtils.dayToLandOn(displayedMonth))
+        )
+    }
+
     // 3. Sync Selection -> List Scroll
     LaunchedEffect(selectedDate) {
         val targetIndex = selectedDate.dayOfMonth - 1

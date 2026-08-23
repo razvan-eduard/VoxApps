@@ -97,9 +97,9 @@ fun <T : CalendarItem> CalendarView(
         val pagerMonth = pagerState.currentMonth
         val selectedDate = CalendarDateUtils.millisToLocalDate(selectedDateMillis)
         if (YearMonth.from(selectedDate) != pagerMonth) {
-            // User swiped to a new month, update selection to the 1st of that month
-            val newDate = pagerMonth.atDay(1)
-            onDateSelected?.invoke(CalendarDateUtils.startOfDayMillis(newDate))
+            onDateSelected?.invoke(
+                CalendarDateUtils.startOfDayMillis(CalendarDateUtils.dayToLandOn(pagerMonth))
+            )
         }
     }
 
