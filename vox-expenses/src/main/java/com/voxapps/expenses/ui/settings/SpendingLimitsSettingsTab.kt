@@ -29,6 +29,7 @@ import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.state.ExpensesStateManager
+import com.voxapps.expenses.ui.labelled
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.expenses.ui.formatAmount
 import com.voxapps.design.settings.SettingsSectionCard
@@ -65,7 +66,7 @@ fun SpendingLimitsSettingsTab(
             )
 
             limits.forEach { limit ->
-                val categoryName = limit.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }
+                val categoryName = limit.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.labelled() }
                     ?: languageManager.getString("overall_spending_label")
                 val periodLabel = languageManager.getString(
                     if (limit.period == SpendingLimit.PERIOD_WEEKLY) "period_weekly" else "period_monthly"
@@ -97,7 +98,7 @@ fun SpendingLimitsSettingsTab(
                 Picklist(
                     items = categories,
                     selected = categories.firstOrNull { it.id == newCategoryId },
-                    itemLabel = { it.name },
+                    itemLabel = { it.labelled() },
                     onSelect = { newCategoryId = it.id },
                     // A limit with no category is the overall one, so "none" here is a real choice
                     // rather than an empty selection.

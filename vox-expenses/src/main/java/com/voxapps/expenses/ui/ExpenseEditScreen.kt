@@ -84,6 +84,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import com.voxapps.design.category.VoxCategoryFields
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
@@ -99,7 +101,6 @@ import com.voxapps.design.PaperTapField
 import com.voxapps.design.openLocationInMaps
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.location.ui.VoxLocationField
-import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.ExpensesApplication
@@ -635,7 +636,7 @@ fun ExpenseEditScreen(
                     Picklist(
                         items = categories,
                         selected = categories.firstOrNull { it.id == categoryId },
-                        itemLabel = { it.name },
+                        itemLabel = { it.labelled() },
                         onSelect = { categoryId = it.id },
                         noneLabel = languageManager.getString("none"),
                         onNoneSelected = { categoryId = null },
@@ -644,12 +645,18 @@ fun ExpenseEditScreen(
                         actionLabel = languageManager.getString("new_category_dropdown_item"),
                         onAction = { showNewCategoryDialog = true },
                         itemLeading = { cat ->
-                            Box(
-                                modifier = Modifier
-                                    .size(14.dp)
-                                    .clip(CircleShape)
-                                    .background(CategoryColors.fromStored(cat.colorArgb))
-                            )
+                            // The icon takes the dot's place: both answer "which category", and a
+                            // row carrying two answers to one question reads slower.
+                            if (cat.icon != null) {
+                                Text(cat.icon, fontSize = 15.sp)
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(CircleShape)
+                                        .background(CategoryColors.fromStored(cat.colorArgb))
+                                )
+                            }
                         },
                         anchor = { value, onClick ->
                             PaperTapField(
@@ -665,7 +672,7 @@ fun ExpenseEditScreen(
                                     )
                                 },
                                 suggestion = suggestedCategory?.let { cat ->
-                                    { FieldSuggestionChip(cat.name, onDismiss = { dismissedSuggestionFields += "category" }) { categoryId = cat.id } }
+                                    { FieldSuggestionChip(cat.labelled(), onDismiss = { dismissedSuggestionFields += "category" }) { categoryId = cat.id } }
                                 }
                             )
                         }
@@ -973,8 +980,8 @@ fun ExpenseEditScreen(
             existingColors = categories.map { it.colorArgb },
             precedingColor = mostRecentCategoryColor,
             onDismiss = { showNewCategoryDialog = false },
-            onConfirm = { name, color ->
-                stateManager.addCategory(name, color, onResult = { newId -> if (newId > 0) categoryId = newId })
+            onConfirm = { name, color, icon ->
+                stateManager.addCategory(name, color, icon, onResult = { newId -> if (newId > 0) categoryId = newId })
                 showNewCategoryDialog = false
             }
         )
@@ -986,10 +993,11 @@ private fun NewCategoryDialog(
     existingColors: List<Long>,
     precedingColor: Long?,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, colorArgb: Long) -> Unit
+    onConfirm: (name: String, colorArgb: Long, icon: String?) -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
     var name by remember { mutableStateOf("") }
+    var icon by remember { mutableStateOf<String?>(null) }
     var selectedColor by remember(existingColors, precedingColor) {
         mutableStateOf(VoxColorPalette.unusedOrRandomColor(existingColors, precedingColor))
     }
@@ -997,28 +1005,21 @@ private fun NewCategoryDialog(
         onDismissRequest = onDismiss,
         title = { Text(languageManager.getString("new_category_dialog_title")) },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(languageManager.getString("category_name")) },
-                    singleLine = true
-                )
-                VoxColorSwatchPicker(
-                    selectedColor = selectedColor,
-                    onColorSelected = { selectedColor = it },
-                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
-                    customColorDialogTitle = languageManager.getString("custom_color_title"),
-                    customColorUseLabel = languageManager.getString("use_color_button"),
-                    customColorCancelLabel = languageManager.getString("cancel"),
-                    customColorHueLabel = languageManager.getString("hue_label"),
-                    customColorSaturationLabel = languageManager.getString("saturation_label"),
-                    customColorBrightnessLabel = languageManager.getString("brightness_label")
-                )
-            }
+            VoxCategoryFields(
+                name = name,
+                onNameChange = { name = it },
+                icon = icon,
+                onIconChange = { icon = it },
+                color = selectedColor,
+                onColorChange = { selectedColor = it },
+                strings = rememberCategoryFieldStrings()
+            )
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name.trim(), selectedColor) }, enabled = name.isNotBlank()) {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onConfirm(name.trim(), selectedColor, icon) },
+                enabled = name.isNotBlank()
+            ) {
                 Text(languageManager.getString("save"))
             }
         },
@@ -1026,6 +1027,7 @@ private fun NewCategoryDialog(
             TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
         }
     )
+
 }
 
 @Composable
