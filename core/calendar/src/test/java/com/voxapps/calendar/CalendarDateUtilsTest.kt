@@ -77,4 +77,41 @@ class CalendarDateUtilsTest {
         assertTrue(CalendarDateUtils.lastItemsOfPreviousMonth(items, month, zone = ZONE).isEmpty())
         assertTrue(CalendarDateUtils.firstItemsOfNextMonth(items, month, zone = ZONE).isEmpty())
     }
+    // --- the day a month answers with when it comes on screen ---
+
+    /** Every other month starts at its first day: the day carried over is nobody's choice. */
+    @Test
+    fun `an ordinary month lands on its first day`() {
+        val today = LocalDate.of(2026, 8, 23)
+        assertEquals(LocalDate.of(2026, 5, 1), CalendarDateUtils.dayToLandOn(YearMonth.of(2026, 5), today))
+        assertEquals(LocalDate.of(2027, 1, 1), CalendarDateUtils.dayToLandOn(YearMonth.of(2027, 1), today))
+    }
+
+    /** Coming back to the present arrives at the present, not at the 1st. */
+    @Test
+    fun `the month holding today lands on today`() {
+        val today = LocalDate.of(2026, 8, 23)
+        assertEquals(today, CalendarDateUtils.dayToLandOn(YearMonth.of(2026, 8), today))
+    }
+
+    /** The same month number a year away is a different month. */
+    @Test
+    fun `the same month in another year is an ordinary month`() {
+        val today = LocalDate.of(2026, 8, 23)
+        assertEquals(LocalDate.of(2025, 8, 1), CalendarDateUtils.dayToLandOn(YearMonth.of(2025, 8), today))
+        assertEquals(LocalDate.of(2027, 8, 1), CalendarDateUtils.dayToLandOn(YearMonth.of(2027, 8), today))
+    }
+
+    @Test
+    fun `today on the first of a month still lands on today`() {
+        val today = LocalDate.of(2026, 2, 1)
+        assertEquals(today, CalendarDateUtils.dayToLandOn(YearMonth.of(2026, 2), today))
+    }
+
+    /** A month shorter than the day left behind still has a first day. */
+    @Test
+    fun `a short month is reached from a long one`() {
+        val today = LocalDate.of(2026, 1, 31)
+        assertEquals(LocalDate.of(2026, 2, 1), CalendarDateUtils.dayToLandOn(YearMonth.of(2026, 2), today))
+    }
 }

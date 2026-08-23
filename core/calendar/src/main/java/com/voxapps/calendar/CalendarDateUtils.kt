@@ -24,6 +24,18 @@ object CalendarDateUtils {
         (1..month.lengthOfMonth()).map { month.atDay(it) }
 
     /**
+     * The day a month answers with when it becomes the one on screen.
+     *
+     * Arriving in a month has to land somewhere, and the day-of-month carried over from the month
+     * just left is a date nobody chose — it is an artefact of where the last month happened to be
+     * standing, and it decides what the agenda below shows. So: the first of the month, except for
+     * the month containing [today], which answers with today. Coming back to the present should
+     * arrive at the present rather than at the 1st.
+     */
+    fun dayToLandOn(month: YearMonth, today: LocalDate = LocalDate.now()): LocalDate =
+        if (month == YearMonth.from(today)) today else month.atDay(1)
+
+    /**
      * Buckets [items] by calendar day (in [zone]), restricted to [month] and keyed by EVERY day of
      * [month] — days with no matching item still get an entry (empty list), so a caller rendering
      * one row per map entry always shows a row for every day, not just days with content.
