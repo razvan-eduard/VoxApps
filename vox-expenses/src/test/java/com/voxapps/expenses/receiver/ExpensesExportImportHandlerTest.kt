@@ -3,6 +3,7 @@ package com.voxapps.expenses.receiver
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.Expense
@@ -66,6 +67,8 @@ class ExpensesExportImportHandlerTest {
         coEvery { expensesRepo.deleteSpendingLimit(any()) } just Runs
         coEvery { expensesRepo.remapRulesSnapshot() } returns emptyList()
         coEvery { expensesRepo.learnedFieldCorrectionsSnapshot() } returns emptyList()
+        coEvery { expensesRepo.setDefaultCategory(any()) } just Runs
+        coEvery { expensesRepo.addCategory(any(), any(), any(), any(), any()) } returns 1L
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
         coEvery { duplicateRuleDao.getAll() } returns emptyList()
     }
@@ -284,5 +287,86 @@ class ExpensesExportImportHandlerTest {
         handler.import(payload)
 
         coVerify(exactly = 1) { duplicateRuleDao.upsert(match { it.name == "New Rule" }) }
+    }
+
+    // --- the category a record with no opinion falls back to ---
+
+    private fun category(id: Long, name: String, isDefault: Boolean = false, icon: String? = null) =
+        Category(id = id, name = name, colorArgb = 0xFF000000, position = 0, createdAt = 0L, isDefault = isDefault, icon = icon)
+
+    @Test
+    fun `export records which category is the fallback`() = runTest {
+        every { expensesRepo.categories } returns flowOf(
+            listOf(category(1, "Groceries", isDefault = true), category(2, "Uncategorised"))
+        )
+
+        val exported = JSONObject(handler.export(includePhotos = false).text).getJSONArray("categories")
+        assertEquals(2, exported.length())
+        assertTrue("the starred one says so", exported.getJSONObject(0).optBoolean("isDefault"))
+        assertFalse("and the other does not", exported.getJSONObject(1).optBoolean("isDefault"))
+    }
+
+    @Test
+    fun `export records a category's icon and omits it where there is none`() = runTest {
+        every { expensesRepo.categories } returns flowOf(
+            listOf(category(1, "Groceries", icon = "🛒"), category(2, "Uncategorised"))
+        )
+
+        val exported = JSONObject(handler.export(includePhotos = false).text).getJSONArray("categories")
+        assertEquals("🛒", exported.getJSONObject(0).optString("icon"))
+        assertFalse("nothing to say, nothing said", exported.getJSONObject(1).has("icon"))
+    }
+
+    /** The star moves onto whichever local category the marked one merged into. */
+    @Test
+    fun `import moves the fallback onto the matching local category`() = runTest {
+        every { expensesRepo.categories } returns flowOf(
+            listOf(category(7, "Groceries"), category(8, "Uncategorised", isDefault = true))
+        )
+
+        handler.import("""{"categories":[{"id":1,"name":"Groceries","isDefault":true},{"id":2,"name":"Uncategorised"}]}""")
+
+        coVerify(exactly = 1) { expensesRepo.setDefaultCategory(7L) }
+    }
+
+    /** Created rather than matched, and the star still finds it. */
+    @Test
+    fun `import moves the fallback onto a category it had to create`() = runTest {
+        every { expensesRepo.categories } returns flowOf(emptyList())
+        coEvery { expensesRepo.addCategory(any(), any(), any(), any(), any()) } returns 42L
+
+        handler.import("""{"categories":[{"id":1,"name":"Groceries","isDefault":true}]}""")
+
+        coVerify(exactly = 1) { expensesRepo.setDefaultCategory(42L) }
+    }
+
+    /** Silence is not an instruction to change anything. */
+    @Test
+    fun `a backup marking no fallback leaves this device's own alone`() = runTest {
+        every { expensesRepo.categories } returns flowOf(listOf(category(7, "Groceries", isDefault = true)))
+
+        handler.import("""{"categories":[{"id":1,"name":"Groceries"},{"id":2,"name":"Utilities"}]}""")
+
+        coVerify(exactly = 0) { expensesRepo.setDefaultCategory(any()) }
+    }
+
+    @Test
+    fun `a marked category that did not survive the trip moves nothing`() = runTest {
+        every { expensesRepo.categories } returns flowOf(listOf(category(7, "Groceries", isDefault = true)))
+        coEvery { expensesRepo.addCategory(any(), any(), any(), any(), any()) } returns -1L
+
+        handler.import("""{"categories":[{"id":1,"name":"Utilities","isDefault":true}]}""")
+
+        coVerify(exactly = 0) { expensesRepo.setDefaultCategory(any()) }
+    }
+
+    @Test
+    fun `import carries a category's icon onto the one it creates`() = runTest {
+        every { expensesRepo.categories } returns flowOf(emptyList())
+        coEvery { expensesRepo.addCategory(any(), any(), any(), any(), any()) } returns 42L
+
+        handler.import("""{"categories":[{"id":1,"name":"Groceries","icon":"🛒"}]}""")
+
+        coVerify(exactly = 1) { expensesRepo.addCategory("Groceries", any(), any(), any(), "🛒") }
     }
 }
