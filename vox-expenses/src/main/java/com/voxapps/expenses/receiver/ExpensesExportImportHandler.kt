@@ -14,6 +14,7 @@ import com.voxapps.backup.VoxImportMode
 import com.voxapps.backup.VoxSettingsRoundTrip
 import com.voxapps.backup.VoxSnapshotReplaceImporter
 import com.voxapps.design.toEnumOrNull
+import com.voxapps.expenses.data.BankAccount
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
@@ -121,6 +122,7 @@ class ExpensesExportImportHandler(
             // Dismissals ride along with confirmations: both are answers a person gave, and a restore
             // that kept only the yesses would start proposing everything they had already refused.
             json.put("recurringPayments", JSONArray(recurringPaymentRepo.snapshot().map { it.toJson() }))
+            json.put("bankAccounts", JSONArray(expensesRepo.bankAccountsSnapshot().map { it.toJson() }))
 
             if (includePhotos) {
                 val names = expensesWithDetails.mapNotNull { it.expense.receiptImageName?.takeIf { n -> n.isNotBlank() } }
@@ -380,6 +382,33 @@ class ExpensesExportImportHandler(
             )
         }
 
+        // Merged by digits rather than replaced by snapshot: the digits are what identify a card
+        // anywhere, so a restore onto a device that already met the same card lands on the row it
+        // already has instead of colliding with the unique index. The parent link is remapped
+        // through the same map, and an account whose parent did not survive the trip becomes a root
+        // rather than pointing at nothing.
+        val importedAccountToLocal = mutableMapOf<Long, Long>()
+        if (root.has("bankAccounts")) {
+            val imported = root.optJSONArray("bankAccounts") ?: JSONArray()
+            val existing = expensesRepo.bankAccountsSnapshot().associateBy { it.digits.lowercase() }
+            val entries = (0 until imported.length()).map { imported.getJSONObject(it) }
+            for (a in entries) {
+                val digits = a.optString("digits").takeIf { it.isNotBlank() } ?: continue
+                val local = existing[digits.lowercase()]?.id
+                    ?: expensesRepo.addBankAccount(a.toBankAccount(parentId = null)).takeIf { it > 0 }
+                    ?: continue
+                importedAccountToLocal[a.optLong("id")] = local
+            }
+            // A second pass, because a card may be listed before the account it belongs to.
+            for (a in entries) {
+                val local = importedAccountToLocal[a.optLong("id")] ?: continue
+                val parent = a.optLong("parentId").takeIf { a.has("parentId") && !a.isNull("parentId") }
+                    ?.let { importedAccountToLocal[it] } ?: continue
+                expensesRepo.bankAccountsSnapshot().firstOrNull { it.id == local }
+                    ?.let { expensesRepo.updateBankAccount(it.copy(parentId = parent)) }
+            }
+        }
+
         if (root.has("recurringPayments")) {
             val preExisting = recurringPaymentRepo.snapshot()
             val imported = root.optJSONArray("recurringPayments") ?: JSONArray()
@@ -434,6 +463,11 @@ class ExpensesExportImportHandler(
                         currencyCode = e.optString("currencyCode"),
                         vendor = e.optStringOrNull("vendor"),
                         bank = e.optStringOrNull("bank"),
+                        // Through the same map the account rows were merged by, so a record restored
+                        // onto a device that already knew the card points at the row it already has.
+                        bankAccountId = e.optLong("bankAccountId")
+                            .takeIf { e.has("bankAccountId") && !e.isNull("bankAccountId") }
+                            ?.let { importedAccountToLocal[it] },
                         location = e.optStringOrNull("location"),
                         dateTime = e.optLong("dateTime", System.currentTimeMillis()),
                         comments = e.optStringOrNull("comments"),
@@ -499,6 +533,33 @@ private fun JSONObject.toExpensesSettings(): ExpensesSettings =
             locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY"
         )
     }
+
+private fun BankAccount.toJson(): JSONObject = JSONObject().apply {
+    put("id", id)
+    put("digits", digits)
+    put("kind", kind)
+    parentId?.let { put("parentId", it) }
+    label?.let { put("label", it) }
+    put("currencyCode", currencyCode)
+    bankName?.let { put("bankName", it) }
+    icon?.let { put("icon", it) }
+    put("createdAt", createdAt)
+    put("autoCreated", autoCreated)
+}
+
+/** [parentId] is supplied by the caller after the id map exists — a card may be listed before the
+ *  account it belongs to. */
+private fun JSONObject.toBankAccount(parentId: Long?): BankAccount = BankAccount(
+    digits = optString("digits"),
+    kind = optString("kind"),
+    parentId = parentId,
+    label = optStringOrNull("label"),
+    currencyCode = optString("currencyCode"),
+    bankName = optStringOrNull("bankName"),
+    icon = optStringOrNull("icon"),
+    createdAt = optLong("createdAt", System.currentTimeMillis()),
+    autoCreated = optBoolean("autoCreated", false)
+)
 
 private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
@@ -584,6 +645,7 @@ private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<Attac
     put("currencyCode", currencyCode)
     put("vendor", vendor)
     put("bank", bank)
+    bankAccountId?.let { put("bankAccountId", it) }
     put("location", location)
     put("dateTime", dateTime)
     put("comments", comments)

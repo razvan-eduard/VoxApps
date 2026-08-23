@@ -265,6 +265,9 @@ class ExpensesStateManager(
     fun setAutoCreateAccountsFromScans(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateAccountsFromScans(enabled) } }
     fun setAutoCreateAccountsFromNotifications(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateAccountsFromNotifications(enabled) } }
     fun setDefaultAccountCurrency(code: String) { scope.launch { settingsRepo.setDefaultAccountCurrency(code) } }
+    fun addTypedBankAccount(text: String, currencyCode: String) {
+        scope.launch { expensesRepo.addTypedBankAccount(text, currencyCode) }
+    }
     fun updateBankAccount(account: BankAccount) { scope.launch { expensesRepo.updateBankAccount(account) } }
     fun deleteBankAccount(account: BankAccount) { scope.launch { expensesRepo.deleteBankAccount(account) } }
     fun setNotificationAssumedDirection(mode: String) { scope.launch { settingsRepo.setNotificationAssumedDirection(mode) } }

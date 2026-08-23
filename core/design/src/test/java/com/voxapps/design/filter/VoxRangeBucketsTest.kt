@@ -112,4 +112,14 @@ class VoxRangeBucketsTest {
         assertTrue(buckets.last().to >= 100.0)
         assertTrue(buckets.any { it.contains(-50.0) })
     }
+
+    // --- an open upper bound, for a range somebody typed ---
+
+    @Test
+    fun `an infinite upper end contains everything above the floor`() {
+        val open = VoxRange(500.0, Double.POSITIVE_INFINITY)
+        assertTrue(open.contains(500.0))
+        assertTrue(open.contains(1_000_000.0))
+        assertFalse(open.contains(499.99))
+    }
 }

@@ -142,6 +142,29 @@ class ExpensesRepository(
 
     suspend fun addBankAccount(account: BankAccount): Long = bankAccountDao?.insert(account) ?: -1L
 
+    /**
+     * An account somebody typed rather than one a capture brought.
+     *
+     * Judged by the same reader the captures use, so a hand-made row is the same kind of thing as a
+     * captured one and matches the same messages later. Refuses text that names no account, or more
+     * than one. [BankAccount.autoCreated] stays false: the two are undone differently, since deleting
+     * one a person made is deleting their work.
+     */
+    suspend fun addTypedBankAccount(text: String, currencyCode: String): Long {
+        val dao = bankAccountDao ?: return -1L
+        val ref = AccountIdentifiers.single(text) ?: return -1L
+        dao.getAll().firstOrNull { it.asRef().sameAs(ref) }?.let { return it.id }
+        return dao.insert(
+            BankAccount(
+                digits = ref.digits,
+                kind = ref.kind.name,
+                currencyCode = currencyCode,
+                createdAt = System.currentTimeMillis(),
+                autoCreated = false
+            )
+        )
+    }
+
     suspend fun updateBankAccount(account: BankAccount) {
         bankAccountDao?.update(account)
     }

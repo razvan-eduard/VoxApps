@@ -1,5 +1,9 @@
 package com.voxapps.expenses.ui
 
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.Close
@@ -97,6 +101,8 @@ fun ExpenseFilterSortSheet(
         if (from != dateFrom || to != dateTo) onDateRangeChange(from, to)
     }
 
+    var editingAmount by remember { mutableStateOf(false) }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -145,7 +151,6 @@ fun ExpenseFilterSortSheet(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-            Text(languageManager.getString("category_filter_label"), style = MaterialTheme.typography.labelLarge)
             Picklist(
                 items = categories,
                 selected = categories.firstOrNull { it.id == selectedCategoryId },
@@ -165,11 +170,6 @@ fun ExpenseFilterSortSheet(
                 }
             )
 
-            Text(
-                languageManager.getString("bank_filter_label"),
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(top = 12.dp)
-            )
             Picklist(
                 items = availableBanks,
                 selected = selectedBank?.text?.takeIf { _ -> selectedBank?.exact == true },
@@ -184,11 +184,6 @@ fun ExpenseFilterSortSheet(
                 onSearchAll = { onBankChange(FilterValue.typed(it)) }
             )
 
-            Text(
-                languageManager.getString("vendor_filter_label"),
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(top = 12.dp)
-            )
             Picklist(
                 items = availableVendors,
                 selected = selectedVendor?.text?.takeIf { _ -> selectedVendor?.exact == true },
@@ -203,11 +198,6 @@ fun ExpenseFilterSortSheet(
                 onSearchAll = { onVendorChange(FilterValue.typed(it)) }
             )
 
-            Text(
-                languageManager.getString("location_filter_label"),
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(top = 12.dp)
-            )
             Picklist(
                 items = availableLocations,
                 selected = selectedLocation?.text?.takeIf { _ -> selectedLocation?.exact == true },
@@ -234,12 +224,6 @@ fun ExpenseFilterSortSheet(
                 // of anything the person can still see.
                 val roots = BankAccountTree.rootsOf(bankAccounts)
                 val accountUsable = selectedCardId == null && selectedCurrency == null
-                Text(
-                    languageManager.getString("account_filter_label"),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (accountUsable) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.weight(1f)) {
                         Picklist(
@@ -268,11 +252,6 @@ fun ExpenseFilterSortSheet(
                 // already as narrow as it goes.
                 val cards = selectedAccountId?.let { BankAccountTree.childrenOf(it, bankAccounts) }.orEmpty()
                 if (cards.isNotEmpty()) {
-                    Text(
-                        languageManager.getString("card_filter_label"),
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
                     Picklist(
                         items = cards,
                         selected = cards.firstOrNull { it.id == selectedCardId },
@@ -286,12 +265,6 @@ fun ExpenseFilterSortSheet(
 
             if (availableCurrencies.isNotEmpty()) {
                 val currenciesUsable = selectedAccountId == null && selectedCardId == null
-                Text(
-                    languageManager.getString("currency_filter_label"),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (currenciesUsable) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
                 Picklist(
                     items = availableCurrencies,
                     selected = selectedCurrency,
@@ -308,11 +281,6 @@ fun ExpenseFilterSortSheet(
             // Offered only where the records span enough to divide: a single bracket holding
             // everything is not a filter. See VoxRangeBuckets.
             if (amountBuckets.isNotEmpty()) {
-                Text(
-                    languageManager.getString("amount_filter_label"),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
                 FlowRow(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -334,6 +302,20 @@ fun ExpenseFilterSortSheet(
                             }
                         )
                     }
+                    // The brackets are read from what the data holds, which makes them a good first
+                    // answer and never the only one — a question like "everything over 500" is not
+                    // a bracket anybody's data would produce.
+                    val custom = selectedAmount?.takeIf { it !in amountBuckets }
+                    FilterChip(
+                        selected = custom != null,
+                        onClick = { editingAmount = true },
+                        label = {
+                            Text(
+                                custom?.let { ExpenseFilterSummary.amountLabel(it) { v -> formatAmountPlain(v) } }
+                                    ?: languageManager.getString("amount_custom")
+                            )
+                        }
+                    )
                 }
             }
 
@@ -346,4 +328,84 @@ fun ExpenseFilterSortSheet(
             DateRangePicker(state = rangeState, modifier = Modifier.height(480.dp))
         }
     }
+
+    if (editingAmount) {
+        CustomAmountDialog(
+            current = selectedAmount?.takeIf { it !in amountBuckets },
+            onConfirm = { range -> onAmountChange(range); editingAmount = false },
+            onDismiss = { editingAmount = false }
+        )
+    }
+}
+
+/**
+ * A range somebody types, for the question the brackets do not happen to ask.
+ *
+ * Either end may be left empty. An empty upper end is the useful case — "everything over 500" — and
+ * is carried as an infinite bound rather than as a large number, so nothing has to guess how large
+ * is large enough. An empty lower end simply starts at nothing.
+ */
+@Composable
+private fun CustomAmountDialog(
+    current: VoxRange?,
+    onConfirm: (VoxRange?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val languageManager = LocalLanguageManager.current
+    var from by remember { mutableStateOf(current?.from?.takeIf { it > 0.0 }?.let { formatAmountPlain(it) } ?: "") }
+    var to by remember {
+        mutableStateOf(current?.to?.takeIf { it.isFinite() }?.let { formatAmountPlain(it) } ?: "")
+    }
+
+    fun typed(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()
+    val low = typed(from) ?: 0.0
+    val high = typed(to) ?: Double.POSITIVE_INFINITY
+    // Nothing to apply when both ends are empty, and nothing sensible to apply when they cross.
+    val usable = (from.isNotBlank() || to.isNotBlank()) && low <= high &&
+        (from.isBlank() || typed(from) != null) && (to.isBlank() || typed(to) != null)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(languageManager.getString("amount_custom_title")) },
+        text = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = from,
+                    onValueChange = { from = it },
+                    label = { Text(languageManager.getString("amount_custom_from")) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = to,
+                    onValueChange = { to = it },
+                    label = { Text(languageManager.getString("amount_custom_to")) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(VoxRange(low, high)) }, enabled = usable) {
+                Text(languageManager.getString("save"))
+            }
+        },
+        dismissButton = {
+            // Clearing is here rather than as a second control: the chip that opened this is the
+            // one showing the range, so this is where somebody comes to be rid of it.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (current != null) {
+                    TextButton(onClick = { onConfirm(null) }) {
+                        Text(languageManager.getString("clear"))
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+            }
+        }
+    )
 }

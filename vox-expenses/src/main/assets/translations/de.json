@@ -619,5 +619,12 @@
   "account_currency": "Währung",
   "account_belongs_to": "Gehört zu",
   "account_belongs_to_none": "Nichts",
-  "edit": "Bearbeiten"
+  "edit": "Bearbeiten",
+  "add_account": "Karte oder Konto hinzufügen",
+  "add_account_hint": "Kartennummer, IBAN oder eine Endung wie ••4535",
+  "add_account_unrecognised": "Keine Kartennummer, IBAN oder maskierte Endung",
+  "amount_custom": "Eigener…",
+  "amount_custom_title": "Betrag zwischen",
+  "amount_custom_from": "Von",
+  "amount_custom_to": "Bis"
 }
