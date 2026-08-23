@@ -8,9 +8,13 @@ name: Validate schemas
 
 on:
   push:
-    paths: ["remote-schemas/**", "scripts/validate_schemas.py"]
+    paths: &schema_paths
+      - "remote-schemas/**"
+      - "vox-*/src/main/assets/schemas/**"
+      - "scripts/validate_schemas.py"
+      - "scripts/check_schema_parity.py"
   pull_request:
-    paths: ["remote-schemas/**", "scripts/validate_schemas.py"]
+    paths: *schema_paths
   workflow_dispatch:
 
 jobs:
@@ -19,3 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 scripts/validate_schemas.py remote-schemas
+      # The published copy replaces the shipped one wherever a fetch has succeeded, so a term added
+      # to an app's asset alone reaches no real device. Nothing else notices that.
+      - run: python3 scripts/check_schema_parity.py

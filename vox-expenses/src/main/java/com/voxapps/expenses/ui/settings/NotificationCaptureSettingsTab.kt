@@ -59,7 +59,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import com.voxapps.design.settings.SettingsSectionCard
+import com.voxapps.design.settings.VoxSuggestionChip
+import com.voxapps.expenses.data.FieldVocabularies
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextField
@@ -119,6 +125,7 @@ fun NotificationCaptureSettingsTab(
     notificationAssumedDirection: String,
     captureAmountlessPayments: Boolean,
     dismissNotificationOnCapture: Boolean,
+    settings: ExpensesSettings,
     stateManager: ExpensesStateManager,
     settingsRepo: ExpensesSettingsRepository,
     modifier: Modifier = Modifier
@@ -489,6 +496,38 @@ fun NotificationCaptureSettingsTab(
             }
         }
 
+        val provided = remember(settings) { FieldVocabularies.provided(context) }
+        VocabularySettingsCard(
+            provided = provided.banks,
+            custom = settings.customBanks,
+            disabledKeys = settings.disabledBanks,
+            vocabulary = FieldVocabularies.VOCAB_BANK,
+            title = languageManager.getString("vocabulary_banks_title"),
+            description = languageManager.getString("vocabulary_banks_desc"),
+            stateManager = stateManager,
+            languageManager = languageManager
+        )
+        VocabularySettingsCard(
+            provided = emptyList(),
+            custom = settings.customVendors,
+            disabledKeys = settings.disabledVendors,
+            vocabulary = FieldVocabularies.VOCAB_VENDOR,
+            title = languageManager.getString("vocabulary_vendors_title"),
+            description = languageManager.getString("vocabulary_vendors_desc"),
+            stateManager = stateManager,
+            languageManager = languageManager
+        )
+        VocabularySettingsCard(
+            provided = provided.legalForms,
+            custom = settings.customLegalForms,
+            disabledKeys = settings.disabledLegalForms,
+            vocabulary = FieldVocabularies.VOCAB_LEGAL_FORM,
+            title = languageManager.getString("vocabulary_legal_title"),
+            description = languageManager.getString("vocabulary_legal_desc"),
+            stateManager = stateManager,
+            languageManager = languageManager
+        )
+
         if (pendingEntries.isNotEmpty()) {
             SettingsSectionCard(languageManager.getString("pending_notification_expenses_title")) {
                 pendingEntries.forEach { entry ->
@@ -497,6 +536,21 @@ fun NotificationCaptureSettingsTab(
                     // than the whole thing being thrown away.
                     var typedAmount by remember(entry.id) { mutableStateOf("") }
                     val amount = entry.totalAmount ?: typedAmount.trim().replace(',', '.').toDoubleOrNull()
+                    // What this entry could teach, once somebody says so. Offered only where the
+                    // word is genuinely unknown to the lists — a bank already listed has nothing to
+                    // learn, and a merchant the app resolved was never in doubt.
+                    val bankToLearn = entry.bank?.takeIf { b ->
+                        FieldVocabularies.rejectionFor(
+                            b, FieldVocabularies.VOCAB_BANK, context, settings
+                        ) == null
+                    }
+                    val vendorToLearn = entry.vendorCandidate?.takeIf { v ->
+                        entry.vendor == null && FieldVocabularies.rejectionFor(
+                            v, FieldVocabularies.VOCAB_VENDOR, context, settings
+                        ) == null
+                    }
+                    var learnBank by remember(entry.id) { mutableStateOf(false) }
+                    var learnVendor by remember(entry.id) { mutableStateOf(false) }
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -512,6 +566,37 @@ fun NotificationCaptureSettingsTab(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            // Amber, because the app is asking rather than offering: nothing
+                            // identified these, and accepting one teaches the lists permanently.
+                            if (bankToLearn != null || vendorToLearn != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    vendorToLearn?.let {
+                                        VoxSuggestionChip(
+                                            label = languageManager.getString("learn_vendor_chip").format(it),
+                                            asking = true,
+                                            selected = learnVendor,
+                                            leading = if (learnVendor) {
+                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                            } else null,
+                                            onClick = { learnVendor = !learnVendor }
+                                        )
+                                    }
+                                    bankToLearn?.let {
+                                        VoxSuggestionChip(
+                                            label = languageManager.getString("learn_bank_chip").format(it),
+                                            asking = true,
+                                            selected = learnBank,
+                                            leading = if (learnBank) {
+                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                            } else null,
+                                            onClick = { learnBank = !learnBank }
+                                        )
+                                    }
+                                }
+                            }
                             if (entry.totalAmount == null) {
                                 OutlinedTextField(
                                     value = typedAmount,
@@ -533,7 +618,13 @@ fun NotificationCaptureSettingsTab(
                                     Text(languageManager.getString("dismiss_button"))
                                 }
                                 Button(
-                                    onClick = { stateManager.approveNotificationExpense(entry, context, amount) },
+                                    onClick = {
+                                        stateManager.approveNotificationExpense(
+                                            entry, context, amount,
+                                            learnBank = bankToLearn?.takeIf { learnBank },
+                                            learnVendor = vendorToLearn?.takeIf { learnVendor }
+                                        )
+                                    },
                                     // Nothing to approve until there is a figure: an expense of
                                     // nothing is a gap wearing the shape of a record.
                                     enabled = amount != null && amount > 0.0,
@@ -556,3 +647,4 @@ fun NotificationCaptureSettingsTab(
         }
     }
 }
+

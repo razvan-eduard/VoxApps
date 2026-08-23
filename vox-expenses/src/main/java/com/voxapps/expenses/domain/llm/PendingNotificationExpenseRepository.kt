@@ -24,6 +24,15 @@ data class PendingNotificationExpense(
     val totalAmount: Double?,
     val currency: String,
     val vendor: String?,
+    /**
+     * The line this capture would have called the merchant if anything had identified one.
+     *
+     * A guess, and carried as one — it is the field no list claimed, which in a two-line message is
+     * usually the shop and sometimes the boilerplate. It exists so the review screen has something
+     * to point at: the screen shows it in the colour that means "asking", and nothing is written
+     * from it until a person taps it.
+     */
+    val vendorCandidate: String? = null,
     val category: String?,
     val capturedAt: Long,
     /** Set deterministically when the notification came from a starred (banking) source app —
@@ -85,6 +94,7 @@ class PendingNotificationExpenseRepository(context: Context) {
             e.totalAmount?.let { o.put("totalAmount", it) }
             o.put("currency", e.currency)
             e.vendor?.let { o.put("vendor", it) }
+            e.vendorCandidate?.let { o.put("vendorCandidate", it) }
             e.category?.let { o.put("category", it) }
             e.bank?.let { o.put("bank", it) }
             o.put("direction", e.direction.toJsonValue())
@@ -107,6 +117,7 @@ class PendingNotificationExpenseRepository(context: Context) {
                 totalAmount = o.optDouble("totalAmount").takeIf { !it.isNaN() },
                 currency = o.optString("currency"),
                 vendor = if (o.has("vendor")) o.optString("vendor") else null,
+                vendorCandidate = if (o.has("vendorCandidate")) o.optString("vendorCandidate") else null,
                 category = if (o.has("category")) o.optString("category") else null,
                 bank = if (o.has("bank")) o.optString("bank") else null,
                 direction = o.optTransactionDirection(),

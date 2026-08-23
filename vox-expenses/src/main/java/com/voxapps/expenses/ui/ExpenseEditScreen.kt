@@ -111,6 +111,7 @@ import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
+import com.voxapps.design.settings.VoxSuggestionChip
 import com.voxapps.expenses.data.PendingFieldSuggestion
 import com.voxapps.expenses.data.PendingLineItemsJson
 import com.voxapps.expenses.data.TransactionDirection
@@ -1384,34 +1385,24 @@ private fun PendingExpenseAttachmentsSection(pendingAttachments: List<String>, o
     }
 }
 
-/** A tappable "this is what the rescanned photo found for this field" chip, shown at the end of a
- *  [PaperField]/[PaperTapField] row when [ExpenseEditScreen]'s pending-suggestion diff finds a
- *  difference for that field. Same green-chip idiom as vox-commander's FastMap rule-editor token
- *  chips (RulesManagerScreen's TokenSelectorSection) — permanently "on" styling rather than a
- *  toggle, since tapping here fires [onClick] once and the chip disappears (the caller applies the
- *  suggested value to local state, which makes the underlying diff go to false on the next
- *  recomposition — no separate dismissed/applied tracking needed). [onDismiss], when supplied, renders
- *  a small trailing "x" that rejects the suggestion instead of applying it — the caller is expected to
- *  record that rejection itself (see `dismissedSuggestionFields` in ExpenseEditScreen), since this
- *  composable has no notion of "which field" it's showing a suggestion for. */
+/**
+ * A suggestion beside the field it concerns. The chip itself is shared — see
+ * [com.voxapps.design.settings.VoxSuggestionChip] for what its two colours mean; this only supplies
+ * the width cap, since a merchant name has to sit next to a field without pushing it off screen.
+ */
 @Composable
-private fun FieldSuggestionChip(value: String, onDismiss: (() -> Unit)? = null, onClick: () -> Unit) {
-    FilterChip(
-        selected = true,
+private fun FieldSuggestionChip(
+    value: String,
+    onDismiss: (() -> Unit)? = null,
+    asking: Boolean = false,
+    onClick: () -> Unit
+) {
+    VoxSuggestionChip(
+        label = value,
+        asking = asking,
         onClick = onClick,
-        label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        trailingIcon = onDismiss?.let {
-            {
-                IconButton(onClick = it, modifier = Modifier.size(18.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = LocalLanguageManager.current.getString("dismiss_suggestion"), tint = Color.White)
-                }
-            }
-        },
-        shape = RoundedCornerShape(16.dp),
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = Color(0xFF4CAF50),
-            selectedLabelColor = Color.White
-        ),
+        onDismiss = onDismiss,
+        dismissContentDescription = LocalLanguageManager.current.getString("dismiss_suggestion"),
         modifier = Modifier.padding(start = 6.dp).widthIn(max = if (onDismiss != null) 170.dp else 140.dp)
     )
 }

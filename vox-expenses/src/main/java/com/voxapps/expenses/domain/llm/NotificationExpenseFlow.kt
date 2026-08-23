@@ -1,6 +1,8 @@
 package com.voxapps.expenses.domain.llm
 
 import android.content.Context
+import com.voxapps.expenses.data.Expense
+import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
@@ -228,6 +230,13 @@ class NotificationExpenseFlow(
         // reaches this point: the policy consults autoAcceptWhenProven when a capture is dispatched,
         // and a reply arriving later never passes through it. Losing that made every answered
         // notification file itself whatever the setting said.
+        // Before anything is decided about this capture: it may be the second announcement of a
+        // payment already filed, in which case it has nothing to create and everything to add.
+        secondNoticeOf(record)?.let { foldedInto ->
+            kept = Kept.RECORD
+            return foldedInto
+        }
+
         val identifiable = !record.title.isNullOrBlank() || !record.vendor.isNullOrBlank()
         if (parsed != null && !(identifiable && autoAcceptWhenProven())) {
             Logger.d(
@@ -266,6 +275,16 @@ class NotificationExpenseFlow(
         // is for, and the figure is the one thing a person supplies there in a second.
         val amount = parsed?.totalAmount ?: f?.amount
         val category = container.expensesRepository.defaultCategory()
+        // A payment already filed does not also belong in the review queue: the entry would be a
+        // second copy of something the list already shows, asking to be approved into a third.
+        if (amount != null) {
+            val asRecord = candidateFor(amount, parsed, f, settings, category?.name)
+            if (secondNoticeOf(asRecord) != null) {
+                kept = Kept.RECORD
+                Logger.d(TAG, "A second notice of a filed payment — nothing queued")
+                return
+            }
+        }
         container.pendingNotificationExpenseRepository.addPending(
             PendingNotificationExpense(
                 id = System.currentTimeMillis(),
@@ -274,6 +293,14 @@ class NotificationExpenseFlow(
                 totalAmount = amount,
                 currency = parsed?.currency.orRead(settings.defaultCurrency) ?: settings.defaultCurrency,
                 vendor = parsed?.vendor.orRead(f?.vendor),
+                // Only where nothing identified a merchant. The title is where a wallet puts the
+                // shop, so it is the line worth pointing at — but no list claimed it, so it is
+                // offered as a question rather than written as an answer.
+                vendorCandidate = if (parsed?.vendor.orRead(f?.vendor) == null) {
+                    f?.title?.trim()?.takeIf { it.isNotBlank() }
+                } else {
+                    null
+                },
                 category = parsed?.category.orRead(category?.name),
                 capturedAt = System.currentTimeMillis(),
                 bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
@@ -297,4 +324,46 @@ class NotificationExpenseFlow(
             bank?.takeIf { it.isNotBlank() && it != vendor },
             category?.takeIf { it.isNotBlank() }
         ).firstOrNull()
+
+    /**
+     * The id of the record this capture is another announcement of, or null when it is a payment of
+     * its own. See [SecondNotice] for why this is asked here rather than left to the duplicate check.
+     */
+    private suspend fun secondNoticeOf(record: ExpenseParseResultParser.Parsed): Long? =
+        record.totalAmount?.let {
+            container.expensesRepository.foldSecondNotice(
+                Expense(
+                    title = record.title,
+                    totalAmount = it,
+                    currencyCode = record.currency ?: container.settingsRepository.getSnapshot().defaultCurrency,
+                    vendor = record.vendor,
+                    bank = record.bank,
+                    dateTime = System.currentTimeMillis(),
+                    direction = record.direction,
+                    source = ExpenseSource.NOTIFICATION
+                )
+            )
+        }
+
+    /** The same record shape the filing path builds, for a capture on its way to the review queue —
+     *  so both paths ask the identical question of the identical thing. */
+    private fun candidateFor(
+        amount: Double,
+        parsed: NotificationExpenseParseResultParser.Parsed?,
+        f: CapturedNotification?,
+        settings: ExpensesSettings,
+        categoryName: String?
+    ) = ExpenseParseResultParser.Parsed(
+        title = parsed?.title.orRead(title(f?.vendor, f?.bank, categoryName)),
+        totalAmount = amount,
+        currency = parsed?.currency.orRead(settings.defaultCurrency),
+        vendor = parsed?.vendor.orRead(f?.vendor),
+        bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
+        location = null,
+        category = parsed?.category.orRead(categoryName),
+        date = null,
+        time = null,
+        items = emptyList(),
+        direction = parsed?.direction ?: f?.direction ?: TransactionDirection.OUTGOING
+    )
 }

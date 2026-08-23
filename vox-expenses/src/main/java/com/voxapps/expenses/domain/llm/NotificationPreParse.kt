@@ -20,7 +20,8 @@ object NotificationPreParse {
     /** The vendor/bank pair as this app names them. */
     private val ROLES = TwoFieldPreParse.Roles(
         legalForm = FieldVocabularies.VOCAB_LEGAL_FORM,
-        issuer = FieldVocabularies.VOCAB_BANK
+        issuer = FieldVocabularies.VOCAB_BANK,
+        namedVendor = FieldVocabularies.VOCAB_VENDOR
     )
 
     /** [TwoFieldPreParse.Result]'s issuer is a bank here. */

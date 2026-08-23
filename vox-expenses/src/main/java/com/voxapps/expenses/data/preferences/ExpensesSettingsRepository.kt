@@ -49,6 +49,10 @@ interface ExpensesSettingsRepository {
     suspend fun setNotificationAssumedDirection(mode: String)
     /** See [ExpensesSettings.captureAmountlessPayments]. */
     suspend fun setCaptureAmountlessPayments(enabled: Boolean)
+    /** Adds or removes a term of this device's own; see [ExpensesSettings.customBanks]. */
+    suspend fun setCustomVocabulary(vocabulary: String, terms: Set<String>)
+    /** Switches shipped terms off or back on; see [ExpensesSettings.disabledBanks]. */
+    suspend fun setDisabledVocabulary(vocabulary: String, keys: Set<String>)
     /** See [ExpensesSettings.dismissNotificationOnCapture]. */
     suspend fun setDismissNotificationOnCapture(enabled: Boolean)
     /** See [ExpensesSettings.recurringProposalThreshold]; 0 turns proposals off. */

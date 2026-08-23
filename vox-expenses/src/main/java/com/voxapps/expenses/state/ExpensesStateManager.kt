@@ -16,6 +16,7 @@ import com.voxapps.expenses.data.PendingFieldSuggestion
 import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
+import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.TransactionDirection
@@ -65,7 +66,7 @@ class ExpensesStateManager(
     private val templateDirectionMemory: com.voxapps.expenses.domain.llm.TemplateDirectionMemory,
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
-    appContext: Context
+    private val appContext: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val workManager = WorkManager.getInstance(appContext)
@@ -540,6 +541,62 @@ class ExpensesStateManager(
      *  asked again. */
     fun dismissRecurringPayment(id: Long) { scope.launch { recurringPaymentRepo.dismiss(id) } }
 
+    /**
+     * Adds a term of this device's own, or says why it was refused.
+     *
+     * Refusal is checked here rather than in the screen because the reason a term is refused is a
+     * property of the merged vocabulary, not of what was typed — and letting a colliding term
+     * through would disable the whole vocabulary silently.
+     */
+    suspend fun addVocabularyTerm(vocabulary: String, term: String): FieldVocabularies.Rejection? {
+        val cleaned = term.trim()
+        val settings = settingsRepo.getSnapshot()
+        FieldVocabularies.rejectionFor(cleaned, vocabulary, appContext, settings)?.let { return it }
+        settingsRepo.setCustomVocabulary(vocabulary, customOf(settings, vocabulary) + cleaned)
+        return null
+    }
+
+    fun removeVocabularyTerm(vocabulary: String, term: String) {
+        scope.launch {
+            val settings = settingsRepo.getSnapshot()
+            settingsRepo.setCustomVocabulary(vocabulary, customOf(settings, vocabulary) - term)
+        }
+    }
+
+    /** Switches a whole section off, or back on — the supplied words or this device's own, named by
+     *  the screen rather than recomputed here, so what is switched is exactly what was listed. */
+    fun setVocabularySectionEnabled(vocabulary: String, terms: Collection<String>, enabled: Boolean) {
+        scope.launch {
+            val keys = FieldVocabularies.keysOf(terms)
+            val settings = settingsRepo.getSnapshot()
+            val current = disabledOf(settings, vocabulary)
+            settingsRepo.setDisabledVocabulary(vocabulary, if (enabled) current - keys else current + keys)
+        }
+    }
+
+    /** Switches a supplied term off, or back on. Keyed by the classifier's own normalization, so the
+     *  choice survives the list underneath being replaced by a newer one. */
+    fun setVocabularyTermEnabled(vocabulary: String, term: String, enabled: Boolean) {
+        scope.launch {
+            val key = com.voxapps.textmatch.extract.VocabularyClassifier.termKey(term)
+            val settings = settingsRepo.getSnapshot()
+            val current = disabledOf(settings, vocabulary)
+            settingsRepo.setDisabledVocabulary(vocabulary, if (enabled) current - key else current + key)
+        }
+    }
+
+    private fun customOf(settings: ExpensesSettings, vocabulary: String) = when (vocabulary) {
+        FieldVocabularies.VOCAB_BANK -> settings.customBanks
+        FieldVocabularies.VOCAB_VENDOR -> settings.customVendors
+        else -> settings.customLegalForms
+    }
+
+    private fun disabledOf(settings: ExpensesSettings, vocabulary: String) = when (vocabulary) {
+        FieldVocabularies.VOCAB_BANK -> settings.disabledBanks
+        FieldVocabularies.VOCAB_VENDOR -> settings.disabledVendors
+        else -> settings.disabledLegalForms
+    }
+
     fun setDismissNotificationOnCapture(enabled: Boolean) { scope.launch { settingsRepo.setDismissNotificationOnCapture(enabled) } }
 
     fun setRecurringProposalThreshold(times: Int) { scope.launch { settingsRepo.setRecurringProposalThreshold(times) } }
@@ -553,13 +610,25 @@ class ExpensesStateManager(
      * offer to — an expense of nothing is not a record, it is a gap wearing one. The figure the
      * reviewer typed arrives as [amountOverride], and this refuses rather than inventing a zero.
      */
+    /**
+     * Files a reviewed capture, and takes with it whatever the person settled while reviewing it.
+     *
+     * [learnBank] and [learnVendor] are words they picked on the entry — the app had no way to know
+     * these, which is why they were asked rather than offered. Written on approval and not on the
+     * tap: a chip tapped and then dismissed teaches nothing, and a list that grew from a glance
+     * would be a list nobody could account for.
+     */
     fun approveNotificationExpense(
         entry: PendingNotificationExpense,
         context: Context? = null,
-        amountOverride: Double? = null
+        amountOverride: Double? = null,
+        learnBank: String? = null,
+        learnVendor: String? = null
     ) {
         val amount = amountOverride ?: entry.totalAmount ?: return
         scope.launch {
+            learnBank?.let { addVocabularyTerm(FieldVocabularies.VOCAB_BANK, it) }
+            learnVendor?.let { addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, it) }
             val settings = settingsRepo.getSnapshot()
             val id = expensesRepo.addParsedExpense(
                 title = entry.title,
