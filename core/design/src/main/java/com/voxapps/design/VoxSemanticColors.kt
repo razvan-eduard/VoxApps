@@ -19,6 +19,20 @@ object VoxSemanticColors {
     /** A finished thing. Green regardless of theme — the one colour everyone already reads as done. */
     val done: Color = Color(0xFF2E7D32)
 
+    /**
+     * A finished item's own surface, and the line around it.
+     *
+     * Flat grey and flat black, carrying nothing of the colour the item was given. A tint of that
+     * colour — a wash, a fade, a desaturation — says "this is still that item, quieter", and a list
+     * of them reads as a list of dimmed items rather than a list of finished ones. Grey says the
+     * item is spent; the black keeps it legible while saying it, which a faded outline cannot.
+     *
+     * Thickness is nobody's business here: what a border means is set by the item being important,
+     * not by its being done, so done changes the colour and never the weight.
+     */
+    val doneFill: Color = Color(0xFFBDBDBD)
+    val doneOutline: Color = Color(0xFF000000)
+
     /** A thing marked important. Amber for the same reason: it has to stand out from the item's own
      *  colour, which the user chose and which could be anything. */
     val important: Color = Color(0xFFF9A825)

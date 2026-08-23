@@ -189,10 +189,12 @@ private fun hasMoreDueToday(items: List<ToDoItem>, fromIndex: Int, today: LocalD
 }
 
 /** View-mode-only "ghosting" check: an item reads as behind-us — done, or dated and already overdue —
- *  and should fade back so the "next up" item stays the visual anchor. The "next" item itself is never
- *  ghosted even if it happens to be an overdue-but-undone fallback pick. */
+ *  and should fade back so the "next up" item stays the visual anchor. A done item is excluded: it
+ *  has its own flat grey-and-black rendering, and fading that would be saying the same thing twice
+ *  in a way that costs legibility. The "next" item itself is never ghosted either, even when it is
+ *  the overdue-but-undone fallback pick. */
 private fun isPastItem(item: ToDoItem, isNext: Boolean, now: Long = System.currentTimeMillis()): Boolean =
-    !isNext && (item.done || (item.dueMillis != null && item.dueMillis < now))
+    !isNext && !item.done && item.dueMillis != null && item.dueMillis < now
 
 /** The color a task/node's own [colorArgb] should be darkened to for its glow — a tinted, non-neon
  *  shadow rather than the flat saturated fill color itself (which read as too harsh/neon at full
@@ -215,27 +217,26 @@ private fun contrastingTextColor(background: Color): Color =
 /** Blends [color] toward its own luminance-gray by [amount] (0 = unchanged, 1 = fully gray) — the
  *  "washed out" look for past/done items, on top of (not instead of) their row's own alpha reduction,
  *  so a faded item reads as genuinely behind-us rather than just a dimmer copy of the same hue. */
-/** The four tones a task renders in — done x important told apart at a glance: plain = the item's
- *  color; important = the same hue pressed deeper; done = washed toward gray; done+important =
- *  the deep tone washed toward gray (darker gray than plain done). */
+/**
+ * The tone a task renders in: its own colour, pressed deeper when it is important — and flat grey
+ * once it is done, whatever colour it was given and whether or not it is important.
+ *
+ * Done is not a quieter version of the item, it is a different state, so it carries none of the hue.
+ * See [com.voxapps.design.VoxSemanticColors.doneFill].
+ */
 internal fun itemTone(colorArgb: Long, done: Boolean, important: Boolean): Color {
+    if (done) return VoxSemanticColors.doneFill
     val base = Color(colorArgb.toInt())
-    val deepened = if (important) {
+    return if (important) {
         Color(red = base.red * 0.78f, green = base.green * 0.78f, blue = base.blue * 0.78f, alpha = base.alpha)
     } else {
         base
     }
-    if (!done) return deepened
-    // Done washes hard toward a whitish gray — barely a memory of the hue.
-    val wash = 0.78f
-    val target = 0.84f
-    return Color(
-        red = deepened.red * (1 - wash) + target * wash,
-        green = deepened.green * (1 - wash) + target * wash,
-        blue = deepened.blue * (1 - wash) + target * wash,
-        alpha = deepened.alpha
-    )
 }
+
+/** The line around a task: its own tone pressed darker, or flat black once it is done. */
+internal fun itemBorderColor(tone: Color, done: Boolean): Color =
+    if (done) VoxSemanticColors.doneOutline else toneBorderColor(tone)
 
 internal fun desaturate(color: Color, amount: Float = 0.55f): Color {
     val gray = color.luminance()
@@ -513,7 +514,7 @@ fun TaskChip(
             .shadow(elevation, RoundedCornerShape(50), ambientColor = glowColorFor(item.colorArgb), spotColor = glowColorFor(item.colorArgb))
             .clip(RoundedCornerShape(50))
             .background(background)
-            .border(borderWidth, toneBorderColor(background), RoundedCornerShape(50))
+            .border(borderWidth, itemBorderColor(background, item.done), RoundedCornerShape(50))
             .then(if (clickable) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
@@ -578,7 +579,7 @@ fun TimelineNode(
                 .size(size)
                 .clip(shape)
                 .background(color)
-                .border(borderWidth, toneBorderColor(color), shape)
+                .border(borderWidth, itemBorderColor(color, done), shape)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {

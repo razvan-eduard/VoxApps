@@ -550,7 +550,7 @@ fun TaskEditInlineCard(
     // flipping it grays the card the way the timeline grays a done node (desaturated contour,
     // gray-leaning darker wash) so the palette edit visibly "takes".
     val itemToneColor = itemTone(item.colorArgb, item.done, item.isImportant)
-    val contourColor = toneBorderColor(itemToneColor)
+    val contourColor = itemBorderColor(itemToneColor, item.done)
     // While the editor is open its contour breathes — "this node has unsaved state" — and stills
     // the moment it closes (saving closes it). Honors the theme menu's animations toggle.
     val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
@@ -565,11 +565,9 @@ fun TaskEditInlineCard(
         alpha
     } else 1f
 
-    val washColor = if (item.done) {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-    } else {
-        itemToneColor.copy(alpha = 0.12f)
-    }
+    // A done card is filled flat rather than washed: the wash is a way of saying "this item, in the
+    // background", and a finished item is not a background version of itself.
+    val washColor = if (item.done) itemToneColor else itemToneColor.copy(alpha = 0.12f)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -586,11 +584,7 @@ fun TaskEditInlineCard(
                         onValueChange = { text = it },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.titleLarge.copy(
-                            color = if (item.done) {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            }
+                            color = MaterialTheme.colorScheme.onSurface
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         decorationBox = { inner ->
