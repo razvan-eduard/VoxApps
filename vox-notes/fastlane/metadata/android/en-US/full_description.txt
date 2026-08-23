@@ -9,3 +9,4 @@ Key Features:
 - Cloud-Free Sync: Genuinely bidirectional peer-to-peer sync with another phone over NFC and Bluetooth. No cloud, no tracking, just your data on your devices.
 - Backup & Restore: Save and restore your notes and settings to a file you choose, with Full override, Merge, or Additive restore modes.
 - Multi-language UI: Available in English, Romanian, German, and French.
+- Months Land Somewhere Sensible: In the optional calendar view, switching month selects the first of that month and returning to this month selects today.

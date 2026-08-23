@@ -13,3 +13,4 @@ Key Features:
 - Private by Design: Core processing is done locally, ensuring data sovereignty. Anything that isn't stays off until you say otherwise — dedicated toggles for cloud AI engines (OpenAI) and for Google system services (system speech recognition) both default to off, so nothing cloud- or Google-operated runs without an explicit opt-in.
 - Material 3 Overlay: A sleek, floating voice UI that provides real-time transcription and status updates over any app.
 - Backup & Restore: Save and restore your settings and FastMap rules to a file you choose, with Full override, Merge, or Additive restore modes.
+- App Lists Open Where You Left Off: Any app picker puts the apps you starred first, then the ones you chose, then the rest — each alphabetical — instead of one long installed-order list.

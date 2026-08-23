@@ -13,3 +13,9 @@ Key Features:
 - P2P Sync: Secure, cloud-free bidirectional sync between two devices using NFC pairing and Bluetooth transfer.
 - Backup & Restore: Save and restore your expenses, rules, and settings to a file you choose, with Full override, Merge, or Additive restore modes.
 - SQLCipher Security: Your entire financial history is encrypted at rest.
+- Cards and Accounts: The card or account a payment went through, read from an IBAN, a card number or a masked ending like ••4535. Verified by checksum rather than guessed, so nothing is learned and nothing has to be taught. Cards can sit under an account, and filtering by the account covers its cards.
+- One Filter Control: A single chip naming every filter in force, opening them all, and clearing them with one tap. Filter by category, bank, vendor, location, card, currency, amount or date — and the same control sits on Reports, reading the same state.
+- Amount Brackets That Fit Your Data: Ranges read from your own smallest and largest amounts and rounded to figures you would have picked, plus a custom From/To for anything they miss — leave the upper end empty for "everything over this".
+- Recurring Payments: Payments that keep coming back are noticed and proposed rather than declared, with the next one shown as a predicted row and a reminder before it is due.
+- Editable Vocabularies: The banks, merchants and legal forms the offline reader matches on, with what the app supplies kept apart from what you added. A new spelling of a name you already use is offered as a rename, not as a second entry.
+- Category Icons: Any emoji on any category, shown in the list, the pickers and the home-screen widget.

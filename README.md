@@ -222,7 +222,12 @@ from your edits — managed together with duplicates and notification templates 
 and rules" settings menu — a shared location system with Commander, per-category spending limits with
 alerts, multi-currency reports, photo attachments via camera or gallery with a paperclip indicator, an
 optional calendar view, a home-screen widget, sync with another phone via Vox Hub, and its own Backup &
-Restore screen.
+Restore screen. The card or account a payment went through is read from the text itself — an IBAN, a
+card number or a masked ending like ••4535, verified by checksum rather than guessed, so nothing about
+it has to be taught; cards can sit under an account, and narrowing to the account covers its cards.
+Payments that keep coming back are noticed and proposed rather than declared. One filter control names
+every narrowing in force, opens them all and clears them in a tap — category, bank, vendor, location,
+card, currency, amount bracket, date — and the same control sits on Reports, reading the same state.
 
 <img width="388" height="850" alt="invoice-to-expense" src="https://github.com/user-attachments/assets/244ed0fd-f71c-48cf-8f03-82d3726bf4df" />
 <img width="388" height="850" alt="voice-lidl-to-expense" src="https://github.com/user-attachments/assets/752bd7c7-79e3-4390-b1ef-d5c25daa2ca4" />
@@ -244,7 +249,9 @@ next" timeline, due-date bleed onto the calendar/widget, and dedicated to-do hom
 lists, or one pinned list); ICS import/export for interop
 with Google Calendar/Thunderbird/Apple Calendar; a day view that opens at the current time, also shows
 that day's Notes and Expenses, and tells you when there's "Nothing else today"; photo attachments with
-a paperclip indicator; syncs with another phone via Vox Hub, plus its own Backup & Restore screen.
+a paperclip indicator; a finished to-do rendered flat grey behind a flat black outline rather than as a
+faded copy of itself; switching months lands on a day of the month you switched to, and returning to
+this month lands on today; syncs with another phone via Vox Hub, plus its own Backup & Restore screen.
 
 <img width="388" height="850" alt="dentist-to-calendar" src="https://github.com/user-attachments/assets/d911d7cc-c46e-4de6-a78f-96c7bcdccad2" />
 
