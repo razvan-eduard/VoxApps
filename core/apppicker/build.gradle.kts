@@ -32,6 +32,7 @@ dependencies {
     // The card's state lives inside the composable — star, selection and default are each held as
     // pending state and applied together — so the behaviour is only observable by driving the UI.
     androidTestImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.junit)

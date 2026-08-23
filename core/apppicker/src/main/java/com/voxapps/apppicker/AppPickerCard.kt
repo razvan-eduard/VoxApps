@@ -307,7 +307,9 @@ private fun AppPickerList(
     )
     val currentFilterLabel = filterOptions.find { it.first == filterMode }?.second ?: strings.showAllApps
 
-    val filteredApps = apps.filter { app ->
+    val ordered = remember(apps) { AppPickerOrder.of(apps, setOfNotNull(selectedPackage)) }
+
+    val filteredApps = ordered.filter { app ->
         val matchesSearch = searchQuery.isBlank() ||
             app.displayName.contains(searchQuery.trim(), ignoreCase = true) ||
             app.packageName.contains(searchQuery.trim(), ignoreCase = true)
@@ -392,7 +394,12 @@ private fun AppPickerListMulti(
     )
     val currentFilterLabel = filterOptions.find { it.first == currentFilter }?.second ?: strings.showAllApps
 
-    val filteredApps = apps.filter { app ->
+    // Ordered as the list opens rather than as it is used: a row that leaps to the top the moment
+    // it is ticked takes the row underneath it — the one you were about to tick — along with it.
+    // Re-keying on `apps` alone means the order settles again the next time the picker is opened.
+    val ordered = remember(apps) { AppPickerOrder.of(apps, selectedPackages.toSet(), starredPackages) }
+
+    val filteredApps = ordered.filter { app ->
         val isSelected = app.packageName in selectedPackages
         val matchesSearch = searchQuery.isBlank() ||
             app.displayName.contains(searchQuery.trim(), ignoreCase = true) ||
