@@ -29,6 +29,9 @@
 23. [Release Process & CI Automation](#23-release-process--ci-automation)
 24. [Record Creation (`:core:recordflow`, `:core:suggestions`)](#24-record-creation-corerecordflow-coresuggestions)
 25. [Document Reading (`:core:docread`)](#25-document-reading-coredocread)
+26. [Where a Record Happened (`:core:location`)](#26-where-a-record-happened-corelocation)
+27. [Backup, and Sync Between Two Phones (`:core:backup`, `:core:voxconnect`)](#27-backup-and-sync-between-two-phones-corebackup-corevoxconnect)
+28. [Home-Screen Widgets (`:core:widget`)](#28-home-screen-widgets-corewidget)
 
 ---
 
@@ -103,6 +106,13 @@ observable `EngineState`, the shared load mutex); the interface adds only what l
 The model and the wake phrase arrive together as a `ModelSpec.WakeWordModel` (`modelId`,
 `entryPoint` — null for a keyword built into the engine — `keyword`, `language`), so all three engines
 get both at load time and "the user changed the wake word" is expressed as `load(newSpec)`.
+
+`ParallelWakeWordEngine` (`:core:wakeword`) is the openWakeWord path's own arrangement rather than a
+fourth engine: the mel spectrogram, the embedding model and the per-word classifier run as a pipeline
+over one audio stream, so several wake words are watched for at once without decoding the audio once
+per word. `DetectionMode` and `WakeWordScore` are what a caller tunes and reads — a score per word
+rather than a single boolean, because "did it hear something" and "which of these did it hear" are
+different questions.
 
 ### Available Engines
 
@@ -2551,6 +2561,11 @@ Beyond `FuzzyNameMatcher`, the module hosts a deterministic-extraction package (
 `FieldCorrections`, `AmountText`, `Findings`.
 Extraction is shared and deterministic; policy — what to do with a finding — stays per satellite.
 
+`CurrencyMarkedAmounts` is why a two-line payment message yields an amount at all: a figure counts
+only when a currency marks it, and only when exactly one distinct such figure is present. A
+purchase-plus-balance notification carries two, and choosing between them is not a regex's call — so
+it declines and the question goes to a model, or to a person.
+
 `AccountIdentifiers` is the one extractor that needs no vocabulary at all, which is what separates it
 from `VocabularyClassifier`: a bank's *name* is a fact about the world and has to be learned, while a
 bank's *account number* is a fact about the string. It reads an IBAN (ISO 7064 mod-97), a full card
@@ -2566,6 +2581,19 @@ number as more of the number, and the checksum then fails on a good IBAN), and a
 or more dots where every other mask character counts on its own, since a single dot is a decimal
 separator and `12.34` would otherwise read as a card ending 34 on every receipt line.
 
+### One payment announced twice (`SecondNotice`)
+
+A duplicate check asks whether a record is already present. This asks something narrower and earlier:
+whether a capture is a *second announcement* of a payment already filed — a reserved-then-settled pair
+from one bank, arriving minutes apart about one purchase. `foldSecondNotice` folds it into the record
+that exists instead of inserting, so the pair never reaches the duplicate engine as two rows to be
+reconciled afterwards.
+
+The conditions are deliberately narrow, because folding is not reversible: both sides captured from a
+notification, the same currency, an amount equal to the cent, inside a three-minute window, and the
+existing record not hand-edited — a record somebody has touched is one whose shape they chose, and
+merging into it would overwrite that choice.
+
 ### Generic duplicate-rule engine
 
 The same module also ships `RuleBasedDuplicateChecker<T>` — a `DuplicateChecker<T>` implementation
@@ -2580,6 +2608,12 @@ Three reusable field builders cover the common comparator shapes so a new entity
 one-line declarations: `stringField` (`FieldCleaner`-normalized, null-on-either-side never matches,
 optional pluggable `FuzzyMatcher`), `exactField` (null-safe `==`), `timeWindowField`
 (`abs(delta) <= windowMillis`).
+
+`TemplateVerdictMemory` is the second of `:core:fieldmemory`'s two memories, and the one with the
+strictest rule: a verdict about a message *shape* rather than a field value. Two unanimous human
+confirmations before it answers on its own, permanent quarantine on the first disagreement — because
+a shape that means one thing today and another tomorrow is a shape nothing should be filed on. The
+verdict is an opaque string, so the app that owns the meaning maps it; this module only counts.
 
 `:core:datahygiene` has no Room/entity knowledge of its own — the field registry, where rules persist,
 and the rule-editing UI are each app's own responsibility. **vox-expenses** is the only current
@@ -2965,6 +2999,10 @@ A rung that asks but does not apply has to put the answer somewhere. `Suggestion
 `sourceOf`, `disposeIfSpent`. Each app declares its own `SuggestableField(key, label, weight)` set —
 which fields of its record may be proposed at all is the app's decision, not the module's.
 
+`OfferedSuggestion` is what a screen reads back — the field key, the proposed value, and which
+capture produced it, so dismissing the last one from a scan can dispose of that scan's photographs
+too (`disposeIfSpent`). A proposal nobody will ever be shown is a photograph nobody will ever delete.
+
 A target also declares what accepting is allowed to *do*: `AcceptMode.WRITES` puts the value on the
 record, `AcceptMode.STAGES` puts it in the draft the screen is holding and lets that screen's Save
 reach the database. The distinction is declared rather than assumed because getting it wrong is
@@ -3047,3 +3085,78 @@ so a correction is not shadowed by the version it corrects.
 `core/docread/src/test/resources/` holds verbatim OCR of real documents, kept as it came — misread
 characters, stray markers and all. They existed before the code that reads them, which is the point:
 a constructed fixture can be shaped, unconsciously, to fit the code it exercises.
+
+---
+
+### Schema catalogue (`:core:services`)
+
+`SchemaCatalog` is what a satellite asks "which schemas exist, and where do they come from" — the
+bundled copy shipped in assets, or the signed remote one fetched per app from its own repo URL. A
+fetched schema changes an install's behaviour, so it must carry a valid signature before it is
+allowed to: see `SchemaSignature`, and the monotonic-version rule that stops an old, validly-signed
+manifest being replayed over a newer one.
+
+---
+
+## 26. Where a Record Happened (`:core:location`)
+
+A city name on a record, resolved without a map SDK and without a Google dependency.
+
+**`VoxLocationResolver`** answers one question — what to call where you are — from three sources in
+order of cost: a cached fix, a live one, or a home town somebody typed. **`LocationCacheTtl`** is why
+the cache exists at all: a phone that has not moved does not need its radio woken for every capture,
+and a fix minutes old is the same answer a fresh one would give. `ResolvedLocation` carries which
+source answered, so a caller can tell a real fix from a fallback rather than treating them alike.
+
+**`VoxNominatimGeocoder`** turns coordinates into a name against OpenStreetMap's Nominatim — an
+open service rather than a bundled SDK, consistent with the rest of the suite. Queries are
+diacritic-folded before matching, so a place typed without them still finds itself. `VoxPlace` and
+`LocationPart` keep the pieces a caller may want separately (city, county, country) rather than one
+formatted string nothing can take apart.
+
+**`VoxLocationField` / `VoxLocationSettingsCard`** are the shared UI: a field with a picker on every
+screen that records a place, and one settings card for the cache TTL, the home town and the "always
+use this location" switch that skips GPS entirely. Four screens across three apps use the field, which
+is the reason it is here rather than in any one of them.
+
+`EphemeralLocationStore` holds a fix for the length of one capture — long enough for a reply to come
+back and be filed, short enough that nothing outlives the record it was for.
+
+---
+
+## 27. Backup, and Sync Between Two Phones (`:core:backup`, `:core:voxconnect`)
+
+**`:core:backup`** is the shape every app's export/import takes, so that Vox Hub can drive all six
+without knowing what any of them stores. `VoxBackupDocument` is the envelope; each app fills its own
+section. `VoxSettingsRoundTrip` is what keeps a settings backup honest — a field added to an app's
+settings travels without anybody remembering to add it to a hand-written allowlist, which is the
+failure that loses a setting silently. `VoxBiometricGate` refuses an export or import while an app is
+locked, so a lock is not merely a UI state. `VoxSnapshotReplaceImporter` implements the three restore
+modes (merge, additive, full override) once rather than six times, and `mergeByName` is the shared
+"land on the row this device already has" rule that keeps a restore from duplicating what it finds.
+
+**`:core:voxconnect`** is sync between two phones with no cloud in the middle. `VoxConnectPairing`
+exchanges keys over NFC — a tap is a proof of proximity no network can forge — and the transfer
+itself runs over Bluetooth through `VoxConnectServer`, since NFC carries a key comfortably and a
+database not at all. `AesGcmCipher` encrypts the payload with the paired key; `PairedDeviceStore`
+remembers which devices are trusted. A QR path (`VoxConnectQrScanner`) exists for devices whose NFC
+cannot be used to read its own address — a platform restriction that shaped the design rather than a
+preference.
+
+Merging is `:core:datahygiene`'s job, not this module's: what arrives is a delta, and which side of a
+conflict wins is a data question rather than a transport one — see §21.
+
+---
+
+## 28. Home-Screen Widgets (`:core:widget`)
+
+Jetpack Glance widgets across four apps, sharing the parts that would otherwise be written four
+times: `WidgetDayFormats` and `DaySeparatorStyle` (how a day is headed and divided), `WidgetDayChrome`
+(the border, the today tint, the padding a widget is given), and `WidgetScanRow` (the capture row a
+widget offers).
+
+The constraint that shapes all of it: a Glance widget renders no vectors of its own and holds no
+session. That is why a category's icon is stored as text (§ the `:core:design` shared components) —
+text survives into a widget where a drawable reference would not — and why every widget reads its
+data through the app's state manager rather than caching its own, since a widget woken by the system
+has no idea how long it has been asleep.
