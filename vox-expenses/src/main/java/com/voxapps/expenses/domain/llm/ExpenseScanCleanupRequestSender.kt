@@ -237,9 +237,14 @@ object ExpenseScanCleanupRequestSender {
         headerTemplates = ReceiptTemplates.headers(context),
         captionTemplates = ReceiptTemplates.captions(context),
         // The designators that mark a company's own line, from the list this app already keeps for
-        // classifying fields — one list, not a second copy that drifts from it.
+        // classifying fields — one list, not a second copy that drifts from it. Terms this device
+        // added or switched off apply here too, for the same reason: one list.
         legalForms = com.voxapps.expenses.data.FieldVocabularies
-            .vocabularies(context)
+            .vocabularies(
+                context,
+                (context.applicationContext as com.voxapps.expenses.ExpensesApplication)
+                    .container.settingsRepository.getSnapshot()
+            )
             .firstOrNull { it.name == com.voxapps.expenses.data.FieldVocabularies.VOCAB_LEGAL_FORM }
             ?.terms?.toList().orEmpty()
     )

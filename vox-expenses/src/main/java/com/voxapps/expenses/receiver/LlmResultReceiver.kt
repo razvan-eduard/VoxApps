@@ -15,6 +15,7 @@ import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.ALREADY_PRESENT_RESULT
+import com.voxapps.expenses.data.RECOGNIZED_NOT_INSERTED
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.NearDuplicateConfig
 import com.voxapps.expenses.data.PendingFieldSuggestion
@@ -560,17 +561,18 @@ class LlmResultReceiver : BroadcastReceiver() {
             withContext(Dispatchers.Main) {
                 Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
             }
-        } else if (newExpenseId == ALREADY_PRESENT_RESULT) {
-            // Silent, like the merge below: the record exists, and telling someone it could not be
-            // saved while it sits in their list is worse than saying nothing.
-            Logger.d(TAG, "A reply arrived for a capture that is already filed — nothing to do")
-        } else if (newExpenseId <= 0 && newExpenseId != NEAR_DUPLICATE_MERGED_RESULT) {
+        } else if (newExpenseId in RECOGNIZED_NOT_INSERTED) {
+            // Every one of these means the record is already there — answered twice, refused as a
+            // duplicate, or folded into the one it duplicated. None of them is a failure to save,
+            // and saying so while the expense sits in the list is worse than saying nothing: it
+            // reads as data lost, and the "try again" it offers would be refused for the same
+            // reason it was refused the first time.
+            Logger.d(TAG, "Nothing inserted, and nothing wrong: $newExpenseId")
+        } else if (newExpenseId <= 0) {
             Logger.e(TAG, "Failed to save parsed expense to database. ID: $newExpenseId")
             withContext(Dispatchers.Main) {
                 Toast.makeText(appContext, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_LONG).show()
             }
-        } else if (newExpenseId == NEAR_DUPLICATE_MERGED_RESULT) {
-            Logger.d(TAG, "Parsed expense merged into an existing near-duplicate instead of inserting")
         }
 
         return newExpenseId

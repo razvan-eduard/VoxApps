@@ -28,6 +28,19 @@ object VoxSemanticColors {
     val importantToggleOn: Color = Color(0xFFE53935)
     val importantToggleOff: Color = Color(0xFF8B1A1A)
 
+    /**
+     * A value the app is offering because it has one it believes — a re-read, a correction it has
+     * seen before, an answer some rung was not allowed to write. Accepting it fills a field.
+     */
+    val offered: Color = Color(0xFF4CAF50)
+
+    /**
+     * A value the app cannot identify and is asking about. Amber for the same reason [important] is,
+     * and deliberately not [offered]: accepting one of these teaches something that changes how
+     * later messages are read, and it must not look like accepting a value the app already trusts.
+     */
+    val asked: Color = Color(0xFFF9A825)
+
     /** Today, when a surface is tinted to say so — the week grid's column. Fades rather than fills;
      *  see the alphas at the call site. */
     val today: Color = Color(0xFF4CAF50)

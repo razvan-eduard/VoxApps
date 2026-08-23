@@ -146,7 +146,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // themselves.
         val fullText = listOfNotNull(text, ticker).joinToString("\n").ifBlank { null }
         val preParse = com.voxapps.expenses.domain.llm.NotificationPreParse.parse(
-            title, fullText, com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext)
+            title, fullText,
+            com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext, settings)
         )
         val bankName = preParse.bank ?: knownBankName
         // The template axis: reduce the message to its template's byte-shape and ask the memory

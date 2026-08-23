@@ -71,10 +71,13 @@ class AnsweredTwiceTest {
             repo.indexOf("SQLiteConstraintException") < repo.indexOf("DB Insert FAILED")
         )
 
+        // The reply handler tests one named set rather than enumerating sentinels, so a new one
+        // cannot be added to the repository and forgotten by the arm that reports failures. What
+        // the set must contain is asserted on the values themselves — see NotInsertedIsNotFailedTest.
         val receiver = source("LlmResultReceiver")
-        val silent = receiver.indexOf("newExpenseId == ALREADY_PRESENT_RESULT")
-        val complains = receiver.indexOf("scan_save_failed", silent)
-        assertTrue("already-present is handled", silent > 0)
+        val silent = receiver.indexOf("newExpenseId in RECOGNIZED_NOT_INSERTED")
+        val complains = receiver.indexOf("scan_save_failed", maxOf(silent, 0))
+        assertTrue("the already-there outcomes are handled as a set", silent > 0)
         assertTrue("and handled before the arm that complains", silent < complains)
     }
 }

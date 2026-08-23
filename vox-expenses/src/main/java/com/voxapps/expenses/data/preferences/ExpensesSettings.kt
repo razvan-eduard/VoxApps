@@ -132,6 +132,20 @@ data class ExpensesSettings(
      * should be the evidence it took to start. Zero switches the whole proposal off.
      */
     /**
+     * Terms this device adds to the shipped vocabularies, and the ones it switches off.
+     *
+     * Kept apart from the file rather than folded into it: the file is replaced wholesale by the
+     * next fetch, and a signed copy cannot be edited in place at all. The switched-off sets hold
+     * normalized keys so a term stays off across a replacement — see [FieldVocabularies.merge].
+     */
+    val customVendors: Set<String> = emptySet(),
+    val disabledVendors: Set<String> = emptySet(),
+    val customLegalForms: Set<String> = emptySet(),
+    val customBanks: Set<String> = emptySet(),
+    val disabledLegalForms: Set<String> = emptySet(),
+    val disabledBanks: Set<String> = emptySet(),
+
+    /**
      * Whether a captured notification is cleared from the shade once the app has kept it.
      *
      * Off by default, and deliberately: this removes a message the app did not write and cannot put

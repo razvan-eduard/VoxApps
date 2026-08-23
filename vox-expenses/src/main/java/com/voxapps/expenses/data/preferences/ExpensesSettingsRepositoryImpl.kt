@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
@@ -38,6 +39,12 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val NOTIFICATION_MODEL_USE = stringPreferencesKey("notification_model_use")
         val NOTIFICATION_ASSUMED_DIRECTION = stringPreferencesKey("notification_assumed_direction")
         val CAPTURE_AMOUNTLESS_PAYMENTS = booleanPreferencesKey("capture_amountless_payments")
+        val CUSTOM_VENDORS = stringSetPreferencesKey("custom_vendors")
+        val DISABLED_VENDORS = stringSetPreferencesKey("disabled_vendors")
+        val CUSTOM_LEGAL_FORMS = stringSetPreferencesKey("custom_legal_forms")
+        val CUSTOM_BANKS = stringSetPreferencesKey("custom_banks")
+        val DISABLED_LEGAL_FORMS = stringSetPreferencesKey("disabled_legal_forms")
+        val DISABLED_BANKS = stringSetPreferencesKey("disabled_banks")
         val DISMISS_NOTIFICATION_ON_CAPTURE = booleanPreferencesKey("dismiss_notification_on_capture")
         val RECURRING_PROPOSAL_THRESHOLD = intPreferencesKey("recurring_proposal_threshold")
         val RECURRING_REMINDERS_ENABLED = booleanPreferencesKey("recurring_reminders_enabled")
@@ -124,6 +131,12 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
                 ?.takeIf { it in ExpensesSettings.ASSUMED_DIRECTION_CHOICES }
                 ?: ExpensesSettings.ASSUME_NOTHING,
             captureAmountlessPayments = prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] ?: false,
+            customVendors = prefs[Keys.CUSTOM_VENDORS] ?: emptySet(),
+            disabledVendors = prefs[Keys.DISABLED_VENDORS] ?: emptySet(),
+            customLegalForms = prefs[Keys.CUSTOM_LEGAL_FORMS] ?: emptySet(),
+            customBanks = prefs[Keys.CUSTOM_BANKS] ?: emptySet(),
+            disabledLegalForms = prefs[Keys.DISABLED_LEGAL_FORMS] ?: emptySet(),
+            disabledBanks = prefs[Keys.DISABLED_BANKS] ?: emptySet(),
             dismissNotificationOnCapture = prefs[Keys.DISMISS_NOTIFICATION_ON_CAPTURE] ?: false,
             recurringProposalThreshold = prefs[Keys.RECURRING_PROPOSAL_THRESHOLD]
                 ?.takeIf { it in ExpensesSettings.RECURRING_THRESHOLD_CHOICES } ?: 2,
@@ -261,6 +274,24 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setNotificationModelUse(mode: String) {
         if (mode !in ExpensesSettings.NOTIFICATION_MODEL_CHOICES) return
         dataStore.edit { it[Keys.NOTIFICATION_MODEL_USE] = mode }
+    }
+
+    override suspend fun setCustomVocabulary(vocabulary: String, terms: Set<String>) {
+        val key = when (vocabulary) {
+            FieldVocabularies.VOCAB_BANK -> Keys.CUSTOM_BANKS
+            FieldVocabularies.VOCAB_VENDOR -> Keys.CUSTOM_VENDORS
+            else -> Keys.CUSTOM_LEGAL_FORMS
+        }
+        dataStore.edit { it[key] = terms }
+    }
+
+    override suspend fun setDisabledVocabulary(vocabulary: String, keys: Set<String>) {
+        val key = when (vocabulary) {
+            FieldVocabularies.VOCAB_BANK -> Keys.DISABLED_BANKS
+            FieldVocabularies.VOCAB_VENDOR -> Keys.DISABLED_VENDORS
+            else -> Keys.DISABLED_LEGAL_FORMS
+        }
+        dataStore.edit { it[key] = keys }
     }
 
     override suspend fun setDismissNotificationOnCapture(enabled: Boolean) {
@@ -553,6 +584,12 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.NOTIFICATION_MODEL_USE] = settings.notificationModelUse
             prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION] = settings.notificationAssumedDirection
             prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = settings.captureAmountlessPayments
+            prefs[Keys.CUSTOM_VENDORS] = settings.customVendors
+            prefs[Keys.DISABLED_VENDORS] = settings.disabledVendors
+            prefs[Keys.CUSTOM_LEGAL_FORMS] = settings.customLegalForms
+            prefs[Keys.CUSTOM_BANKS] = settings.customBanks
+            prefs[Keys.DISABLED_LEGAL_FORMS] = settings.disabledLegalForms
+            prefs[Keys.DISABLED_BANKS] = settings.disabledBanks
             prefs[Keys.DISMISS_NOTIFICATION_ON_CAPTURE] = settings.dismissNotificationOnCapture
             prefs[Keys.RECURRING_PROPOSAL_THRESHOLD] = settings.recurringProposalThreshold
             prefs[Keys.RECURRING_REMINDERS_ENABLED] = settings.recurringRemindersEnabled

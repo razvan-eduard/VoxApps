@@ -10,6 +10,8 @@ package com.voxapps.textmatch.extract
  *
  * The rules are the mutual-exclusion contract the vocabularies exist for, and every one of them
  * declines to the model rather than guess:
+ *  - a field carrying a name the caller has been told is a merchant is the vendor, outranking
+ *    everything below — nothing is more specific than having been named;
  *  - a field carrying a legal-form token is the vendor — companies carry designators, banks'
  *    notification prose does not; within one field a legal form outranks a bank token;
  *  - a bank token in a non-vendor field names the bank — the matched term, not the whole field,
@@ -31,10 +33,31 @@ object TwoFieldPreParse {
      * is the same wherever messages are sent by machines; the names those vocabularies go by belong
      * to whoever curates them.
      */
-    data class Roles(val legalForm: String, val issuer: String)
+    data class Roles(
+        val legalForm: String,
+        val issuer: String,
+        /**
+         * Names the caller has been told are merchants, if it keeps such a list. Optional because
+         * the relationship this object describes — a designator and an issuer token — holds without
+         * one; a caller with no list of names passes null and nothing changes.
+         */
+        val namedVendor: String? = null
+    )
 
-    /** A vendor candidate longer than this many tokens is prose, not a name. */
-    private const val MAX_VENDOR_TOKENS = 5
+    /**
+     * A vendor candidate longer than this many tokens is prose, not a name.
+     *
+     * Three, because a machine-sent sentence collapses once its figure is removed: what is left of
+     * "<verb> <figure> <preposition> <counterparty>" is short enough to pass a laxer bound, and the
+     * rule then writes a whole sentence into a field that will be shown as a merchant. The names
+     * this rule exists to catch are shorter than the sentences it must refuse — an issuer's own
+     * label, a company with its legal form, a shop with a branch code — so the tighter bound costs
+     * nothing it should have taken and refuses a class it never should have.
+     *
+     * Refusing is cheap here: a field this declines is simply not resolved deterministically, and
+     * naming the counterparty falls to whoever is allowed to guess.
+     */
+    private const val MAX_VENDOR_TOKENS = 3
 
 
 
@@ -55,16 +78,30 @@ object TwoFieldPreParse {
         }
         val bankFields = bankFindings.map { it.lineIndex }.distinct()
 
-        // Exactly one side per conclusion; anything ambiguous is the model's.
-        val vendorFromLegal = legalFields.singleOrNull()?.let { fields[it].ifBlank { null } }
-        val bank = if (bankFields.size == 1) bankFindings.first().term else null
+        // Exactly one side per conclusion, everywhere below; anything ambiguous is the model's.
+        //
+        // A name the caller was told is a merchant settles its field outright. It outranks the
+        // designator rule and the issuer rule alike, and for the same reason those rank against each
+        // other: the more specific statement wins, and nothing is more specific than having been
+        // named. Only one such field, as everywhere here — two is an ambiguity, not a conclusion.
+        val namedFields = roles.namedVendor
+            ?.let { name -> findings.filter { it.vocabulary == name }.map { it.lineIndex }.distinct() }
+            .orEmpty()
+        val vendorFromName = namedFields.singleOrNull()?.let { fields[it].ifBlank { null } }
 
-        val vendor = vendorFromLegal ?: run {
+        val vendorFromLegal = legalFields.singleOrNull()?.let { fields[it].ifBlank { null } }
+        // An issuer token in the field a name already claimed is part of that name.
+        val bank = if (bankFields.size == 1 && bankFields.single() !in namedFields) {
+            bankFindings.first().term
+        } else {
+            null
+        }
+
+        val vendor = vendorFromName ?: vendorFromLegal ?: run {
             // The leftover rule: a bank claimed one field and nothing claimed the other — the
             // other is the vendor, when it is name-shaped rather than a sentence.
-            if (vendorFromLegal == null && legalFields.isEmpty() && bankFields.size == 1) {
-                val leftover = fields[1 - bankFields.single()].ifBlank { null }
-                leftover?.takeIf { looksLikeName(it) }
+            if (namedFields.isEmpty() && legalFields.isEmpty() && bankFields.size == 1) {
+                nameOrNull(fields[1 - bankFields.single()])
             } else null
         }
 
@@ -81,13 +118,23 @@ object TwoFieldPreParse {
         listOfNotNull(vendor.trim().ifBlank { null }, category?.trim()?.ifBlank { null })
             .joinToString(" ")
 
-    private fun looksLikeName(field: String): Boolean {
+    /**
+     * The merchant name inside a field, or null where the field is prose.
+     *
+     * The figure comes out rather than merely being discounted while counting: a field naming both
+     * the shop and the sum is one message, but "<name> <sum>" is not a name, and it is a name that
+     * gets shown, matched against a template and offered as a correction. What is left is squeezed
+     * back to single spaces — removing a figure from the middle of a field otherwise leaves a gap
+     * where it stood.
+     */
+    private fun nameOrNull(field: String): String? {
         var withoutAmounts = field
         CurrencyMarkedAmounts.find(field).forEach {
             withoutAmounts = withoutAmounts.replace(it.raw, " ")
         }
         val tokens = withoutAmounts.split(Regex("""\s+""")).filter { it.isNotBlank() }
-        return tokens.isNotEmpty() && tokens.size <= MAX_VENDOR_TOKENS
+        if (tokens.isEmpty() || tokens.size > MAX_VENDOR_TOKENS) return null
+        return tokens.joinToString(" ")
     }
 
     private fun singleMarkedAmount(fields: List<String>): Double? {

@@ -11,6 +11,7 @@ import com.voxapps.datahygiene.RuleBasedDuplicateChecker
 import com.voxapps.datahygiene.RuleCombinator
 import com.voxapps.datahygiene.findDuplicate
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.domain.llm.SecondNotice
 import com.voxapps.expenses.domain.llm.DuplicateGroup
 import com.voxapps.expenses.domain.llm.ExpenseParseResultParser
 import com.voxapps.fieldmemory.FieldCorrectionMemory
@@ -50,6 +51,19 @@ const val NEAR_DUPLICATE_MERGED_RESULT = -3L
 const val ALREADY_PRESENT_RESULT = -4L
 
 /**
+ * The outcomes that are not failures.
+ *
+ * Each means the record is already in the list — refused as a duplicate, folded into the one it
+ * duplicated, or answered a second time for a capture already filed. Naming the set once is what
+ * keeps a caller from testing for the two it happens to remember: the last sentinel added was
+ * missed by exactly such a test, and a refused duplicate was reported to the user as a payment that
+ * failed to save.
+ */
+val RECOGNIZED_NOT_INSERTED = setOf(
+    DUPLICATE_ENTRY_RESULT, NEAR_DUPLICATE_MERGED_RESULT, ALREADY_PRESENT_RESULT
+)
+
+/**
  * Single write point over the Room DAOs.
  */
 class ExpensesRepository(
@@ -78,6 +92,34 @@ class ExpensesRepository(
      *  field-suggestion chips after a line-items rescan. */
     fun observePendingFieldSuggestion(expenseId: Long): Flow<PendingFieldSuggestion?> =
         pendingFieldSuggestionDao.observe(expenseId)
+
+    /**
+     * Folds another announcement of an already-filed payment into the record it belongs to.
+     *
+     * Returns the id it folded into, or null when this is a payment of its own. Nothing is inserted
+     * on the folding path — that is the point: a second announcement must never build a row and be
+     * turned away, because being turned away is reported as a failure and because whichever message
+     * happened to arrive first would otherwise decide what the record says.
+     *
+     * The merge itself is the one already used for near-duplicates, so the better-populated side
+     * wins field by field regardless of order — the announcement naming the merchant supplies it
+     * whether it came first or second.
+     */
+    suspend fun foldSecondNotice(candidate: Expense): Long? {
+        val nearby = expenseDao.getForDateRange(
+            candidate.dateTime - SecondNotice.WINDOW_MILLIS,
+            candidate.dateTime + SecondNotice.WINDOW_MILLIS
+        )
+        val existing = nearby.firstOrNull { SecondNotice.isAnotherNoticeOf(it, candidate) } ?: return null
+        val enriched = enrichWithNearDuplicate(existing, candidate)
+        if (enriched !== existing) {
+            expenseDao.update(enriched)
+            Logger.d("ExpensesRepository", "A second notice of id=${existing.id} added what it was missing")
+        } else {
+            Logger.d("ExpensesRepository", "A second notice of id=${existing.id} added nothing new")
+        }
+        return existing.id
+    }
 
     suspend fun setPendingFieldSuggestion(suggestion: PendingFieldSuggestion) =
         pendingFieldSuggestionDao.upsert(suggestion)

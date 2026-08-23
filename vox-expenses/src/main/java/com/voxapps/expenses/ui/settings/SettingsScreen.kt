@@ -379,6 +379,7 @@ fun SettingsScreen(
                     notificationAssumedDirection = settings.notificationAssumedDirection,
                     captureAmountlessPayments = settings.captureAmountlessPayments,
                     dismissNotificationOnCapture = settings.dismissNotificationOnCapture,
+                    settings = settings,
                 stateManager = stateManager,
                 settingsRepo = settingsRepo,
                 modifier = mod

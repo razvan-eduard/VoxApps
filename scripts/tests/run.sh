@@ -86,6 +86,34 @@ if [ -f "$CANARY" ]; then
     fi
 fi
 
+log_blue "── schema parity ───────────────────────────────────────────"
+if python3 scripts/check_schema_parity.py >/dev/null 2>&1; then
+    ok "every shipped schema entry is also published"
+else
+    bad "an app ships a schema entry the repository does not publish" \
+        "run: python3 scripts/check_schema_parity.py"
+fi
+
+# The published copy replaces the shipped one on any install that has fetched, so a term added to
+# the asset alone reaches nobody. A guard that cannot see that is worse than none.
+PARITY_VICTIM="vox-expenses/src/main/assets/schemas/field_vocabularies.json"
+if [ -f "$PARITY_VICTIM" ]; then
+    cp "$PARITY_VICTIM" "$PARITY_VICTIM.testbak"
+    python3 - "$PARITY_VICTIM" <<'PYEOF'
+import json, io, sys, collections
+p = sys.argv[1]
+d = json.load(io.open(p, encoding='utf-8'), object_pairs_hook=collections.OrderedDict)
+d["banks"].append("ZZParityCanary")
+io.open(p, 'w', encoding='utf-8').write(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+PYEOF
+    if python3 scripts/check_schema_parity.py >/dev/null 2>&1; then
+        bad "parity PASSED with a shipped-only term (it proves nothing)"
+    else
+        ok "parity fails on a term shipped but not published"
+    fi
+    mv "$PARITY_VICTIM.testbak" "$PARITY_VICTIM"
+fi
+
 log_blue "── schema signing ──────────────────────────────────────────"
 if [ -f remote-schemas/manifest.json ] && [ -f remote-schemas/manifest.json.sig ]; then
     if ./scripts/vox schemas verify >/dev/null 2>&1; then
