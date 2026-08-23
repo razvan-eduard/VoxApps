@@ -260,7 +260,10 @@ class NotificationExpenseFlow(
             container = container,
             parsed = record,
             imageName = null,
-            preParse = null
+            preParse = null,
+            // Both halves of the message: a wallet puts the shop in the title and the card in the
+            // body, and which half carries the tail is not something to assume.
+            sourceText = listOfNotNull(f?.title, f?.text).joinToString(" ")
         )
         kept = Kept.RECORD
         // The same link the model path writes, so editing the record still teaches its template.

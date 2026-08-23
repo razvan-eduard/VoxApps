@@ -39,6 +39,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val NOTIFICATION_MODEL_USE = stringPreferencesKey("notification_model_use")
         val NOTIFICATION_ASSUMED_DIRECTION = stringPreferencesKey("notification_assumed_direction")
         val CAPTURE_AMOUNTLESS_PAYMENTS = booleanPreferencesKey("capture_amountless_payments")
+        val AUTO_CREATE_ACCOUNTS_SCANS = booleanPreferencesKey("auto_create_accounts_scans")
+        val AUTO_CREATE_ACCOUNTS_NOTIFICATIONS = booleanPreferencesKey("auto_create_accounts_notifications")
+        val DEFAULT_ACCOUNT_CURRENCY = stringPreferencesKey("default_account_currency")
         val CUSTOM_VENDORS = stringSetPreferencesKey("custom_vendors")
         val DISABLED_VENDORS = stringSetPreferencesKey("disabled_vendors")
         val CUSTOM_LEGAL_FORMS = stringSetPreferencesKey("custom_legal_forms")
@@ -131,6 +134,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
                 ?.takeIf { it in ExpensesSettings.ASSUMED_DIRECTION_CHOICES }
                 ?: ExpensesSettings.ASSUME_NOTHING,
             captureAmountlessPayments = prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] ?: false,
+            autoCreateAccountsFromScans = prefs[Keys.AUTO_CREATE_ACCOUNTS_SCANS] ?: false,
+            autoCreateAccountsFromNotifications = prefs[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] ?: false,
+            defaultAccountCurrency = prefs[Keys.DEFAULT_ACCOUNT_CURRENCY] ?: "",
             customVendors = prefs[Keys.CUSTOM_VENDORS] ?: emptySet(),
             disabledVendors = prefs[Keys.DISABLED_VENDORS] ?: emptySet(),
             customLegalForms = prefs[Keys.CUSTOM_LEGAL_FORMS] ?: emptySet(),
@@ -309,6 +315,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setCaptureAmountlessPayments(enabled: Boolean) {
         dataStore.edit { it[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = enabled }
+    }
+
+    override suspend fun setAutoCreateAccountsFromScans(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_CREATE_ACCOUNTS_SCANS] = enabled }
+    }
+
+    override suspend fun setAutoCreateAccountsFromNotifications(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] = enabled }
+    }
+
+    override suspend fun setDefaultAccountCurrency(code: String) {
+        dataStore.edit { it[Keys.DEFAULT_ACCOUNT_CURRENCY] = code }
     }
 
     override suspend fun setNotificationAssumedDirection(mode: String) {
@@ -584,6 +602,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.NOTIFICATION_MODEL_USE] = settings.notificationModelUse
             prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION] = settings.notificationAssumedDirection
             prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = settings.captureAmountlessPayments
+            prefs[Keys.AUTO_CREATE_ACCOUNTS_SCANS] = settings.autoCreateAccountsFromScans
+            prefs[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] = settings.autoCreateAccountsFromNotifications
+            prefs[Keys.DEFAULT_ACCOUNT_CURRENCY] = settings.defaultAccountCurrency
             prefs[Keys.CUSTOM_VENDORS] = settings.customVendors
             prefs[Keys.DISABLED_VENDORS] = settings.disabledVendors
             prefs[Keys.CUSTOM_LEGAL_FORMS] = settings.customLegalForms

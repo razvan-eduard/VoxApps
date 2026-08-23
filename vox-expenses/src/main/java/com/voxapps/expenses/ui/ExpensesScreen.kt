@@ -1,5 +1,11 @@
 package com.voxapps.expenses.ui
 
+import java.util.Date
+import java.text.DateFormat
+import com.voxapps.expenses.state.sortKeyOf
+import com.voxapps.expenses.state.ExpenseFilterSummary
+import com.voxapps.design.filter.VoxFilterSummary
+import com.voxapps.design.filter.VoxFilterButton
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,18 +20,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.BurstMode
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -160,9 +162,6 @@ fun ExpensesScreen(
             TopAppBar(
                 title = { Text(languageManager.getString("expenses_title")) },
                 actions = {
-                    IconButton(onClick = { showFilterSheet = true }) {
-                        Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))
-                    }
                     IconButton(onClick = onOpenReports) {
                         Icon(Icons.Filled.Assessment, contentDescription = languageManager.getString("reports_title"))
                     }
@@ -194,40 +193,7 @@ fun ExpensesScreen(
             }
         }
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (state.categories.isNotEmpty() || state.isAmountSort) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (state.categories.isNotEmpty()) {
-                        FilterChip(
-                            selected = state.selectedCategoryId == null,
-                            onClick = { stateManager.setCategoryFilter(null) },
-                            label = { Text(languageManager.getString("all_expenses")) }
-                        )
-                    }
-                    if (state.isAmountSort) {
-                        InputChip(
-                            selected = true,
-                            onClick = {},
-                            label = {
-                                Text(
-                                    languageManager.getString(
-                                        if (state.sort == SortMode.AMOUNT_DESC) "sorted_by_amount_desc" else "sorted_by_amount_asc"
-                                    )
-                                )
-                            },
-                            trailingIcon = {
-                                Icon(
-                                    Icons.Filled.Close,
-                                    contentDescription = languageManager.getString("clear"),
-                                    modifier = Modifier.clickable { stateManager.setSort(SortMode.NEWEST) }
-                                )
-                            }
-                        )
-                    }
-                }
-            }
+            ExpenseFilterBar(state = state, stateManager = stateManager)
 
             if (state.expenses.isEmpty()) {
                 Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
@@ -283,33 +249,4 @@ fun ExpensesScreen(
         }
     }
 
-    if (showFilterSheet) {
-        ExpenseFilterSortSheet(
-            sort = state.sort,
-            dateFrom = state.dateFrom,
-            dateTo = state.dateTo,
-            selectedBank = state.selectedBank,
-            selectedLocation = state.selectedLocation,
-            selectedVendor = state.selectedVendor,
-            availableBanks = state.availableBanks,
-            availableLocations = state.availableLocations,
-            availableVendors = state.availableVendors,
-            onApply = { sort, from, to, bank, vendor, location ->
-                stateManager.setSort(sort)
-                stateManager.setDateFilter(from, to)
-                stateManager.setBankFilter(bank)
-                stateManager.setVendorFilter(vendor)
-                stateManager.setLocationFilter(location)
-                showFilterSheet = false
-            },
-            onClear = {
-                stateManager.clearDateFilter()
-                stateManager.setBankFilter(null)
-                stateManager.setVendorFilter(null)
-                stateManager.setLocationFilter(null)
-                showFilterSheet = false
-            },
-            onDismiss = { showFilterSheet = false }
-        )
-    }
 }

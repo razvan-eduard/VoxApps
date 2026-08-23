@@ -239,3 +239,14 @@ fun formatAmount(amount: Double, currencyCode: String): String {
     val rounded = "%.2f".format(amount)
     return "$rounded $currencyCode"
 }
+
+/**
+ * A figure with no currency after it, for a bracket rather than a record.
+ *
+ * A bracket spans whatever the list holds, and a list can hold more than one currency — so naming
+ * one would be claiming something about records filed in the others. Whole numbers lose their
+ * decimals, because a boundary is a round number by construction and "50.00 – 100.00" is two
+ * decimals of nothing.
+ */
+fun formatAmountPlain(amount: Double): String =
+    if (amount == amount.toLong().toDouble()) amount.toLong().toString() else "%.2f".format(amount)

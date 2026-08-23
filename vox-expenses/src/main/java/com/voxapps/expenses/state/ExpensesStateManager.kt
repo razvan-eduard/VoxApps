@@ -1,5 +1,9 @@
 package com.voxapps.expenses.state
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
+import com.voxapps.expenses.data.BankAccount
+import com.voxapps.design.filter.VoxRangeBuckets
+import com.voxapps.design.filter.VoxRange
 import android.content.Context
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -81,6 +85,10 @@ class ExpensesStateManager(
         val selectedBank: FilterValue? = null,
         val selectedLocation: FilterValue? = null,
         val selectedVendor: FilterValue? = null,
+        val selectedAmount: VoxRange? = null,
+        val selectedAccountId: Long? = null,
+        val selectedCardId: Long? = null,
+        val selectedCurrency: String? = null,
         val sessionTick: Int = 0
     )
 
@@ -96,13 +104,18 @@ class ExpensesStateManager(
                     ?.nextScheduleTimeMillis
             }
 
+        // Paired rather than passed separately: combine is typed up to five sources, and the two
+        // lists that name a record's category and its account are read together every time anyway.
+        val namesFlow = combine(expensesRepo.categories, expensesRepo.bankAccounts) { c, a -> c to a }
+
         combine(
             settingsRepo.settingsFlow,
             expensesRepo.expensesWithDetails,
-            expensesRepo.categories,
+            namesFlow,
             _runtime,
             nextRunMillisFlow
-        ) { settings, expenses, categories, rt, nextRunMillis ->
+        ) { settings, expenses, names, rt, nextRunMillis ->
+            val (categories, accounts) = names
             val locked = settings.isBiometricRequired &&
                 !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
             if (locked) {
@@ -111,7 +124,12 @@ class ExpensesStateManager(
                 ExpensesUiState.Unlocked(
                     expenses = ExpenseFilter.apply(
                         expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank,
-                        rt.selectedVendor, rt.selectedLocation, rt.sort
+                        rt.selectedVendor, rt.selectedLocation, rt.selectedAmount,
+                        // A card answers for itself; an account answers for its cards too. The
+                        // narrower choice wins because it is the one made second.
+                        (rt.selectedCardId ?: rt.selectedAccountId)
+                            ?.let { BankAccountTree.familyOf(it, accounts) },
+                        rt.selectedCurrency, rt.sort
                     ),
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
@@ -123,6 +141,19 @@ class ExpensesStateManager(
                     selectedBank = rt.selectedBank,
                     selectedLocation = rt.selectedLocation,
                     selectedVendor = rt.selectedVendor,
+                    selectedAmount = rt.selectedAmount,
+                    selectedAccountId = rt.selectedAccountId,
+                    selectedCardId = rt.selectedCardId,
+                    selectedCurrency = rt.selectedCurrency,
+                    bankAccounts = accounts,
+                    availableCurrencies = expenses.map { it.expense.currencyCode }
+                        .filter { it.isNotBlank() }.distinct().sorted(),
+                    // Read from every record rather than from the filtered list: brackets that
+                    // narrowed themselves each time one was picked would move under the finger.
+                    amountBuckets = VoxRangeBuckets.of(
+                        expenses.minOfOrNull { it.expense.totalAmount } ?: 0.0,
+                        expenses.maxOfOrNull { it.expense.totalAmount } ?: 0.0
+                    ),
                     availableBanks = expenses.mapNotNull { it.expense.bank }.distinct().sorted(),
                     availableLocations = expenses.mapNotNull { it.expense.location }.distinct().sorted(),
                     availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted(),
@@ -148,9 +179,46 @@ class ExpensesStateManager(
 
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
+    fun setAmountFilter(range: VoxRange?) = _runtime.update { it.copy(selectedAmount = range) }
+
+    /**
+     * Narrowing to one account, or to one currency — never both at once.
+     *
+     * An account holds exactly one currency, so the two questions overlap: asking for a EUR account
+     * and then for RON returns nothing, and the person is left looking at an empty list with two
+     * filters on and no hint which one emptied it. Choosing either therefore lets go of the other,
+     * and the screen greys out whichever is not in force.
+     */
+    fun setAccountFilter(accountId: Long?) =
+        _runtime.update {
+            // The card belonged to the account that was chosen before; changing or clearing the
+            // account takes the card with it, since a card under a different account is not a
+            // narrowing of this one — it is a different question.
+            it.copy(selectedAccountId = accountId, selectedCardId = null, selectedCurrency = null)
+        }
+
+    /** One card under the account already chosen. The account stays, and shows greyed: it is no
+     *  longer a choice, it is the thing the card belongs to. */
+    fun setCardFilter(cardId: Long?) =
+        _runtime.update { it.copy(selectedCardId = cardId, selectedCurrency = null) }
+
+    fun setCurrencyFilter(code: String?) =
+        _runtime.update { it.copy(selectedCurrency = code, selectedAccountId = null, selectedCardId = null) }
     fun setSelectedDate(millis: Long) = _runtime.update { it.copy(selectedDateMillis = millis) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
     fun clearDateFilter() = _runtime.update { it.copy(dateFrom = null, dateTo = null) }
+
+    /** Every narrowing undone at once, sort included: a list nobody has narrowed is also a list
+     *  nobody has reordered, and clearing all but one leaves the button still reporting a filter. */
+    fun clearAllFilters() = _runtime.update {
+        it.copy(
+            selectedCategoryId = null, dateFrom = null, dateTo = null,
+            selectedBank = null, selectedVendor = null, selectedLocation = null,
+            selectedAmount = null, selectedAccountId = null, selectedCardId = null,
+            selectedCurrency = null,
+            sort = SortMode.NEWEST
+        )
+    }
     fun setBankFilter(bank: FilterValue?) = _runtime.update { it.copy(selectedBank = bank) }
     fun setLocationFilter(location: FilterValue?) = _runtime.update { it.copy(selectedLocation = location) }
     fun setVendorFilter(vendor: FilterValue?) = _runtime.update { it.copy(selectedVendor = vendor) }
@@ -189,6 +257,16 @@ class ExpensesStateManager(
     fun setScanModelUse(mode: String) { scope.launch { settingsRepo.setScanModelUse(mode) } }
     fun setNotificationModelUse(mode: String) { scope.launch { settingsRepo.setNotificationModelUse(mode) } }
     fun setCaptureAmountlessPayments(enabled: Boolean) { scope.launch { settingsRepo.setCaptureAmountlessPayments(enabled) } }
+
+    // --- cards and accounts (see BankAccount) ---
+
+    val bankAccountsFlow: Flow<List<BankAccount>> = expensesRepo.bankAccounts
+
+    fun setAutoCreateAccountsFromScans(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateAccountsFromScans(enabled) } }
+    fun setAutoCreateAccountsFromNotifications(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateAccountsFromNotifications(enabled) } }
+    fun setDefaultAccountCurrency(code: String) { scope.launch { settingsRepo.setDefaultAccountCurrency(code) } }
+    fun updateBankAccount(account: BankAccount) { scope.launch { expensesRepo.updateBankAccount(account) } }
+    fun deleteBankAccount(account: BankAccount) { scope.launch { expensesRepo.deleteBankAccount(account) } }
     fun setNotificationAssumedDirection(mode: String) { scope.launch { settingsRepo.setNotificationAssumedDirection(mode) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
     fun setAutoRescanOnFirstAttachment(enabled: Boolean) { scope.launch { settingsRepo.setAutoRescanOnFirstAttachment(enabled) } }

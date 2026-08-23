@@ -49,6 +49,9 @@ interface ExpensesSettingsRepository {
     suspend fun setNotificationAssumedDirection(mode: String)
     /** See [ExpensesSettings.captureAmountlessPayments]. */
     suspend fun setCaptureAmountlessPayments(enabled: Boolean)
+    suspend fun setAutoCreateAccountsFromScans(enabled: Boolean)
+    suspend fun setAutoCreateAccountsFromNotifications(enabled: Boolean)
+    suspend fun setDefaultAccountCurrency(code: String)
     /** Adds or removes a term of this device's own; see [ExpensesSettings.customBanks]. */
     suspend fun setCustomVocabulary(vocabulary: String, terms: Set<String>)
     /** Switches shipped terms off or back on; see [ExpensesSettings.disabledBanks]. */

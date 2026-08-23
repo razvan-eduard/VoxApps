@@ -644,19 +644,16 @@ fun ExpenseEditScreen(
                         // makes a new one.
                         actionLabel = languageManager.getString("new_category_dropdown_item"),
                         onAction = { showNewCategoryDialog = true },
+                        // The dot, never the icon: the label already carries the icon, and this menu's
+                        // anchor has no slot of its own — so the colour is the one thing the row can
+                        // add that the collapsed field cannot show.
                         itemLeading = { cat ->
-                            // The icon takes the dot's place: both answer "which category", and a
-                            // row carrying two answers to one question reads slower.
-                            if (cat.icon != null) {
-                                Text(cat.icon, fontSize = 15.sp)
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(14.dp)
-                                        .clip(CircleShape)
-                                        .background(CategoryColors.fromStored(cat.colorArgb))
-                                )
-                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape)
+                                    .background(CategoryColors.fromStored(cat.colorArgb))
+                            )
                         },
                         anchor = { value, onClick ->
                             PaperTapField(

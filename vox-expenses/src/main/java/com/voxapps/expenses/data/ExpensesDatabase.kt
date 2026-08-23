@@ -22,8 +22,8 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         ExpenseTombstone::class, PendingLlmRequestEntity::class,
         AttachmentEntity::class, DuplicateRuleEntity::class, com.voxapps.suggestions.FieldSuggestion::class,
         LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class,
-        RecurringPayment::class],
-    version = 31,
+        RecurringPayment::class, BankAccount::class],
+    version = 32,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -33,6 +33,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun expenseLineItemDao(): ExpenseLineItemDao
     abstract fun spendingLimitDao(): SpendingLimitDao
     abstract fun recurringPaymentDao(): RecurringPaymentDao
+    abstract fun bankAccountDao(): BankAccountDao
     abstract fun remapRuleDao(): RemapRuleDao
     abstract fun remapPatternSightingDao(): RemapPatternSightingDao
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
@@ -389,6 +390,34 @@ abstract class ExpensesDatabase : RoomDatabase() {
          * up in exactly one place, and a cased name cases to itself — so running them from either
          * version reaches the same state, and an upgrade crossing both runs the chain once.
          */
+        /**
+         * Cards and accounts money moves through, and the link from a record to one.
+         *
+         * The digits are unique: two rows for one card would let the same account collect records
+         * under both, and nothing downstream could tell they were the same. See [BankAccount] for
+         * why a card is held by its tail rather than in full, and for the one optional level of
+         * nesting a card may sit at under an account.
+         */
+        private val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS bank_accounts (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "digits TEXT NOT NULL, " +
+                        "kind TEXT NOT NULL, " +
+                        "parentId INTEGER, " +
+                        "label TEXT, " +
+                        "currencyCode TEXT NOT NULL, " +
+                        "bankName TEXT, " +
+                        "icon TEXT, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "autoCreated INTEGER NOT NULL DEFAULT 0)"
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bank_accounts_digits ON bank_accounts(digits)")
+                db.execSQL("ALTER TABLE expenses ADD COLUMN bankAccountId INTEGER")
+            }
+        }
+
         /** A category may carry a short piece of text identifying it — see [Category.icon]. */
         private val MIGRATION_30_31 = object : Migration(30, 31) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -553,7 +582,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate

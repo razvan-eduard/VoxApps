@@ -199,7 +199,8 @@ class ExpenseScanFlow(
             container = container,
             parsed = record,
             imageName = imageName,
-            preParse = null
+            preParse = null,
+            sourceText = proved?.plainText
         )
 
         // The two figures the creation path has no field for. Written only where the reading
@@ -272,7 +273,10 @@ class ExpenseScanFlow(
             container = container,
             parsed = record,
             imageName = imageName,
-            preParse = suppressed
+            preParse = suppressed,
+            // Settled on the way out and carried through the round trip, like the vendor and the
+            // direction — the reply itself never carried the page's characters.
+            knownAccountId = suppressed?.bankAccountId
         )
         Logger.d(TAG, "Wrote a reply-backed record $newId (head applied=$headApplied)")
         offerWhatWasNotWritten(newId, parsed, applies)
