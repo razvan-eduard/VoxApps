@@ -228,6 +228,17 @@ class ExpensesExportImportHandler(
         val importedIdToLocalId = categoryMerge.idMap
         val categoriesCreated = categoryMerge.created
 
+        // Which category records with no opinion fall back to is one choice rather than a property
+        // of a row, so it is restored like a setting: moved through the same id map the rows use,
+        // onto the local category the marked one merged into. A backup carrying no mark at all
+        // leaves this device's own choice standing, since silence is not an instruction to change
+        // it. See [com.voxapps.expenses.data.Category.isDefault] for the invariant this keeps.
+        (0 until importedCategories.length())
+            .map { importedCategories.getJSONObject(it) }
+            .firstOrNull { it.optBoolean("isDefault") }
+            ?.let { importedIdToLocalId[it.optLong("id")] }
+            ?.let { expensesRepo.setDefaultCategory(it) }
+
         // Merged by (origin, matchJson), not replace-by-snapshot — wiping locally learned rules on
         // every restore would un-learn streaks built up on this device since the backup was taken.
         // Category ids inside setJson are the exporting device's; remapped through the same id map
@@ -495,6 +506,7 @@ private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("colorArgb", colorArgb)
     put("position", position)
     put("createdAt", createdAt)
+    put("isDefault", isDefault)
     icon?.let { put("icon", it) }
 }
 
