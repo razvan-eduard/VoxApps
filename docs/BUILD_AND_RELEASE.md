@@ -194,9 +194,10 @@ gh attestation verify VoxCommander-<tag>.apk --repo razvan-eduard/VoxApps
 
 ### Build hosts
 
-macOS and Linux directly; Windows through WSL, since the scripts are bash. The Android SDK and NDK
-are resolved from `ANDROID_HOME`/`ANDROID_SDK_ROOT`/`ANDROID_NDK_HOME` and each platform's default
-location, so no environment needs a particular layout — see
+macOS and Linux directly; Windows through WSL, since the scripts are bash. The Android SDK is resolved
+from `ANDROID_HOME`/`ANDROID_SDK_ROOT` and each platform's default location, so no environment needs a
+particular layout. The NDK is *pinned* in `gradle/libs.versions.toml` and every native build in this
+repo uses that one version, whatever the machine happens to have installed — see
 [BUILD_TIME_DEPENDENCIES.md](BUILD_TIME_DEPENDENCIES.md#where-the-toolchain-comes-from).
 
 ## How `main` is protected

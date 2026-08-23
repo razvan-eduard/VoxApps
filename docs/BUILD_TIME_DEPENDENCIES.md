@@ -198,8 +198,8 @@ artifact could cover well.
      Android Studio's non-interactive Gradle invocation).
   3. Snapshots the current `.so` libraries as a rollback point.
   4. Builds the OpenCL import shim once per build tree, then configures + builds via CMake (hybrid
-     CPU/OpenCL), targeting the NDK `vox_android_ndk` resolves (`ANDROID_NDK_HOME`,
-     `ANDROID_NDK_ROOT`, newest under `$SDK/ndk`).
+     CPU/OpenCL), targeting the pinned NDK `vox_android_ndk` resolves — see
+     [Where the toolchain comes from](#where-the-toolchain-comes-from).
   5. Verifies the resulting `libwhisper.so` actually exports `whisper_init` before deploying it to
      `jniLibs/arm64-v8a/` — if anything in steps 4–5 fails, it **automatically rolls back** to the
      previous git revision and restores the previous `.so` backup, so a bad build never leaves the
@@ -543,8 +543,20 @@ every build:
 | resolver | order |
 |---|---|
 | `vox_android_sdk` | `ANDROID_HOME`, `ANDROID_SDK_ROOT`, then the macOS, Linux and Windows defaults |
-| `vox_android_ndk` | `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, newest under `$SDK/ndk`, `ndk-bundle` |
+| `vox_android_ndk` | `VOX_NDK`, then the **pinned** version wherever it is found: `ANDROID_NDK_HOME`/`ANDROID_NDK_ROOT` when they point at it, then `$SDK/ndk/<pinned>` |
+| `vox_ndk_version` | the `ndk` entry in `gradle/libs.versions.toml` — one place, read by Gradle and by the scripts alike |
 | `vox_sha256` | coreutils or macOS |
+
+**One NDK builds every native library in this repo, named once.** The version is pinned in
+`gradle/libs.versions.toml` and the pin outranks whatever the machine advertises: an ambient
+`ANDROID_NDK_HOME` is accepted only when it happens to *be* the pinned one. Resolving to whichever NDK
+sorts newest makes the same commit produce different binaries on a laptop and on a runner, and a
+native library that changes without its source changing makes every comparison — a hash, a size, a
+bisect — meaningless. `VOX_NDK` overrides everything, for a machine that keeps its toolchain
+somewhere the resolver would not look.
+
+With no pin set the resolver falls back to accepting any `ANDROID_NDK_HOME`/`ANDROID_NDK_ROOT`, which
+is what makes the pin removable rather than load-bearing.
 
 `vox_android_ndk` follows symlinks: a runner's SDK can be assembled from them.
 

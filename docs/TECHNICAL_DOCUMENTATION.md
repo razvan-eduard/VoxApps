@@ -2303,6 +2303,42 @@ Three code-reuse-only Gradle modules (no shared runtime state, just library code
 whichever apps need it) shipped alongside the Vox Apps ecosystem work: a calendar/agenda view, a
 searchable app picker, and a color picker — each consumed by more than one app.
 
+### `:core:design` shared components
+
+Beyond the picker below, the module hosts the pieces more than one app needs to say the same thing the
+same way:
+
+- **`VoxSemanticColors`** — the colours that mean something rather than match something, deliberately
+  kept out of the theme: done stays green and important stays amber whatever palette is chosen,
+  because their job is to be recognised at a glance rather than to belong. `offered` and `asked` split
+  the two kinds of proposal — green for a value the app believes, amber for one it is asking about —
+  and must not look alike, since accepting an amber one teaches something that changes how later
+  captures are read. `doneFill`/`doneOutline` are flat grey and flat black: a *tint* of an item's own
+  colour says "still that item, quieter", so a list of finished items reads as a list of dimmed ones.
+  What a border weighs is set by importance, never by doneness, so done changes colour and never
+  weight.
+- **`VoxFilterButton` / `VoxFilterSummary`** — one control for a narrowed list: it names what is in
+  force, opens the filters, and clears them from a trailing ✕ shown only when there is something to
+  clear. A filtered list otherwise looks exactly like a short one. `VoxFilterSummary.of(parts,
+  whenNothingActive)` joins the active parts in the caller's fixed order, dropping nulls and blanks so
+  a filter switched off does not move the ones beside it — a summary that reorders itself has to be
+  re-read every time.
+- **`VoxRangeBuckets`** — a few spans covering what the data actually holds, read from its smallest and
+  largest values. Fixed brackets cannot work: the same list is somebody's weekly shopping and somebody
+  else's rent, so 0–50 is every record for one and none for the other. Boundaries are rounded to the
+  1/2/5/10-times-a-power-of-ten steps an axis is drawn with, and computed by index rather than
+  accumulated — adding a step repeatedly drifts, and a boundary at 149.99999999 can leave a record in
+  no bracket at all. Nothing to divide (one value, or several identical) yields no brackets, since one
+  bracket holding everything is not a filter.
+- **`VoxIcons` / `VoxIconPickerDialog`** — a short piece of text standing for a category or an account,
+  offered as a grid and as a free-text field, because a fixed set can only ever be someone else's idea
+  of what people record. Text rather than a drawable reference, so it survives into a widget that
+  renders no vectors and into a backup restored on another device.
+- **`VoxCategoryFields`** — name, colour and icon as one body two containers hold: the settings card
+  that manages categories and the dialog reached while filing a record that has none yet. Each had its
+  own copy, and copies drift — a slot added to one goes missing from the other, so which screen you
+  happened to use decided what your category could carry.
+
 ### `:core:design` color picker
 
 Vox Notes, Vox Expenses, and Vox Calendar each independently grew their own category/layer color
@@ -2347,6 +2383,15 @@ module also hosts the month-grid and hybrid display modes (`MonthGridView`, `Hyb
   `dateTimeMillis: Long`. Each app wraps its own Room-backed model in a `@JvmInline value class`
   (`NoteCalendarItem`, `ExpenseCalendarItem`) implementing this interface — the module never depends on
   either app's data classes.
+- **`CalendarDateUtils.dayToLandOn(month)`** — the day a month answers with when it becomes the one on
+  screen: its first day, except the month containing today, which answers with today. Arriving in a
+  month has to land somewhere, and the day-of-month carried over from the month just left is a date
+  nobody chose — an artefact of where the last month happened to be standing, and it decides what the
+  agenda below shows. Both display modes read this one function. In `HybridMonthView` the grid and the
+  pager move each other, so the month on screen can change with nothing having touched the selection;
+  the effect that corrects this is guarded on the selection already being in the displayed month,
+  which is what keeps it from fighting the opposite sync — choosing a day outside the visible month
+  scrolls the grid first, and by the time the guard runs the two already agree.
 - **`CalendarDateUtils.bucketByDay()`** — buckets items by day for the *whole* month, including empty
   days (so scroll position is never ambiguous), and separately computes a small peek window (default 3
   items) into the tail of the previous month / head of the next — rendered at reduced alpha
@@ -2383,6 +2428,12 @@ to expand a search box + all/user/system filter dropdown + scrollable list — p
 `vox-commander`'s original `AppSelectorDropdown.kt` (see §7) into a module both `vox-commander` and
 `vox-expenses` now depend on.
 
+- **`AppPickerOrder`** — the order the list is offered in: starred first, then chosen, then the rest,
+  each group case-insensitively alphabetical with the package name as a tie-break so the order is
+  total and never depends on how the list arrived. Installed alphabetical order is the order of a list
+  nobody has an opinion about, and these lists are long; a star outranks a tick because it says more.
+  The order is computed when the list opens rather than as it is used — a row that leaps to the top the
+  moment it is ticked takes the row underneath it, the one you were about to tick, along with it.
 - **`AppPickerEntry`** — minimal app-agnostic model (`packageName`, `displayName`, `isSystemApp`).
   Callers map their own richer type into this: `vox-commander` maps its domain/intent-aware
   `AppRegistry.AppEntry` (dropping `domains`/`uriTemplates`, which the picker UI doesn't need);
@@ -2496,8 +2547,24 @@ activate at a consecutive-count threshold (`activeCorrections(threshold)`).
 
 Beyond `FuzzyNameMatcher`, the module hosts a deterministic-extraction package (`extract/`):
 `TemplateSkeleton` (a notification's byte-shape identity), `DateTimeExtractor`,
-`LabelledAmountExtractor`, `VocabularyClassifier`, `FieldCorrections`, `AmountText`, `Findings`.
+`LabelledAmountExtractor`, `VocabularyClassifier`, `TwoFieldPreParse`, `AccountIdentifiers`,
+`FieldCorrections`, `AmountText`, `Findings`.
 Extraction is shared and deterministic; policy — what to do with a finding — stays per satellite.
+
+`AccountIdentifiers` is the one extractor that needs no vocabulary at all, which is what separates it
+from `VocabularyClassifier`: a bank's *name* is a fact about the world and has to be learned, while a
+bank's *account number* is a fact about the string. It reads an IBAN (ISO 7064 mod-97), a full card
+number (Luhn) and a masked tail (`••4535`, `**00`, `xxxx1234`, `...1234`), returning `AccountRef(kind,
+digits)` most-specific-first with weaker readings absorbed by stronger ones that account for them. Two
+refs are the same card when one's digits end with the other's — which is what lets two digits from a
+notification meet sixteen from a receipt — while IBANs must match exactly and never match a card.
+Both checksums are enforced rather than trusting length: a receipt is full of digit runs that are
+sixteen long by coincidence, and the check digit is what separates an account from one of them. Two
+format details earn their comments in the source — the IBAN pattern treats spaced-in-fours and
+unspaced as *alternatives* rather than one lenient pattern (a lenient one reads the prose after the
+number as more of the number, and the checksum then fails on a good IBAN), and a masked tail needs two
+or more dots where every other mask character counts on its own, since a single dot is a decimal
+separator and `12.34` would otherwise read as a card ending 34 on every receipt line.
 
 ### Generic duplicate-rule engine
 
@@ -2897,6 +2964,15 @@ A rung that asks but does not apply has to put the answer somewhere. `Suggestion
 `FieldSuggestion` table keyed by record: `offer`, `offered(recordId)`, `accept`, `dismiss`, `clear`,
 `sourceOf`, `disposeIfSpent`. Each app declares its own `SuggestableField(key, label, weight)` set —
 which fields of its record may be proposed at all is the app's decision, not the module's.
+
+A target also declares what accepting is allowed to *do*: `AcceptMode.WRITES` puts the value on the
+record, `AcceptMode.STAGES` puts it in the draft the screen is holding and lets that screen's Save
+reach the database. The distinction is declared rather than assumed because getting it wrong is
+invisible from the outside — a proposal written straight through looks identical to one staged, right
+up to the moment somebody cancels an edit and finds part of it kept. `SuggestionStore.accept` refuses
+outright on a `STAGES` target rather than leaving the refusal to an `applyValue` that returns false
+and hopes. `WRITES` is the default only because it is the behaviour needing no cooperation from a
+screen; a screen holding a draft must say so.
 
 Note the ordering constraint in `deliver`: the record is written from what the device proved either
 way, even at a level that writes none of the answer. A proposal has to be attached to something.

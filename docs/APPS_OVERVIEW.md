@@ -325,6 +325,26 @@ bank/payment notifications, or entered by hand.
   count, and per-template Forget and Re-teach. The request to Commander is durably queued — see
   [Durable delivery: the pending-request queue](TECHNICAL_DOCUMENTATION.md#durable-delivery-the-pending-request-queue-voxllmrequestqueue)
   — so a notification is recovered automatically even if Commander was killed/stopped at capture time.
+- **What a capture is allowed to do to the notification, and to itself** — a capture that resolves
+  cleanly can dismiss the notification it came from (Settings, off by default). A message announcing a
+  payment without a figure is normally nothing to keep, since an amount is what tells a payment from an
+  advertisement — but some senders do leave the sum out, and an opt-in setting keeps those as review
+  entries with the one missing figure asked for there. Where a template has taught nothing yet, an
+  assumed direction can be chosen rather than waiting: it is safe to offer only because it is not final,
+  since correcting the direction once is the confirmation that shape never had. A second announcement of
+  a payment already filed is folded into the existing record upstream — same source, same currency,
+  amount equal to the cent, within three minutes, and not hand-edited — rather than arriving as a
+  duplicate to reconcile afterwards
+- **Editable vocabularies** (Settings → Notification capture) — the banks, legal forms and merchants the
+  deterministic pre-parse matches on. What the app supplies is listed apart from what this device added,
+  either side can be switched off a term at a time or all at once, and a term switched off stays off
+  across list reloads because the blacklist is keyed by the word rather than by its position. A term may
+  not sit in two lists at once, which is the mutual-exclusion contract the pre-parse rules depend on.
+  A name that is another spelling of one already accepted — matched against both the lists and the names
+  on records you edited by hand — is offered as a *rename* rather than as a second list entry, shown as
+  an amber chip because the app is asking rather than offering; accepting it writes an enabled re-map
+  rule, so the spelling resolves by itself from then on and the record in front of you takes the
+  accepted name too
 - **Notification-parse prompt tuning** — the notification-capture prompt (`NotificationExpenseParsePromptBuilder`)
   branches on whether Commander's currently-active engine is local or cloud (queried once per capture
   via `VoxCapabilityClient.isLocalEngine`): a local engine gets the few-shot examples and a short
@@ -367,6 +387,16 @@ bank/payment notifications, or entered by hand.
   total/bank/vendor/date-time, so the default is explainable rather than a black box. Approving a
   review group backfills the kept row's blank fields from its higher-scoring duplicates before
   deleting them, instead of discarding that data outright.
+- **Uncategorised, and how a category names itself** — records nothing classified fall back to a
+  category that says so, seeded and starred rather than landing on whichever category happened to sort
+  first: every capture with no opinion takes the fallback, so whatever holds that role is stamped on a
+  great many records, and afterwards a stamped record cannot be told from one that genuinely belongs
+  there. The starred category sits at the top of the settings list above a divider. Category names take
+  one shape on the way in (`:core:datahygiene`'s `NameCasing`, cased against `Locale.ROOT` so a name
+  syncs identically across devices), and a category may carry an icon — stored as text, which is why it
+  survives into the widget, which renders no vectors of its own, and into a backup. The icon shows
+  wherever a category names itself; where a row already has a slot for it — an expense card, a picklist
+  entry, a widget line — it takes the coloured dot's place rather than sitting beside it
 - **Category color adjacency + merchant category memory** — a freshly auto-created category's color is
   chosen to visibly differ from the most-recently-added expense's category (not just from the aggregate
   palette), and repeatedly correcting the same vendor to the same category (configurable 1×/3×/5×/10×
@@ -384,6 +414,28 @@ bank/payment notifications, or entered by hand.
 - **Currency & exchange rates** — a default currency for new expenses, a separate home currency reports
   convert *into* when expenses mix currencies, and a locale-independent decimal separator setting (comma
   vs. period) so typed amounts round-trip correctly regardless of device locale
+- **Cards and accounts** (Settings → Notification capture → Cards and accounts) — the card or account a
+  record went through, read from the text itself rather than learned: an IBAN (ISO 7064 mod-97 verified),
+  a full card number (Luhn verified), or a masked ending such as `••4535` or `**00`, which is what a
+  payment notification usually carries. Both checksums are enforced because a receipt is full of digit
+  runs that happen to be the right length — an order number, a till id. Nothing here is guessed,
+  matched against a list or asked of a model, so unlike the bank and merchant vocabularies there is no
+  supplied list, nothing to switch off term by term, and no proposal to accept: the format matches or
+  it does not. A card is stored by its last four digits so the two a notification shows and the sixteen
+  a receipt shows reach one account, and a card first met as a masked ending is *widened* rather than
+  duplicated once a fuller reading arrives. A message naming two accounts — a transfer between your own
+  — claims neither. Cards may sit under an account, one level deep and only where a person says so
+  (never inferred: a document naming both is as likely a payment between them as a statement listing
+  both), and each carries one currency, a name and an icon. Two independent switches decide whether an
+  unfamiliar account may be added without being asked, one per source, because a scan is something you
+  photographed and a notification arrives on its own
+- **Recurring payments** (Settings → Recurring payments) — payments to the same vendor that keep coming
+  back are counted, and an arrangement seen often enough is *proposed* rather than declared; how many
+  sightings that takes is a setting. A confirmed arrangement shows its next expected payment as a dotted
+  predicted row in the list, and a daily `WorkManager` job counts the cycles that went by and delivers
+  reminders through the same `:core:design` notification card every other reminder in the suite uses.
+  Predictions appear only in an unfiltered list — a filtered list is a question about what happened, and
+  a payment that has not happened is not an answer to it
 - **Spending limits** — per-category/per-period budget alerts, checked by a scheduled `WorkManager` job
   (`SpendingLimitCheckWorker`) and delivered as a system notification
 - **Category cleanup** (Settings → Categories) — "Remember merchant categories" toggle + 1×/3×/5×/10×
@@ -411,8 +463,23 @@ bank/payment notifications, or entered by hand.
 - **Calendar view** (optional, off by default) — same shared `:core:calendar` module as Vox Notes, plus
   bank/vendor filters and an amount ascending/descending sort; sorting by amount isn't chronological, so
   it temporarily disables the calendar view (a dismissible chip restores it)
+- **One filter control** — a single chip above the list naming every narrowing in force
+  (`:core:design`'s `VoxFilterButton`), opening the filter sheet, and clearing everything from a ✕ that
+  appears only when there is something to clear. A filtered list otherwise looks exactly like a short
+  one, which is the difference between records missing on purpose and records missing. There is no
+  Apply: every control reports as it is used, the date range included. Narrowings are category, bank,
+  vendor, location, amount, card or account, currency, date range and sort — bank/vendor/location are
+  searchable picklists built from the values the data actually holds, and the amount brackets are read
+  from the smallest and largest amounts on file and rounded to numbers a person would have chosen
+  (a fixed 0–50 bracket is every record for one person and none for another). Choosing an account
+  reveals a second picker for its cards; an account answers for its cards too, since a notification
+  names a card and never the account behind it. An account and a currency exclude each other — an
+  account holds one currency — and whichever is not in force greys out rather than disappearing
 - **Reports** — Total (outgoing)/Received split (see Transaction direction above) and by-category
-  breakdowns, converted into the home currency
+  breakdowns, converted into the home currency. Reports carry the same filter control, reading the same
+  state as the list, so a narrowing made in one holds in the other: a report answers a question about
+  the records in front of you and must not quietly widen it back out. The period chips are the report's
+  own question and stay separate
 - **Category color picker** — shared `:core:design` component (also used by Vox Notes/Vox Calendar):
   a scrollable preset row with a clear ring around the selected swatch, plus a "Custom…" entry opening a
   full-screen color screen (Hue/Saturation/Value sliders, live preview, the same presets for a quick
@@ -468,6 +535,12 @@ Standalone, encrypted on-device calendar (`com.voxapps.calendar`, Kotlin/AGP nam
 `com.voxapps.calendarapp` to avoid a dex-merge clash with the reused `:core:calendar` module — see its
 own doc comment). Voice-created through Commander (`create`/`read`) or used entirely on its own.
 
+- **Arriving in a month lands on a day of that month** — the first of it, except the month holding
+  today, which lands on today. The day-of-month carried over from the month just left is a date
+  nobody chose, and it decides what the agenda below shows. One rule
+  (`:core:calendar`'s `CalendarDateUtils.dayToLandOn`) read by both the collapsed and the expanded
+  view, so swiping months and scrolling the grid agree; shared with Vox Notes and Vox Expenses,
+  which use the same module for their optional calendar view
 - **Year / Month / Week / Day views** behind a collapsible sidebar; Month reuses the shared
   `:core:calendar` engine, Week/Day are a new local hour-of-day grid, Year is 12 compact mini-months. Day
   view draws a red **"now" line** at the current time-of-day position and auto-scrolls to land near it
@@ -507,6 +580,13 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   on the Calendar screen's header. Create any number of named lists, each a flippable card (tap to flip
   between a view face and an edit face) holding a vertical timeline of items:
   - An **"Important" star** marks an item with a 5-point-star node instead of a plain circle.
+  - A **finished item is flat grey behind a flat black outline** — never a faded or washed version
+    of its own colour. A tint of that colour says "still that item, quieter", so a list of finished
+    items read as a list of dimmed ones; carrying no hue at all says the item is spent. The
+    row-level fade that marks a past item is not applied to a done one, since it now says the same
+    thing twice at the cost of legibility — an overdue-but-unfinished item still fades, which is
+    what that was for. Border weight is set by importance and never by doneness, so a starred item
+    keeps its heavy contour on both sides of the checkbox (`:core:design`'s `VoxSemanticColors`).
   - The single most-imminent undone item gets an **"Up Next"** marker — a bigger, gently pulsing node
     with a rotated label.
   - A **"Now" splitter line** divides past-due items from upcoming ones in the same list, the same

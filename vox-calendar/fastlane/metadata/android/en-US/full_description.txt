@@ -11,3 +11,5 @@ Key Features:
 - Secure P2P Sync: Sync your schedule across two phones using NFC and Bluetooth. No cloud login required.
 - Backup & Restore: Save and restore your events, to-do lists, and settings to a file you choose, with Full override, Merge, or Additive restore modes.
 - SQLCipher Protected: Your schedule is your business. All data is encrypted with high-grade security.
+- Finished Items Read as Finished: A done to-do is flat grey behind a black outline, not a faded copy of itself — so a list of completed items doesn't read as a list of dimmed ones.
+- Months Land Somewhere Sensible: Switching month selects the first of that month; coming back to this month selects today, instead of keeping a day-of-month you never chose.
