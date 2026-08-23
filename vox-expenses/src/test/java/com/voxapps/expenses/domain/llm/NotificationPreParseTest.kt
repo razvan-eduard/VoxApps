@@ -232,4 +232,89 @@ class NotificationPreParseTest {
         assertEquals("LAZAR IONUT PFA", r.vendor)
         assertEquals("ING", r.bank)
     }
+
+    // --- one shop, however the message spells it ---
+
+    /**
+     * The point of naming a shop once: every later message about it, whatever suffix or branch code
+     * it carries, resolves to the word that was listed. Without it the same merchant arrives as
+     * three different vendors and nothing downstream — filtering, re-map rules, recurrence — agrees
+     * they are one shop.
+     */
+    @Test
+    fun `a named shop resolves to its listed spelling, not the line it was found in`() {
+        val named = listOf(
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_VENDOR, listOf("LIDL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_LEGAL_FORM, listOf("SRL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_BANK, listOf("ING"))
+        )
+        for (line in listOf("LIDL", "LIDL SRL 2", "LIDL RO-490", "lidl srl")) {
+            assertEquals(line, "LIDL", NotificationPreParse.parse(line, "12,00 RON paid", named).vendor)
+        }
+    }
+
+    /** A shorter entry inside a longer one is the same reading seen less fully — the fuller wins. */
+    @Test
+    fun `the longest listed spelling wins`() {
+        val named = listOf(
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_VENDOR, listOf("LIDL", "LIDL EXPRESS")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_LEGAL_FORM, listOf("SRL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_BANK, listOf("ING"))
+        )
+        assertEquals("LIDL EXPRESS", NotificationPreParse.parse("LIDL EXPRESS 5", "12,00 RON", named).vendor)
+        assertEquals("LIDL", NotificationPreParse.parse("LIDL 5", "12,00 RON", named).vendor)
+    }
+
+    /** Token boundaries, so a listed word cannot fire from inside an unrelated one. */
+    @Test
+    fun `a listed word does not match inside another word`() {
+        val named = listOf(
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_VENDOR, listOf("LIDL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_LEGAL_FORM, listOf("SRL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_BANK, listOf("ING"))
+        )
+        assertNull(NotificationPreParse.parse("SOLIDLY", "12,00 RON", named).vendor)
+    }
+
+    /**
+     * The list may hold the fuller name. A shop listed by its registered name must keep resolving on
+     * the day a message names only the shop — and the record still says what the list says, so one
+     * merchant stays one merchant however each message spelled it.
+     */
+    @Test
+    fun `a listed name fuller than the message still resolves`() {
+        val named = listOf(
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_VENDOR, listOf("LIDL SRL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_LEGAL_FORM, listOf("SRL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_BANK, listOf("ING"))
+        )
+        assertEquals("LIDL SRL", NotificationPreParse.parse("LIDL", "12,00 RON paid", named).vendor)
+        assertEquals("LIDL SRL", NotificationPreParse.parse("LIDL SRL", "12,00 RON paid", named).vendor)
+    }
+
+    /**
+     * Character containment would accept these; token containment does not. A four-letter shop hides
+     * inside plenty of ordinary words, and a false claim here does not merely mislabel one field —
+     * it makes the other field stop resolving too.
+     */
+    @Test
+    fun `a name hiding inside another word is not the same shop`() {
+        val named = listOf(
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_VENDOR, listOf("LIDL SRL")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_LEGAL_FORM, listOf("PFA")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_BANK, listOf("ING"))
+        )
+        assertNull(NotificationPreParse.parse("SOLIDLY", "12,00 RON", named).vendor)
+    }
+
+    /** Two listed shops that both fit the line is an ambiguity, and ambiguity declines. */
+    @Test
+    fun `two listed names fitting one line resolve nothing`() {
+        val named = listOf(
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_VENDOR, listOf("LIDL SRL", "LIDL PFA")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_LEGAL_FORM, listOf("SA")),
+            VocabularyClassifier.Vocabulary(FieldVocabularies.VOCAB_BANK, listOf("ING"))
+        )
+        assertNull(NotificationPreParse.parse("LIDL", "12,00 RON", named).vendor)
+    }
 }

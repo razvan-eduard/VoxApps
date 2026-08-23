@@ -17,11 +17,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import com.voxapps.design.icon.VoxIconPickerDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.StarBorder
 import com.voxapps.design.color.VoxSwatchShapes
@@ -42,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.draw.alpha
 import com.voxapps.design.color.VoxColorSwatchPicker
@@ -73,6 +76,10 @@ fun CategoriesSettingsTab(
     val context = LocalContext.current
     var addingNew by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var newIcon by remember { mutableStateOf<String?>(null) }
+    var pickingNewIcon by remember { mutableStateOf(false) }
+    /** The category whose icon is being chosen, or null while none is. */
+    var iconEditing by remember { mutableStateOf<Category?>(null) }
     var pendingDeleteCategory by remember { mutableStateOf<Category?>(null) }
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
     val autoMergeGate = rememberRequirementGate(
@@ -97,8 +104,13 @@ fun CategoriesSettingsTab(
     Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SettingsSectionCard(languageManager.getString("categories_settings_title")) {
 
+            // The fallback first, then a rule, then the rest — a list where the starred one sits
+            // wherever its position happens to put it says the star is a property of that row; above
+            // a divider it says the row is what the others fall back to, which is what it is.
+            val mainCategory = categories.firstOrNull { it.isDefault }
+            val otherCategories = categories.filterNot { it.isDefault }
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(categories, key = { it.id }) { cat ->
+                items(listOfNotNull(mainCategory) + otherCategories, key = { it.id }) { cat ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -111,13 +123,34 @@ fun CategoriesSettingsTab(
                                 .clip(if (cat.isDefault) VoxSwatchShapes.Star else CircleShape)
                                 .background(CategoryColors.fromStored(cat.colorArgb))
                         )
+                        // The icon is edited where it is shown. A category with none still offers
+                        // the slot, since a row that only lets you change what is already set is a
+                        // row where nothing can be set in the first place.
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .clickable { iconEditing = cat },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                cat.icon ?: "＋",
+                                fontSize = if (cat.icon != null) 17.sp else 13.sp,
+                                color = if (cat.icon != null) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
                         Text(
                             if (cat.isDefault) {
                                 "${cat.name} (${languageManager.getString("default_category_suffix")})"
                             } else {
                                 cat.name
                             },
-                            modifier = Modifier.weight(1f).padding(start = 8.dp)
+                            modifier = Modifier.weight(1f).padding(start = 4.dp)
                         )
                         if (!cat.isDefault) {
                             IconButton(onClick = { stateManager.setDefaultCategory(cat.id) }) {
@@ -131,17 +164,34 @@ fun CategoriesSettingsTab(
                             }
                         }
                     }
+                    // Below the fallback, not between two ordinary rows: the line says everything
+                    // under it falls back to what is above it, which a star on its own cannot.
+                    if (cat.isDefault) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
                 }
             }
 
             if (addingNew) {
                 var newColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text(languageManager.getString("category_name")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { pickingNewIcon = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(newIcon ?: "＋", fontSize = if (newIcon != null) 22.sp else 15.sp)
+                    }
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text(languageManager.getString("category_name")) },
+                        modifier = Modifier.weight(1f).padding(start = 8.dp)
+                    )
+                }
                 VoxColorSwatchPicker(
                     selectedColor = newColor,
                     onColorSelected = { newColor = it },
@@ -156,12 +206,13 @@ fun CategoriesSettingsTab(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
                         if (newName.isNotBlank()) {
-                            stateManager.addCategory(newName.trim(), newColor)
+                            stateManager.addCategory(newName.trim(), newColor, newIcon)
                         }
                         newName = ""
+                        newIcon = null
                         addingNew = false
                     }) { Text(languageManager.getString("save")) }
-                    TextButton(onClick = { addingNew = false; newName = "" }) {
+                    TextButton(onClick = { addingNew = false; newName = ""; newIcon = null }) {
                         Text(languageManager.getString("cancel"))
                     }
                 }
@@ -291,6 +342,35 @@ fun CategoriesSettingsTab(
             dismissButton = {
                 TextButton(onClick = { pendingDeleteCategory = null }) { Text(languageManager.getString("cancel")) }
             }
+        )
+    }
+
+    iconEditing?.let { category ->
+        VoxIconPickerDialog(
+            title = languageManager.getString("category_icon_title"),
+            selected = category.icon,
+            onPick = { picked ->
+                stateManager.updateCategory(category.copy(icon = picked))
+                iconEditing = null
+            },
+            onDismiss = { iconEditing = null },
+            noneLabel = languageManager.getString("category_icon_none"),
+            customLabel = languageManager.getString("category_icon_custom"),
+            confirmLabel = languageManager.getString("save"),
+            cancelLabel = languageManager.getString("cancel")
+        )
+    }
+
+    if (pickingNewIcon) {
+        VoxIconPickerDialog(
+            title = languageManager.getString("category_icon_title"),
+            selected = newIcon,
+            onPick = { picked -> newIcon = picked; pickingNewIcon = false },
+            onDismiss = { pickingNewIcon = false },
+            noneLabel = languageManager.getString("category_icon_none"),
+            customLabel = languageManager.getString("category_icon_custom"),
+            confirmLabel = languageManager.getString("save"),
+            cancelLabel = languageManager.getString("cancel")
         )
     }
 }

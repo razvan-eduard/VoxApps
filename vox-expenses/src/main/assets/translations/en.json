@@ -587,5 +587,13 @@
   "vocabulary_vendors_title": "Shops you name yourself",
   "vocabulary_vendors_desc": "A line naming one of these is the merchant, whatever else the message says — it outranks both lists below. Nothing is supplied here: these are the shops you deal with, not a list anyone could write for you.",
   "learn_vendor_chip": "Shop: %s",
-  "learn_bank_chip": "Bank: %s"
+  "learn_bank_chip": "Bank: %s",
+  "location_filter_label": "Location",
+  "all_locations": "All locations",
+  "filter_search_hint": "Search",
+  "filter_show_all_matching": "Show all %d matching",
+  "rename_chip": "%1$s is %2$s",
+  "category_icon_title": "Category icon",
+  "category_icon_none": "No icon",
+  "category_icon_custom": "Or type one"
 }

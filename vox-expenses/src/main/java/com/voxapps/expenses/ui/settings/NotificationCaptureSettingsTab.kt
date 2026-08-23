@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -539,18 +540,24 @@ fun NotificationCaptureSettingsTab(
                     // What this entry could teach, once somebody says so. Offered only where the
                     // word is genuinely unknown to the lists — a bank already listed has nothing to
                     // learn, and a merchant the app resolved was never in doubt.
+                    // A name already accepted under another spelling is renamed rather than listed:
+                    // a second entry for a shop the list already names is what makes the list a
+                    // worse copy of the ledger. So a rename, where there is one, replaces the offer.
                     val bankToLearn = entry.bank?.takeIf { b ->
-                        FieldVocabularies.rejectionFor(
+                        entry.bankRenameTo == null && FieldVocabularies.rejectionFor(
                             b, FieldVocabularies.VOCAB_BANK, context, settings
                         ) == null
                     }
                     val vendorToLearn = entry.vendorCandidate?.takeIf { v ->
-                        entry.vendor == null && FieldVocabularies.rejectionFor(
-                            v, FieldVocabularies.VOCAB_VENDOR, context, settings
-                        ) == null
+                        entry.vendor == null && entry.vendorRenameTo == null &&
+                            FieldVocabularies.rejectionFor(
+                                v, FieldVocabularies.VOCAB_VENDOR, context, settings
+                            ) == null
                     }
                     var learnBank by remember(entry.id) { mutableStateOf(false) }
                     var learnVendor by remember(entry.id) { mutableStateOf(false) }
+                    var renameVendor by remember(entry.id) { mutableStateOf(false) }
+                    var renameBank by remember(entry.id) { mutableStateOf(false) }
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -568,11 +575,38 @@ fun NotificationCaptureSettingsTab(
                             )
                             // Amber, because the app is asking rather than offering: nothing
                             // identified these, and accepting one teaches the lists permanently.
-                            if (bankToLearn != null || vendorToLearn != null) {
-                                Row(
+                            if (bankToLearn != null || vendorToLearn != null ||
+                                entry.vendorRenameTo != null || entry.bankRenameTo != null
+                            ) {
+                                FlowRow(
                                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
+                                    entry.vendorRenameTo?.let { to ->
+                                        VoxSuggestionChip(
+                                            label = languageManager.getString("rename_chip")
+                                                .format(entry.vendorSpelling().orEmpty(), to),
+                                            asking = true,
+                                            selected = renameVendor,
+                                            leading = if (renameVendor) {
+                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                            } else null,
+                                            onClick = { renameVendor = !renameVendor }
+                                        )
+                                    }
+                                    entry.bankRenameTo?.let { to ->
+                                        VoxSuggestionChip(
+                                            label = languageManager.getString("rename_chip")
+                                                .format(entry.bank.orEmpty(), to),
+                                            asking = true,
+                                            selected = renameBank,
+                                            leading = if (renameBank) {
+                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                            } else null,
+                                            onClick = { renameBank = !renameBank }
+                                        )
+                                    }
                                     vendorToLearn?.let {
                                         VoxSuggestionChip(
                                             label = languageManager.getString("learn_vendor_chip").format(it),
@@ -622,7 +656,9 @@ fun NotificationCaptureSettingsTab(
                                         stateManager.approveNotificationExpense(
                                             entry, context, amount,
                                             learnBank = bankToLearn?.takeIf { learnBank },
-                                            learnVendor = vendorToLearn?.takeIf { learnVendor }
+                                            learnVendor = vendorToLearn?.takeIf { learnVendor },
+                                            renameVendor = renameVendor,
+                                            renameBank = renameBank
                                         )
                                     },
                                     // Nothing to approve until there is a figure: an expense of

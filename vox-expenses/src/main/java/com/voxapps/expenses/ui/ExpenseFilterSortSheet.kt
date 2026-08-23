@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.picklist.Picklist
+import com.voxapps.expenses.state.FilterValue
 import com.voxapps.expenses.state.SortMode
 
 /** Structural sibling to vox-notes' DateSortSheet, extended with bank/vendor filters and amount sort. */
@@ -35,11 +36,13 @@ fun ExpenseFilterSortSheet(
     sort: SortMode,
     dateFrom: Long?,
     dateTo: Long?,
-    selectedBank: String?,
-    selectedVendor: String?,
+    selectedBank: FilterValue?,
+    selectedLocation: FilterValue?,
+    selectedVendor: FilterValue?,
     availableBanks: List<String>,
+    availableLocations: List<String>,
     availableVendors: List<String>,
-    onApply: (SortMode, Long?, Long?, String?, String?) -> Unit,
+    onApply: (SortMode, Long?, Long?, FilterValue?, FilterValue?, FilterValue?) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -51,6 +54,7 @@ fun ExpenseFilterSortSheet(
 
     var pendingSort by remember { mutableStateOf(sort) }
     var pendingBank by remember { mutableStateOf(selectedBank) }
+    var pendingLocation by remember { mutableStateOf(selectedLocation) }
     var pendingVendor by remember { mutableStateOf(selectedVendor) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -88,11 +92,16 @@ fun ExpenseFilterSortSheet(
             Text(languageManager.getString("bank_filter_label"), style = MaterialTheme.typography.labelLarge)
             Picklist(
                 items = availableBanks,
-                selected = pendingBank,
+                selected = pendingBank?.text?.takeIf { _ -> pendingBank?.exact == true },
                 itemLabel = { it },
-                onSelect = { pendingBank = it },
+                onSelect = { pendingBank = FilterValue.picked(it) },
                 noneLabel = languageManager.getString("all_banks"),
-                onNoneSelected = { pendingBank = null }
+                onNoneSelected = { pendingBank = null },
+                // These lists are as long as the data makes them — every vendor ever paid, every
+                // place ever recorded — so they are searched rather than scrolled.
+                searchPlaceholder = languageManager.getString("filter_search_hint"),
+                searchAllLabel = { count -> languageManager.getString("filter_show_all_matching").format(count) },
+                onSearchAll = { pendingBank = FilterValue.typed(it) }
             )
 
             Text(
@@ -102,11 +111,35 @@ fun ExpenseFilterSortSheet(
             )
             Picklist(
                 items = availableVendors,
-                selected = pendingVendor,
+                selected = pendingVendor?.text?.takeIf { _ -> pendingVendor?.exact == true },
                 itemLabel = { it },
-                onSelect = { pendingVendor = it },
+                onSelect = { pendingVendor = FilterValue.picked(it) },
                 noneLabel = languageManager.getString("all_vendors"),
-                onNoneSelected = { pendingVendor = null }
+                onNoneSelected = { pendingVendor = null },
+                // These lists are as long as the data makes them — every vendor ever paid, every
+                // place ever recorded — so they are searched rather than scrolled.
+                searchPlaceholder = languageManager.getString("filter_search_hint"),
+                searchAllLabel = { count -> languageManager.getString("filter_show_all_matching").format(count) },
+                onSearchAll = { pendingVendor = FilterValue.typed(it) }
+            )
+
+            Text(
+                languageManager.getString("location_filter_label"),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            Picklist(
+                items = availableLocations,
+                selected = pendingLocation?.text?.takeIf { _ -> pendingLocation?.exact == true },
+                itemLabel = { it },
+                onSelect = { pendingLocation = FilterValue.picked(it) },
+                noneLabel = languageManager.getString("all_locations"),
+                onNoneSelected = { pendingLocation = null },
+                // These lists are as long as the data makes them — every vendor ever paid, every
+                // place ever recorded — so they are searched rather than scrolled.
+                searchPlaceholder = languageManager.getString("filter_search_hint"),
+                searchAllLabel = { count -> languageManager.getString("filter_show_all_matching").format(count) },
+                onSearchAll = { pendingLocation = FilterValue.typed(it) }
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
@@ -129,7 +162,8 @@ fun ExpenseFilterSortSheet(
                             rangeState.selectedStartDateMillis,
                             rangeState.selectedEndDateMillis,
                             pendingBank,
-                            pendingVendor
+                            pendingVendor,
+                            pendingLocation
                         )
                     }
                 ) { Text(languageManager.getString("apply")) }

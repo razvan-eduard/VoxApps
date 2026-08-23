@@ -112,7 +112,8 @@ import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.design.settings.VoxSuggestionChip
-import com.voxapps.expenses.data.PendingFieldSuggestion
+import com.voxapps.expenses.data.ExpenseSuggestionTarget
+import com.voxapps.suggestions.OfferedSuggestion
 import com.voxapps.expenses.data.PendingLineItemsJson
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
@@ -249,13 +250,26 @@ fun ExpenseEditScreen(
     // recomposition, which made this look like it never updated on an already-open screen (confirmed
     // bug report: neither the line-items nor any other field's suggestion ever appeared live).
     val pendingSuggestionFlow = remember(existing?.expense?.id) {
-        existing?.expense?.id?.let { stateManager.observePendingFieldSuggestion(it) } ?: emptyFlow()
+        existing?.expense?.id?.let { stateManager.observeSuggestions(it) } ?: emptyFlow()
     }
-    val pendingSuggestion by pendingSuggestionFlow.collectAsStateWithLifecycle(initialValue = null)
+    val offeredSuggestions by pendingSuggestionFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    // Keyed by field: the screen reads what it needs by name and never has to know what else was
+    // offered.
+    //
+    // Taking one of these puts its value in the draft below and nowhere else. This screen reaches
+    // the database through Save and through nothing else, so a proposal accepted and then abandoned
+    // is abandoned with the rest of the edit — see ExpenseSuggestionTarget, which refuses to write
+    // for the same reason.
+    val suggested = remember(offeredSuggestions) {
+        offeredSuggestions.associate { it.field.key to it.proposed }
+    }
+    val suggestionSource = remember(offeredSuggestions) {
+        offeredSuggestions.firstOrNull { it.sourceTag != null }?.sourceTag
+    }
     // Per-field "no thanks" — tapping a chip's x hides just that field's suggestion without applying
     // it. Keyed on the whole pendingSuggestion object so a genuinely new rescan (a new DB row) starts
     // with a clean slate rather than inheriting dismissals aimed at the old suggestion's values.
-    val dismissedSuggestionFields = remember(pendingSuggestion) { mutableStateSetOf<String>() }
+    val dismissedSuggestionFields = remember(offeredSuggestions) { mutableStateSetOf<String>() }
     // Attachment groups added (by a Vision capture or gallery multi-pick) during THIS screen visit —
     // tracked so "Discard" can remove them along with the pending suggestion instead of leaving newly
     // scanned photos permanently attached to a record the user chose not to keep changes on. A capture
@@ -314,7 +328,7 @@ fun ExpenseEditScreen(
             // Whatever the rescan suggested is now moot either way — applied suggestions are
             // already reflected in `expense`, and anything left un-applied shouldn't linger past
             // this save to be offered again against a record that's moved on.
-            stateManager.clearPendingFieldSuggestion(expense.id)
+            stateManager.clearSuggestions(expense.id)
         } else {
             stateManager.addExpense(
                 title = expense.title,
@@ -401,7 +415,7 @@ fun ExpenseEditScreen(
             // clear even if no field's been touched — a chip left untapped changes no local value,
             // so the diff above alone would silently miss it (the exact bug: chips visible, back
             // closes with no prompt, suggestion row untouched, still there on reopen).
-            pendingSuggestion != null ||
+            offeredSuggestions.isNotEmpty() ||
             // Same reasoning for photos captured/picked this session (see sessionAddedGroupIds' doc
             // comment) — they're written straight to the DB, not staged, so nothing in the
             // EditSnapshot diff above ever reflects them. Without this, a session that only ever
@@ -516,7 +530,7 @@ fun ExpenseEditScreen(
             }
             if (existing?.expense?.id != null) {
                 item {
-                    ExpenseAttachmentsSection(existing.expense.id, imageName, stateManager, pendingSuggestion)
+                    ExpenseAttachmentsSection(existing.expense.id, imageName, stateManager, offeredSuggestions)
                 }
             } else {
                 item {
@@ -535,7 +549,7 @@ fun ExpenseEditScreen(
                         label = languageManager.getString("expense_title_optional"),
                         value = title,
                         onValueChange = { title = it },
-                        suggestion = pendingSuggestion?.title?.takeIf { it != title && "title" !in dismissedSuggestionFields }?.let { suggested ->
+                        suggestion = suggested[ExpenseSuggestionTarget.KEY_TITLE]?.takeIf { it != title && "title" !in dismissedSuggestionFields }?.let { suggested ->
                             { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "title" }) { title = suggested } }
                         }
                     )
@@ -543,7 +557,7 @@ fun ExpenseEditScreen(
                         label = languageManager.getString("expense_vendor"),
                         value = vendor,
                         onValueChange = { vendor = it },
-                        suggestion = pendingSuggestion?.vendor?.takeIf { it != vendor && "vendor" !in dismissedSuggestionFields }?.let { suggested ->
+                        suggestion = suggested[ExpenseSuggestionTarget.KEY_VENDOR]?.takeIf { it != vendor && "vendor" !in dismissedSuggestionFields }?.let { suggested ->
                             { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "vendor" }) { vendor = suggested } }
                         }
                     )
@@ -551,7 +565,7 @@ fun ExpenseEditScreen(
                         label = languageManager.getString("expense_bank"),
                         value = bank,
                         onValueChange = { bank = it },
-                        suggestion = pendingSuggestion?.bank?.takeIf { it != bank && "bank" !in dismissedSuggestionFields }?.let { suggested ->
+                        suggestion = suggested[ExpenseSuggestionTarget.KEY_BANK]?.takeIf { it != bank && "bank" !in dismissedSuggestionFields }?.let { suggested ->
                             { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "bank" }) { bank = suggested } }
                         }
                     )
@@ -559,7 +573,7 @@ fun ExpenseEditScreen(
                     // routes through resolveCurrentCityName — live fix, then the TTL'd cache,
                     // then Home Town, the exact chain commander uses; the rescan suggestion chip
                     // keeps its slot above the field.
-                    pendingSuggestion?.location?.takeIf { it != location && "location" !in dismissedSuggestionFields }?.let { suggested ->
+                    suggested[ExpenseSuggestionTarget.KEY_LOCATION]?.takeIf { it != location && "location" !in dismissedSuggestionFields }?.let { suggested ->
                         FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "location" }) { location = suggested }
                     }
                     VoxLocationField(
@@ -587,7 +601,7 @@ fun ExpenseEditScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                         },
-                        suggestion = pendingSuggestion?.dateTime?.takeIf { it != dateTime && "dateTime" !in dismissedSuggestionFields }?.let { suggested ->
+                        suggestion = suggested[ExpenseSuggestionTarget.KEY_DATE_TIME]?.toLongOrNull()?.takeIf { it != dateTime && "dateTime" !in dismissedSuggestionFields }?.let { suggested ->
                             {
                                 FieldSuggestionChip(
                                     DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(suggested)),
@@ -614,7 +628,7 @@ fun ExpenseEditScreen(
                     // Only offered when the suggested name matches an EXISTING category
                     // (case-insensitive) — no auto-create here, unlike the voice/scan-create
                     // paths, to keep applying a suggestion a synchronous, no-surprises action.
-                    val suggestedCategory = pendingSuggestion?.category?.let { name ->
+                    val suggestedCategory = suggested[ExpenseSuggestionTarget.KEY_CATEGORY]?.let { name ->
                         categories.firstOrNull { it.name.equals(name, ignoreCase = true) }
                     }?.takeIf { it.id != categoryId && "category" !in dismissedSuggestionFields }
 
@@ -662,7 +676,7 @@ fun ExpenseEditScreen(
                         onValueChange = { comments = it },
                         singleLine = false,
                         minLines = 2,
-                        suggestion = pendingSuggestion?.comments?.takeIf { it != comments && "comments" !in dismissedSuggestionFields }?.let { suggested ->
+                        suggestion = suggested[ExpenseSuggestionTarget.KEY_COMMENTS]?.takeIf { it != comments && "comments" !in dismissedSuggestionFields }?.let { suggested ->
                             { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "comments" }) { comments = suggested } }
                         }
                     )
@@ -677,7 +691,7 @@ fun ExpenseEditScreen(
                             valueColor = amountColor,
                             dividerColor = amountColor.copy(alpha = if (totalMismatch) 1f else 0.4f),
                             modifier = Modifier.weight(1f),
-                            suggestion = pendingSuggestion?.totalAmount
+                            suggestion = suggested[ExpenseSuggestionTarget.KEY_AMOUNT]?.toDoubleOrNull()
                                 ?.let { formatDecimal(it, useComma) }
                                 ?.takeIf { it != totalText && "totalAmount" !in dismissedSuggestionFields }
                                 ?.let { suggested ->
@@ -689,7 +703,7 @@ fun ExpenseEditScreen(
                             value = currency,
                             onValueChange = { currency = it.uppercase().take(3) },
                             modifier = Modifier.weight(0.6f),
-                            suggestion = pendingSuggestion?.currencyCode?.takeIf { it != currency && "currencyCode" !in dismissedSuggestionFields }?.let { suggested ->
+                            suggestion = suggested[ExpenseSuggestionTarget.KEY_CURRENCY]?.takeIf { it != currency && "currencyCode" !in dismissedSuggestionFields }?.let { suggested ->
                                 { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "currencyCode" }) { currency = suggested } }
                             }
                         )
@@ -749,11 +763,11 @@ fun ExpenseEditScreen(
                     // deliberately a single persistent slot, compared by value against the current
                     // suggestion) hides the banner once tapped/dismissed for that exact itemsJson
                     // content; a genuinely new suggestion (different itemsJson) still shows it again.
-                    val suggestedItems = remember(pendingSuggestion?.itemsJson) {
-                        PendingLineItemsJson.decode(pendingSuggestion?.itemsJson)
+                    val suggestedItems = remember(suggested[ExpenseSuggestionTarget.KEY_ITEMS]) {
+                        PendingLineItemsJson.decode(suggested[ExpenseSuggestionTarget.KEY_ITEMS])
                     }
                     var appliedItemsJson by remember { mutableStateOf<String?>(null) }
-                    if (suggestedItems.isNotEmpty() && pendingSuggestion?.itemsJson != appliedItemsJson) {
+                    if (suggestedItems.isNotEmpty() && suggested[ExpenseSuggestionTarget.KEY_ITEMS] != appliedItemsJson) {
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 languageManager.getString("lineitems_suggestion_found"),
@@ -768,12 +782,12 @@ fun ExpenseEditScreen(
                                     // (see PendingFieldSuggestion.sourceGroupId's doc comment) — the
                                     // user rejected the rescan's findings, so the photos it was based on
                                     // shouldn't linger attached with no suggestion left to act on them.
-                                    val groupId = pendingSuggestion?.sourceGroupId
+                                    val groupId = suggestionSource
                                     if (existing != null && groupId != null) {
                                         stateManager.deleteAttachmentGroup(existing.expense.id, groupId, context)
                                     }
-                                    existing?.expense?.id?.let { stateManager.clearPendingFieldSuggestion(it) }
-                                    appliedItemsJson = pendingSuggestion?.itemsJson
+                                    existing?.expense?.id?.let { stateManager.clearSuggestions(it) }
+                                    appliedItemsJson = suggested[ExpenseSuggestionTarget.KEY_ITEMS]
                                 }
                             ) {
                                 suggestedItems.forEach { parsedItem ->
@@ -788,7 +802,7 @@ fun ExpenseEditScreen(
                                         )
                                     )
                                 }
-                                appliedItemsJson = pendingSuggestion?.itemsJson
+                                appliedItemsJson = suggested[ExpenseSuggestionTarget.KEY_ITEMS]
                             }
                         }
                     }
@@ -910,7 +924,7 @@ fun ExpenseEditScreen(
                 // not-yet-applied change "discard" should throw away too — otherwise it just
                 // reappears next time this record is opened, since it's a separate DB row that
                 // saving (not discarding) is the only other thing that clears.
-                existing?.expense?.id?.let { stateManager.clearPendingFieldSuggestion(it) }
+                existing?.expense?.id?.let { stateManager.clearSuggestions(it) }
                 onDone()
             },
             onCancel = { showDiscardConfirm = false }
@@ -1127,7 +1141,7 @@ private fun ExpenseAttachmentsSection(
     expenseId: Long,
     receiptImageName: String?,
     stateManager: ExpensesStateManager,
-    pendingSuggestion: PendingFieldSuggestion?
+    offeredSuggestions: List<OfferedSuggestion>
 ) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
@@ -1141,7 +1155,7 @@ private fun ExpenseAttachmentsSection(
     // below is a safety net so a lost/failed request (Commander crash, dropped broadcast) doesn't
     // leave rescanning permanently blocked for the rest of this screen visit.
     var rescanInFlight by remember { mutableStateOf(false) }
-    LaunchedEffect(pendingSuggestion) {
+    LaunchedEffect(offeredSuggestions) {
         rescanInFlight = false
     }
     LaunchedEffect(rescanInFlight) {

@@ -10,6 +10,10 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -74,26 +78,80 @@ fun <T> Picklist(
     /** Whether the menu spans the width it is given. False for an inline anchor, where a menu wider
      *  than the button it drops from reads as belonging to the whole row rather than to the value. */
     menuFillsWidth: Boolean = true,
+    /**
+     * When set, a box at the top of the menu that narrows the rows as you type, matched against
+     * [itemLabel]. Absent, the menu behaves exactly as it did.
+     *
+     * Worth having only where the list is as long as the data makes it — every vendor a person has
+     * ever paid, every place they have been. A fixed list of four engines is quicker to read than to
+     * search, and a box above it is one more thing between someone and the row they can already see.
+     *
+     * The query is cleared whenever the menu closes: it belongs to the act of finding a row, not to
+     * the selection, and a menu that reopens still narrowed hides rows nobody excluded on purpose.
+     */
+    searchPlaceholder: String? = null,
+    /**
+     * An extra row offered while a search narrows the list, taking the number of rows that survived
+     * — "Show all 12 matching". For a caller whose selection can be a query rather than one value;
+     * [onSearchAll] receives the text as typed.
+     */
+    searchAllLabel: ((Int) -> String)? = null,
+    onSearchAll: (String) -> Unit = {},
     below: @Composable () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     // The width belongs to the anchor, not to this box: a full-width button fills it, an inline one
     // does not, and a box that always filled would stretch the second kind across its row.
+    var query by remember { mutableStateOf("") }
+    val shown = remember(items, query) {
+        if (query.isBlank()) items
+        else items.filter { itemLabel(it).contains(query.trim(), ignoreCase = true) }
+    }
+
     Box(modifier = modifier) {
         anchor(selected?.let(itemLabel) ?: noneLabel.orEmpty()) { expanded = true }
 
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
+            onDismissRequest = { expanded = false; query = "" },
             modifier = if (menuFillsWidth) Modifier.fillMaxWidth() else Modifier
         ) {
+            searchPlaceholder?.let { placeholder ->
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(placeholder, style = MaterialTheme.typography.bodySmall) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = if (query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Filled.Clear, contentDescription = null)
+                            }
+                        }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+                if (query.isNotBlank() && searchAllLabel != null) {
+                    DropdownMenuItem(
+                        text = { Text(searchAllLabel(shown.size)) },
+                        onClick = {
+                            onSearchAll(query.trim())
+                            expanded = false
+                            query = ""
+                        }
+                    )
+                }
+            }
+
             noneLabel?.let { label ->
                 DropdownMenuItem(
                     text = { Text(label) },
                     onClick = {
                         onNoneSelected()
                         expanded = false
+                        query = ""
                     }
                 )
             }
@@ -104,11 +162,12 @@ fun <T> Picklist(
                     onClick = {
                         onAction()
                         expanded = false
+                        query = ""
                     }
                 )
             }
 
-            items.forEach { item ->
+            shown.forEach { item ->
                 val enabled = itemEnabled(item)
                 DropdownMenuItem(
                     leadingIcon = itemLeading?.let { leading -> { leading(item) } },
@@ -123,6 +182,7 @@ fun <T> Picklist(
                         if (enabled) {
                             onSelect(item)
                             expanded = false
+                            query = ""
                         }
                     },
                     enabled = enabled

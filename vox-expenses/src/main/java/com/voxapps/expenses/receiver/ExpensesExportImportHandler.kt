@@ -220,7 +220,8 @@ class ExpensesExportImportHandler(
                     name,
                     c.optLong("colorArgb"),
                     c.optInt("position"),
-                    c.optLong("createdAt", System.currentTimeMillis())
+                    c.optLong("createdAt", System.currentTimeMillis()),
+                    c.optString("icon").takeIf { it.isNotBlank() }
                 )
             }
         )
@@ -494,6 +495,7 @@ private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("colorArgb", colorArgb)
     put("position", position)
     put("createdAt", createdAt)
+    icon?.let { put("icon", it) }
 }
 
 private fun RecurringPayment.toJson(): JSONObject = JSONObject().apply {

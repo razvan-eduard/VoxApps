@@ -3,6 +3,7 @@ package com.voxapps.expenses.domain.llm
 import android.content.Context
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseSource
+import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
@@ -17,6 +18,13 @@ import com.voxapps.recordflow.RecordSource
 import kotlinx.coroutines.flow.first
 
 private const val TAG = "NotificationExpenseFlow"
+
+/**
+ * Containment, so a shop's fuller registered spelling and its bare name reach each other in both
+ * directions. Looser than anything allowed to claim a field: a wrong answer here is a rename shown
+ * to a person, who declines it by not touching it, rather than a field silently mislabelled.
+ */
+private const val RENAME_MATCH_LEVEL = 2
 
 /**
  * What the model said, unless it said nothing.
@@ -285,6 +293,16 @@ class NotificationExpenseFlow(
                 return
             }
         }
+        val vendorForEntry = parsed?.vendor.orRead(f?.vendor)
+        val bankForEntry = knownBank.orRead(parsed?.bank.orRead(f?.bank))
+        // Asked of the word the entry will actually show — the vendor if one was resolved, the line
+        // offered as a candidate if none was. Either way it is the spelling a person is about to
+        // read, and the only one worth pointing at a name they already use.
+        val (vendorRename, bankRename) = renamesFor(
+            vendorForEntry ?: f?.title?.trim()?.takeIf { it.isNotBlank() },
+            bankForEntry,
+            settings
+        )
         container.pendingNotificationExpenseRepository.addPending(
             PendingNotificationExpense(
                 id = System.currentTimeMillis(),
@@ -292,18 +310,21 @@ class NotificationExpenseFlow(
                     ?: title(f?.vendor, f?.bank, category?.name),
                 totalAmount = amount,
                 currency = parsed?.currency.orRead(settings.defaultCurrency) ?: settings.defaultCurrency,
-                vendor = parsed?.vendor.orRead(f?.vendor),
+                vendor = vendorForEntry,
                 // Only where nothing identified a merchant. The title is where a wallet puts the
                 // shop, so it is the line worth pointing at — but no list claimed it, so it is
-                // offered as a question rather than written as an answer.
-                vendorCandidate = if (parsed?.vendor.orRead(f?.vendor) == null) {
+                // offered as a question rather than written as an answer. It is also the spelling a
+                // rename renames, which is why it is kept even when one is proposed.
+                vendorCandidate = if (vendorForEntry == null) {
                     f?.title?.trim()?.takeIf { it.isNotBlank() }
                 } else {
                     null
                 },
+                vendorRenameTo = vendorRename,
+                bankRenameTo = bankRename,
                 category = parsed?.category.orRead(category?.name),
                 capturedAt = System.currentTimeMillis(),
-                bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
+                bank = bankForEntry,
                 // The queue's own default, and the thing approving the entry confirms. A starting
                 // position for the reviewer, not a claim about the message.
                 direction = f?.direction ?: TransactionDirection.OUTGOING,
@@ -312,6 +333,30 @@ class NotificationExpenseFlow(
         )
         kept = Kept.REVIEW
         Logger.d(TAG, "Queued for review: $amount")
+    }
+
+    /**
+     * The accepted names a capture's own could be another spelling of, one per field.
+     *
+     * Two sources, because a name earns its standing two ways: a term someone put in a vocabulary
+     * list, and a name they typed onto a record themselves. Both are answers a person gave; neither
+     * is a guess, and a rename pointed at either lands on a name they already use.
+     *
+     * Asked only of a name that is not already listed, so nothing is proposed about a word the app
+     * resolved outright. [FuzzyNameMatcher] level 2 — containment, so a shop's fuller registered
+     * spelling and its bare name reach each other, which is the pairing this exists for.
+     */
+    private suspend fun renamesFor(vendor: String?, bank: String?, settings: ExpensesSettings): Pair<String?, String?> {
+        if (vendor == null && bank == null) return null to null
+        val lists = FieldVocabularies.vocabularies(context, settings).associate { it.name to it.terms }
+        val records = container.expensesRepository.expensesSnapshot()
+        fun acceptedFor(vocabulary: String, of: (Expense) -> String?): List<String> =
+            (lists[vocabulary].orEmpty() + NameAlreadyKnown.vouchedNames(records, of)).distinct()
+        return NameAlreadyKnown.match(
+            vendor, acceptedFor(FieldVocabularies.VOCAB_VENDOR) { it.vendor }, RENAME_MATCH_LEVEL
+        ) to NameAlreadyKnown.match(
+            bank, acceptedFor(FieldVocabularies.VOCAB_BANK) { it.bank }, RENAME_MATCH_LEVEL
+        )
     }
 
     /**

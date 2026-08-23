@@ -33,6 +33,15 @@ data class PendingNotificationExpense(
      * from it until a person taps it.
      */
     val vendorCandidate: String? = null,
+    /**
+     * The accepted name this capture's vendor or bank turned out to be another spelling of.
+     *
+     * Present instead of an offer to list the candidate: a shop already named needs no second entry,
+     * it needs this spelling pointed at the name already there. Accepting one writes an enabled
+     * re-map rule, so the rename happens by itself from then on.
+     */
+    val vendorRenameTo: String? = null,
+    val bankRenameTo: String? = null,
     val category: String?,
     val capturedAt: Long,
     /** Set deterministically when the notification came from a starred (banking) source app —
@@ -42,7 +51,11 @@ data class PendingNotificationExpense(
     /** The notification's template identity — approving this entry confirms the direction against
      *  it; see [TemplateDirectionMemory]. */
     val templateHash: String? = null
-)
+) {
+    /** The spelling this entry carries for the merchant: the one that was resolved, or the one being
+     *  asked about. What a rename renames. */
+    fun vendorSpelling(): String? = vendor?.takeIf { it.isNotBlank() } ?: vendorCandidate
+}
 
 /**
  * Holds *pending* expenses captured from payment-app notifications, awaiting individual user review
@@ -95,6 +108,8 @@ class PendingNotificationExpenseRepository(context: Context) {
             o.put("currency", e.currency)
             e.vendor?.let { o.put("vendor", it) }
             e.vendorCandidate?.let { o.put("vendorCandidate", it) }
+            e.vendorRenameTo?.let { o.put("vendorRenameTo", it) }
+            e.bankRenameTo?.let { o.put("bankRenameTo", it) }
             e.category?.let { o.put("category", it) }
             e.bank?.let { o.put("bank", it) }
             o.put("direction", e.direction.toJsonValue())
@@ -118,6 +133,8 @@ class PendingNotificationExpenseRepository(context: Context) {
                 currency = o.optString("currency"),
                 vendor = if (o.has("vendor")) o.optString("vendor") else null,
                 vendorCandidate = if (o.has("vendorCandidate")) o.optString("vendorCandidate") else null,
+                vendorRenameTo = if (o.has("vendorRenameTo")) o.optString("vendorRenameTo") else null,
+                bankRenameTo = if (o.has("bankRenameTo")) o.optString("bankRenameTo") else null,
                 category = if (o.has("category")) o.optString("category") else null,
                 bank = if (o.has("bank")) o.optString("bank") else null,
                 direction = o.optTransactionDirection(),

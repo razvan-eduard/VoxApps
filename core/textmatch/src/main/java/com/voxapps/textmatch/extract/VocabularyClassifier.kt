@@ -97,6 +97,28 @@ object VocabularyClassifier {
     fun termKey(term: String): String = tokenize(term).joinToString(" ")
 
     /**
+     * Whether [term] is the fuller spelling of [name] — its tokens contain the name's, in order.
+     *
+     * The mirror of how a term is normally found. A list entry is matched *inside* a line, so a
+     * shop listed as one word is recognised in every longer rendering of it; this answers the other
+     * direction, where the entry is the longer one and the message says less. Someone who lists a
+     * shop by its full registered name should not stop recognising it the day a message names only
+     * the shop.
+     *
+     * Token sequences on both sides, never characters. Character containment would make a word
+     * match inside an unrelated one — a four-letter shop hides in plenty of ordinary words — and a
+     * false claim here does not merely mislabel a field, it makes the other field stop resolving too.
+     */
+    fun isFullerSpellingOf(term: String, name: String): Boolean {
+        val termTokens = tokenize(term)
+        val nameTokens = tokenize(name)
+        if (termTokens.isEmpty() || nameTokens.isEmpty()) return false
+        if (nameTokens.size >= termTokens.size) return false
+        return containsSequence(termTokens, nameTokens)
+    }
+
+
+    /**
      * Where a term sits, for callers to whom order is the meaning.
      *
      * [tokenIndex] counts tokens under this object's own tokenization, not characters, because that

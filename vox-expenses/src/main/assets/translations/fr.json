@@ -587,5 +587,13 @@
   "vocabulary_vendors_title": "Enseignes que vous nommez",
   "vocabulary_vendors_desc": "Une ligne nommant l'une d'elles est le commerçant, quoi que dise le reste du message — elle prime sur les deux listes ci-dessous. Rien n'est fourni ici : ce sont vos enseignes, pas une liste qu'on pourrait écrire à votre place.",
   "learn_vendor_chip": "Enseigne : %s",
-  "learn_bank_chip": "Banque : %s"
+  "learn_bank_chip": "Banque : %s",
+  "location_filter_label": "Lieu",
+  "all_locations": "Tous les lieux",
+  "filter_search_hint": "Rechercher",
+  "filter_show_all_matching": "Afficher les %d résultats",
+  "rename_chip": "%1$s est %2$s",
+  "category_icon_title": "Icône de catégorie",
+  "category_icon_none": "Aucune icône",
+  "category_icon_custom": "Ou saisissez-en une"
 }

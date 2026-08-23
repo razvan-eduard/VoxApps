@@ -62,6 +62,15 @@ class SuggestionStore(
      * that could not be carried out leaves the offer standing rather than losing it silently.
      */
     suspend fun accept(recordId: Long, fieldKey: String, value: String?): Boolean {
+        // A draft editor accepts by putting the value in the draft, and its Save is what reaches the
+        // record. Refused here rather than left to the target, because the mistake this prevents —
+        // a write that a Discard cannot take back — is invisible until somebody cancels an edit and
+        // finds part of it kept, and `store.accept()` is the obvious call for a screen that must
+        // not make it.
+        if (target.acceptMode == AcceptMode.STAGES) {
+            Logger.w(TAG, "accept() on a staging target — the screen applies its own draft, and saving clears it")
+            return false
+        }
         val tag = sourceOf(recordId, fieldKey)
         val applied = target.applyValue(recordId, fieldKey, value)
         if (!applied) {

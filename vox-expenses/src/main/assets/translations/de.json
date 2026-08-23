@@ -587,5 +587,13 @@
   "vocabulary_vendors_title": "Geschäfte, die du selbst benennst",
   "vocabulary_vendors_desc": "Eine Zeile, die eines davon nennt, ist der Händler, was die Nachricht sonst auch sagt — sie geht beiden Listen darunter vor. Hier wird nichts mitgeliefert: das sind deine Geschäfte, keine Liste, die jemand für dich schreiben könnte.",
   "learn_vendor_chip": "Geschäft: %s",
-  "learn_bank_chip": "Bank: %s"
+  "learn_bank_chip": "Bank: %s",
+  "location_filter_label": "Ort",
+  "all_locations": "Alle Orte",
+  "filter_search_hint": "Suchen",
+  "filter_show_all_matching": "Alle %d Treffer zeigen",
+  "rename_chip": "%1$s ist %2$s",
+  "category_icon_title": "Kategoriesymbol",
+  "category_icon_none": "Kein Symbol",
+  "category_icon_custom": "Oder eines eingeben"
 }

@@ -12,8 +12,9 @@ import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Expense
-import com.voxapps.expenses.data.PendingFieldSuggestion
+import com.voxapps.suggestions.OfferedSuggestion
 import com.voxapps.expenses.data.ExpenseLineItem
+import com.voxapps.expenses.data.ExpenseRemapFields
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.FieldVocabularies
@@ -77,8 +78,9 @@ class ExpensesStateManager(
         val selectedDateMillis: Long = System.currentTimeMillis(),
         val dateFrom: Long? = null,
         val dateTo: Long? = null,
-        val selectedBank: String? = null,
-        val selectedVendor: String? = null,
+        val selectedBank: FilterValue? = null,
+        val selectedLocation: FilterValue? = null,
+        val selectedVendor: FilterValue? = null,
         val sessionTick: Int = 0
     )
 
@@ -108,7 +110,8 @@ class ExpensesStateManager(
             } else {
                 ExpensesUiState.Unlocked(
                     expenses = ExpenseFilter.apply(
-                        expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank, rt.selectedVendor, rt.sort
+                        expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank,
+                        rt.selectedVendor, rt.selectedLocation, rt.sort
                     ),
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
@@ -118,8 +121,10 @@ class ExpensesStateManager(
                     dateFrom = rt.dateFrom,
                     dateTo = rt.dateTo,
                     selectedBank = rt.selectedBank,
+                    selectedLocation = rt.selectedLocation,
                     selectedVendor = rt.selectedVendor,
                     availableBanks = expenses.mapNotNull { it.expense.bank }.distinct().sorted(),
+                    availableLocations = expenses.mapNotNull { it.expense.location }.distinct().sorted(),
                     availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted(),
                     nextScheduledDedupMillis = nextRunMillis
                 )
@@ -146,8 +151,9 @@ class ExpensesStateManager(
     fun setSelectedDate(millis: Long) = _runtime.update { it.copy(selectedDateMillis = millis) }
     fun setDateFilter(from: Long?, to: Long?) = _runtime.update { it.copy(dateFrom = from, dateTo = to) }
     fun clearDateFilter() = _runtime.update { it.copy(dateFrom = null, dateTo = null) }
-    fun setBankFilter(bank: String?) = _runtime.update { it.copy(selectedBank = bank) }
-    fun setVendorFilter(vendor: String?) = _runtime.update { it.copy(selectedVendor = vendor) }
+    fun setBankFilter(bank: FilterValue?) = _runtime.update { it.copy(selectedBank = bank) }
+    fun setLocationFilter(location: FilterValue?) = _runtime.update { it.copy(selectedLocation = location) }
+    fun setVendorFilter(vendor: FilterValue?) = _runtime.update { it.copy(selectedVendor = vendor) }
 
     fun setBiometricRequired(required: Boolean) { scope.launch { settingsRepo.setBiometricRequired(required) } }
     fun setSessionTimeoutMinutes(minutes: Int) { scope.launch { settingsRepo.setSessionTimeoutMinutes(minutes) } }
@@ -419,10 +425,10 @@ class ExpensesStateManager(
         scope.launch { expensesRepo.deleteAllExpenses() }
     }
 
-    fun addCategory(name: String, colorArgb: Long, onResult: (Long) -> Unit = {}) {
+    fun addCategory(name: String, colorArgb: Long, icon: String? = null, onResult: (Long) -> Unit = {}) {
         val position = (uiStateCategories()).size
         scope.launch {
-            val id = expensesRepo.addCategory(name, colorArgb, position, System.currentTimeMillis())
+            val id = expensesRepo.addCategory(name, colorArgb, position, System.currentTimeMillis(), icon)
             onResult(id)
         }
     }
@@ -623,19 +629,33 @@ class ExpensesStateManager(
         context: Context? = null,
         amountOverride: Double? = null,
         learnBank: String? = null,
-        learnVendor: String? = null
+        learnVendor: String? = null,
+        renameVendor: Boolean = false,
+        renameBank: Boolean = false
     ) {
         val amount = amountOverride ?: entry.totalAmount ?: return
         scope.launch {
             learnBank?.let { addVocabularyTerm(FieldVocabularies.VOCAB_BANK, it) }
             learnVendor?.let { addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, it) }
+            // Before the record is written, so the rule that outlives this entry also reaches it:
+            // addParsedExpense runs enabled re-map rules on the way in, and a rename accepted on a
+            // record the person is looking at should be visible on that record.
+            if (renameVendor) entry.vendorRenameTo?.let { to ->
+                entry.vendorSpelling()?.let { expensesRepo.addAcceptedRename(ExpenseRemapFields.ID_VENDOR, it, to) }
+            }
+            if (renameBank) entry.bankRenameTo?.let { to ->
+                entry.bank?.let { expensesRepo.addAcceptedRename(ExpenseRemapFields.ID_BANK, it, to) }
+            }
             val settings = settingsRepo.getSnapshot()
             val id = expensesRepo.addParsedExpense(
                 title = entry.title,
                 totalAmount = amount,
                 currencyCode = entry.currency,
-                vendor = entry.vendor,
-                bank = entry.bank,
+                // An accepted rename names this record too, not only the ones after it. Where the
+                // entry never resolved a merchant there is no field for a rule to rewrite, so the
+                // answer the person just gave is written here directly.
+                vendor = entry.vendorRenameTo?.takeIf { renameVendor } ?: entry.vendor,
+                bank = entry.bankRenameTo?.takeIf { renameBank } ?: entry.bank,
                 location = null,
                 comments = null,
                 dateTime = entry.capturedAt,
@@ -720,11 +740,27 @@ class ExpensesStateManager(
         }
     }
 
-    // --- Pending field suggestions (from a line-items rescan on an already-saved expense) ---
-    fun observePendingFieldSuggestion(expenseId: Long): Flow<PendingFieldSuggestion?> =
-        expensesRepo.observePendingFieldSuggestion(expenseId)
+    // --- Proposals a record holds until someone accepts them (see :core:suggestions) ---
 
-    fun clearPendingFieldSuggestion(expenseId: Long) {
-        scope.launch { expensesRepo.clearPendingFieldSuggestion(expenseId) }
+    /**
+     * What is being offered for this record, live.
+     *
+     * Read only, deliberately. Taking a proposal puts its value in the draft the edit screen is
+     * holding and nowhere else — that screen reaches the database through Save and through nothing
+     * else, so a proposal taken and then abandoned is abandoned along with the rest of the edit.
+     * See [com.voxapps.expenses.data.ExpenseSuggestionTarget], which refuses to write for the same
+     * reason.
+     */
+    fun observeSuggestions(expenseId: Long): Flow<List<OfferedSuggestion>> =
+        expensesRepo.suggestions.offered(expenseId)
+
+    /** Refuse one. Disposes of whatever produced it, once its last proposal is gone. */
+    fun dismissSuggestion(expenseId: Long, fieldKey: String) {
+        scope.launch { expensesRepo.suggestions.dismiss(expenseId, fieldKey) }
+    }
+
+    /** Everything for this record, gone — which is what saving it means. */
+    fun clearSuggestions(expenseId: Long) {
+        scope.launch { expensesRepo.suggestions.clear(expenseId) }
     }
 }

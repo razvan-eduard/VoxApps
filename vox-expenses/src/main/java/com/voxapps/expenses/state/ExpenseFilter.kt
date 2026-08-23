@@ -14,8 +14,9 @@ object ExpenseFilter {
         categoryId: Long?,
         dateFrom: Long?,
         dateTo: Long?,
-        bank: String?,
-        vendor: String?,
+        bank: FilterValue?,
+        vendor: FilterValue?,
+        location: FilterValue?,
         sort: SortMode
     ): List<ExpenseWithDetails> {
         val filtered = expenses.filter { ewd ->
@@ -23,8 +24,9 @@ object ExpenseFilter {
             (categoryId == null || e.categoryId == categoryId) &&
                 (dateFrom == null || e.dateTime >= dateFrom) &&
                 (dateTo == null || e.dateTime <= dateTo) &&
-                (bank == null || e.bank == bank) &&
-                (vendor == null || e.vendor == vendor)
+                (bank == null || bank.matches(e.bank)) &&
+                (vendor == null || vendor.matches(e.vendor)) &&
+                (location == null || location.matches(e.location))
         }
         return when (sort) {
             SortMode.NEWEST -> filtered.sortedByDescending { it.expense.dateTime }

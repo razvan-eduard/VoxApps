@@ -87,7 +87,36 @@ object TwoFieldPreParse {
         val namedFields = roles.namedVendor
             ?.let { name -> findings.filter { it.vocabulary == name }.map { it.lineIndex }.distinct() }
             .orEmpty()
-        val vendorFromName = namedFields.singleOrNull()?.let { fields[it].ifBlank { null } }
+        // The listed spelling, not the line it was found in — the same rule the issuer already
+        // follows, and for the same reason it gives there. A shop appears as "NAME SRL", "NAME RO-490"
+        // and "name" across a month of messages; writing each line verbatim spreads one merchant
+        // across a filter list, a set of re-map rules and a recurrence key that no longer agree it is
+        // the same shop. The word someone put in the list is what they call it, so that is what the
+        // record says.
+        //
+        // Longest match wins where several terms hit the same line, as [VocabularyClassifier.locate]
+        // already resolves it: a shorter entry that is a fragment of a longer one is not a second
+        // reading of the line, it is the same reading seen less fully.
+        val vendorFromName = namedFields.singleOrNull()?.let { field ->
+            findings
+                .filter { it.vocabulary == roles.namedVendor && it.lineIndex == field }
+                .maxByOrNull { VocabularyClassifier.termKey(it.term).count { c -> c == ' ' } }
+                ?.term
+        }
+
+        // And the other direction: the listed name is the fuller one and the message says less.
+        // Only where the first pass found nothing, only against a line short enough to be a name,
+        // and only when exactly one line and one entry agree — the same "exactly one" that governs
+        // every other conclusion here.
+        val vendorFromFullerName = vendorFromName ?: roles.namedVendor?.let { name ->
+            val listed = vocabularies.firstOrNull { it.name == name }?.terms.orEmpty()
+            val hits = fields.indices.flatMap { index ->
+                val asName = nameOrNull(fields[index]) ?: return@flatMap emptyList()
+                listed.filter { VocabularyClassifier.isFullerSpellingOf(it, asName) }
+                    .map { index to it }
+            }
+            hits.map { it.first }.distinct().singleOrNull()?.let { hits.map { h -> h.second }.distinct().singleOrNull() }
+        }
 
         val vendorFromLegal = legalFields.singleOrNull()?.let { fields[it].ifBlank { null } }
         // An issuer token in the field a name already claimed is part of that name.
@@ -97,7 +126,7 @@ object TwoFieldPreParse {
             null
         }
 
-        val vendor = vendorFromName ?: vendorFromLegal ?: run {
+        val vendor = vendorFromFullerName ?: vendorFromLegal ?: run {
             // The leftover rule: a bank claimed one field and nothing claimed the other — the
             // other is the vendor, when it is name-shaped rather than a sentence.
             if (namedFields.isEmpty() && legalFields.isEmpty() && bankFields.size == 1) {
@@ -110,9 +139,9 @@ object TwoFieldPreParse {
 
     /**
      * The title for a record whose vendor was resolved deterministically: the vendor, plus the
-     * model's category when it offered one — "LIDL Groceries", not the card the model would
-     * otherwise have titled it after. The vendor is what identifies the expense; the category is
-     * the one word of context the model still contributes.
+     * model's category when it offered one, rather than the card the model would otherwise have
+     * titled it after. The vendor is what identifies the expense; the category is the one word of
+     * context the model still contributes.
      */
     fun composeTitle(vendor: String, category: String?): String =
         listOfNotNull(vendor.trim().ifBlank { null }, category?.trim()?.ifBlank { null })

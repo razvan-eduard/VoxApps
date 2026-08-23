@@ -587,5 +587,13 @@
   "vocabulary_vendors_title": "Magazine numite de tine",
   "vocabulary_vendors_desc": "Un rând care numește unul dintre acestea este comerciantul, orice altceva ar spune mesajul — are prioritate față de ambele liste de mai jos. Nimic nu vine livrat aici: sunt magazinele tale, nu o listă pe care ți-o poate scrie altcineva.",
   "learn_vendor_chip": "Magazin: %s",
-  "learn_bank_chip": "Bancă: %s"
+  "learn_bank_chip": "Bancă: %s",
+  "location_filter_label": "Locație",
+  "all_locations": "Toate locațiile",
+  "filter_search_hint": "Caută",
+  "filter_show_all_matching": "Arată toate cele %d potriviri",
+  "rename_chip": "%1$s este %2$s",
+  "category_icon_title": "Pictograma categoriei",
+  "category_icon_none": "Fără pictogramă",
+  "category_icon_custom": "Sau scrie una"
 }

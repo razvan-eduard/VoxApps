@@ -91,6 +91,7 @@ dependencies {
     implementation(project(":core:fieldmemory"))
     implementation(project(":core:schema-annotations"))
     ksp(project(":core:schema-processor"))
+    implementation(project(":core:suggestions"))
     implementation(project(":core:textmatch"))
     implementation(project(":core:onboarding"))
     implementation(libs.androidx.core.ktx)
