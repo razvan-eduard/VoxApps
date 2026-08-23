@@ -2,6 +2,7 @@ package com.voxapps.expenses.data
 
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.datahygiene.NameCasing
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
@@ -76,7 +77,6 @@ class ExpensesRepository(
     private val appContext: Context,
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
-    private val pendingFieldSuggestionDao: PendingFieldSuggestionDao,
     private val fieldCorrectionMemory: FieldCorrectionMemory,
     /** Notices that payments to a vendor keep coming back. Nothing it records changes this record;
      *  it only counts, and only a person turns a count into an arrangement. */
@@ -88,10 +88,12 @@ class ExpensesRepository(
     val categories: Flow<List<Category>> = categoryDao.observeAll().distinctUntilChanged()
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll().distinctUntilChanged()
 
-    /** See [PendingFieldSuggestion]'s doc comment — the source for ExpenseEditScreen's tappable
-     *  field-suggestion chips after a line-items rescan. */
-    fun observePendingFieldSuggestion(expenseId: Long): Flow<PendingFieldSuggestion?> =
-        pendingFieldSuggestionDao.observe(expenseId)
+    /**
+     * Where a proposal goes. Set once by the container rather than injected, because the target this
+     * store consults reads records back through this repository — one of the two has to be late,
+     * and nothing offers a suggestion while the graph is still being built.
+     */
+    lateinit var suggestions: com.voxapps.suggestions.SuggestionStore
 
     /**
      * Folds another announcement of an already-filed payment into the record it belongs to.
@@ -120,12 +122,6 @@ class ExpensesRepository(
         }
         return existing.id
     }
-
-    suspend fun setPendingFieldSuggestion(suggestion: PendingFieldSuggestion) =
-        pendingFieldSuggestionDao.upsert(suggestion)
-
-    suspend fun clearPendingFieldSuggestion(expenseId: Long) =
-        pendingFieldSuggestionDao.clear(expenseId)
 
     /** Builds the current duplicate checker from whatever rules are persisted right now — fetched
      *  fresh on every call rather than cached, since rules can change between checks and this
@@ -254,6 +250,34 @@ class ExpensesRepository(
             }
             remapPatternSightingDao.deleteForPattern(patternKey)
         }
+    }
+
+    /**
+     * A rename someone accepted: from now on this spelling becomes the name they already use.
+     *
+     * Enabled, unlike the rules the edit-pattern learner drafts, and the difference is who decided.
+     * A drafted rule is the app saying it noticed a habit and waiting to be told it was right; this
+     * one is the answer to a question that was asked and returned. Asking again, in a list, for a
+     * confirmation already given is how a proposal becomes a chore.
+     *
+     * Exact match on the trigger, never fuzzy — the resemblance was judged once, by a person, and
+     * baking it into a standing rule would apply that judgement to names nobody looked at.
+     */
+    suspend fun addAcceptedRename(fieldId: String, from: String, to: String) {
+        val matchJson = RemapRuleJson.encode(mapOf(fieldId to from))
+        if (remapRuleDao.getByMatch(matchJson) != null) return
+        remapRuleDao.upsert(
+            RemapRuleEntity(
+                name = "$from → $to",
+                matchJson = matchJson,
+                setJson = RemapRuleJson.encode(mapOf(fieldId to to)),
+                origin = RemapRuleEntity.ORIGIN_PROPOSED,
+                enabled = true,
+                sortOrder = remapRuleDao.getAll().size,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        Logger.d("ExpensesRepository", "Accepted rename: $fieldId '$from' -> '$to'")
     }
 
     suspend fun remapRulesSnapshot(): List<RemapRuleEntity> = remapRuleDao.getAll()
@@ -539,6 +563,28 @@ class ExpensesRepository(
      *  [applyExpenseDeduplication] reassigns a merge-adopted receipt's row onto the keeper — so this
      *  never deletes a file another row still needs. A file-delete failure never blocks/rolls back
      *  the DB delete — an orphan file is a far cheaper failure mode than a stuck delete. */
+    /**
+     * The photographs one rescan was made from, gone.
+     *
+     * Called when the last suggestion carrying that scan's tag is dismissed — the scan has nothing
+     * left to offer, and left attached it is indistinguishable from one somebody took on purpose.
+     * A file another row still references is kept, and a failed file delete never blocks the row
+     * delete: an orphan file is the cheaper failure.
+     */
+    suspend fun deleteAttachmentGroup(expenseId: Long, groupId: String) {
+        val rows = attachmentDao.deleteGroup(ExpensesAttachments.RECORD_TYPE, expenseId, groupId)
+        for (row in rows) {
+            try {
+                if (attachmentDao.countByFileName(ExpensesAttachments.RECORD_TYPE, row.fileName) == 0) {
+                    val dir = if (row.source == AttachmentSource.SCANNED) "receipts" else ExpensesAttachments.DIR
+                    AttachmentFileStore.delete(appContext, dir, row.fileName)
+                }
+            } catch (e: Exception) {
+                Logger.w("ExpensesRepository", "Failed to delete a rescan's file for expense $expenseId", e)
+            }
+        }
+    }
+
     private suspend fun deleteAttachmentsFor(expenseId: Long) {
         val rows = attachmentDao.deleteAllFor(ExpensesAttachments.RECORD_TYPE, expenseId)
         for (row in rows) {
@@ -678,27 +724,38 @@ class ExpensesRepository(
             val diff = suggested.mapIndexed { i, s -> s?.takeIf { it != inserted[i] } }
             val itemsDiffer = suggestedItems != null && suggestedItems.map { it.name } != effItems.map { it.name }
             if (diff.any { it != null } || itemsDiffer) {
-                pendingFieldSuggestionDao.upsert(
-                    PendingFieldSuggestion(
-                        expenseId = newId,
-                        title = diff[0], vendor = diff[1], bank = diff[2],
-                        location = diff[3], comments = diff[4],
-                        itemsJson = if (itemsDiffer) PendingLineItemsJson.encode(
+                suggestions.offer(
+                    newId,
+                    mapOf(
+                        ExpenseSuggestionTarget.KEY_TITLE to diff[0],
+                        ExpenseSuggestionTarget.KEY_VENDOR to diff[1],
+                        ExpenseSuggestionTarget.KEY_BANK to diff[2],
+                        ExpenseSuggestionTarget.KEY_LOCATION to diff[3],
+                        ExpenseSuggestionTarget.KEY_COMMENTS to diff[4],
+                        ExpenseSuggestionTarget.KEY_ITEMS to if (itemsDiffer) PendingLineItemsJson.encode(
                             suggestedItems.map {
                                 ExpenseParseResultParser.ParsedItem(
                                     it.name, it.quantity, it.unitPrice, it.netAmount, it.vatAmount, it.grossAmount
                                 )
                             }
                         ) else null
-                    )
+                    ).filterValues { it != null }
                 )
             }
         }
         return newId
     }
 
-    suspend fun addCategory(name: String, colorArgb: Long, position: Int, createdAt: Long): Long {
-        val clean = name.trim()
+    suspend fun addCategory(
+        name: String,
+        colorArgb: Long,
+        position: Int,
+        createdAt: Long,
+        icon: String? = null
+    ): Long {
+        // Cased here rather than at each caller: a category is created from a typed name, a spoken
+        // one and a synced one, and a list is only uniform if every route through it agrees.
+        val clean = NameCasing.titleCased(name).orEmpty()
         if (clean.isEmpty()) return -1
         // The very first category becomes the fallback, so an install always has one without anybody
         // being asked to choose. See [Category.isDefault].
@@ -709,7 +766,8 @@ class ExpensesRepository(
                 colorArgb = colorArgb,
                 position = position,
                 createdAt = createdAt,
-                isDefault = isFirst
+                isDefault = isFirst,
+                icon = icon
             )
         )
     }
@@ -736,7 +794,8 @@ class ExpensesRepository(
         }
     }
 
-    suspend fun updateCategory(category: Category) = categoryDao.update(category)
+    suspend fun updateCategory(category: Category) =
+        categoryDao.update(category.copy(name = NameCasing.titleCased(category.name) ?: category.name))
 
     suspend fun deleteCategory(category: Category) {
         // The fallback is never deleted — there has to be somewhere for a record with no opinion to

@@ -135,3 +135,76 @@ class SuggestionStoreTest {
         assertTrue(dao.snapshot(1L).isEmpty())
     }
 }
+
+/**
+ * A screen holding a draft must not have its accepted values written behind it.
+ *
+ * The mistake this guards is invisible from the outside: a proposal written straight to the record
+ * looks identical to one staged into the draft, right up to the moment somebody cancels the edit and
+ * finds that part of it stayed. Refused in the store rather than left to the target, because
+ * `accept()` is the obvious call for a screen that must never make it.
+ */
+class StagingTargetTest {
+
+    private class FakeDao : FieldSuggestionDao {
+        val rows = MutableStateFlow<List<FieldSuggestion>>(emptyList())
+        override fun forRecord(recordId: Long): Flow<List<FieldSuggestion>> =
+            rows.map { all -> all.filter { it.recordId == recordId } }
+        override suspend fun snapshot(recordId: Long) = rows.value.filter { it.recordId == recordId }
+        override suspend fun upsert(suggestions: List<FieldSuggestion>) {
+            val keys = suggestions.map { it.recordId to it.fieldKey }.toSet()
+            rows.value = rows.value.filterNot { (it.recordId to it.fieldKey) in keys } + suggestions
+        }
+        override suspend fun clearField(recordId: Long, fieldKey: String) {
+            rows.value = rows.value.filterNot { it.recordId == recordId && it.fieldKey == fieldKey }
+        }
+        override suspend fun clearRecord(recordId: Long) {
+            rows.value = rows.value.filterNot { it.recordId == recordId }
+        }
+        override suspend fun clearSource(recordId: Long, sourceTag: String) {
+            rows.value = rows.value.filterNot { it.recordId == recordId && it.sourceTag == sourceTag }
+        }
+    }
+
+    private class Staging : SuggestionTarget {
+        var wasAskedToWrite = false
+        override val suggestableFields = listOf(SuggestableField("vendor", "Vendor"))
+        override val acceptMode = AcceptMode.STAGES
+        override suspend fun currentValue(recordId: Long, fieldKey: String): String? = null
+        override suspend fun applyValue(recordId: Long, fieldKey: String, value: String?): Boolean {
+            wasAskedToWrite = true
+            return true
+        }
+    }
+
+    @Test
+    fun `a staging target is never asked to write`() = runTest {
+        val dao = FakeDao()
+        val target = Staging()
+        val store = SuggestionStore(dao, target)
+        store.offer(1L, mapOf("vendor" to "LIDL"))
+
+        assertFalse("accept must not succeed on a draft editor", store.accept(1L, "vendor", "LIDL"))
+        assertFalse("and must not reach the record", target.wasAskedToWrite)
+    }
+
+    /** And the offer survives, because the screen has not saved yet — losing it would lose the value. */
+    @Test
+    fun `the refused accept leaves the suggestion standing`() = runTest {
+        val dao = FakeDao()
+        val store = SuggestionStore(dao, Staging())
+        store.offer(1L, mapOf("vendor" to "LIDL"))
+        store.accept(1L, "vendor", "LIDL")
+        assertEquals(1, dao.snapshot(1L).size)
+    }
+
+    /** Saving is what clears them, which is the screen's one route to the record. */
+    @Test
+    fun `clearing on save removes everything for the record`() = runTest {
+        val dao = FakeDao()
+        val store = SuggestionStore(dao, Staging())
+        store.offer(1L, mapOf("vendor" to "LIDL"))
+        store.clear(1L)
+        assertTrue(dao.snapshot(1L).isEmpty())
+    }
+}

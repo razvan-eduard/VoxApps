@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CallReceived
@@ -71,7 +72,11 @@ fun ExpenseCard(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (category != null) {
+            // The icon takes the dot's place rather than sitting beside it: both say which category
+            // this is, and a row carrying two answers to one question is a row that reads slower.
+            if (category?.icon != null) {
+                Text(category.icon, fontSize = 17.sp)
+            } else if (category != null) {
                 Box(
                     modifier = Modifier
                         .size(12.dp)

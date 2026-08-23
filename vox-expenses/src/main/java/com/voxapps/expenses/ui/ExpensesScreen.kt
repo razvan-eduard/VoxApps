@@ -55,6 +55,7 @@ import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.recurring.PaymentPredictor
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
+import com.voxapps.expenses.state.FilterValue
 import com.voxapps.expenses.state.SortMode
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
@@ -96,7 +97,8 @@ fun ExpensesScreen(
     // than guess which filters a payment that hasn't happened would satisfy, predictions appear only
     // in the unfiltered list — where "what is coming" is a sensible thing to be told.
     val filtered = state.dateFrom != null || state.dateTo != null ||
-        state.selectedBank != null || state.selectedVendor != null || state.selectedCategoryId != null
+        state.selectedBank != null || state.selectedVendor != null ||
+        state.selectedLocation != null || state.selectedCategoryId != null
     val predictedPayments = remember(recurring, state.expenses, filtered) {
         if (filtered) emptyList() else PaymentPredictor.predict(
             confirmed = recurring,
@@ -287,20 +289,24 @@ fun ExpensesScreen(
             dateFrom = state.dateFrom,
             dateTo = state.dateTo,
             selectedBank = state.selectedBank,
+            selectedLocation = state.selectedLocation,
             selectedVendor = state.selectedVendor,
             availableBanks = state.availableBanks,
+            availableLocations = state.availableLocations,
             availableVendors = state.availableVendors,
-            onApply = { sort, from, to, bank, vendor ->
+            onApply = { sort, from, to, bank, vendor, location ->
                 stateManager.setSort(sort)
                 stateManager.setDateFilter(from, to)
                 stateManager.setBankFilter(bank)
                 stateManager.setVendorFilter(vendor)
+                stateManager.setLocationFilter(location)
                 showFilterSheet = false
             },
             onClear = {
                 stateManager.clearDateFilter()
                 stateManager.setBankFilter(null)
                 stateManager.setVendorFilter(null)
+                stateManager.setLocationFilter(null)
                 showFilterSheet = false
             },
             onDismiss = { showFilterSheet = false }

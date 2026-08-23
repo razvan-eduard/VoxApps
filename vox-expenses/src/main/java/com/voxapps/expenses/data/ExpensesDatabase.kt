@@ -8,6 +8,7 @@ import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.migration.Migration
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.datahygiene.NameCasing
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.fieldmemory.LearnedFieldCorrection
@@ -19,10 +20,10 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 @Database(
     entities = [Expense::class, Category::class, ExpenseLineItem::class, SpendingLimit::class,
         ExpenseTombstone::class, PendingLlmRequestEntity::class,
-        AttachmentEntity::class, DuplicateRuleEntity::class, PendingFieldSuggestion::class,
+        AttachmentEntity::class, DuplicateRuleEntity::class, com.voxapps.suggestions.FieldSuggestion::class,
         LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class,
         RecurringPayment::class],
-    version = 26,
+    version = 31,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -37,7 +38,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
     abstract fun pendingLlmRequestDao(): PendingLlmRequestDao
     abstract fun attachmentDao(): AttachmentDao
     abstract fun duplicateRuleDao(): DuplicateRuleDao
-    abstract fun pendingFieldSuggestionDao(): PendingFieldSuggestionDao
+    abstract fun fieldSuggestionDao(): com.voxapps.suggestions.FieldSuggestionDao
     abstract fun learnedFieldCorrectionDao(): LearnedFieldCorrectionDao
 
     companion object {
@@ -345,6 +346,126 @@ abstract class ExpensesDatabase : RoomDatabase() {
          * model-free scan fail on exactly the installs that upgraded into the feature.
          */
         /** The invoice's net and tax, beside the total it already stored. */
+        /**
+         * The per-expense suggestion row becomes one row per suggested field.
+         *
+         * Carried across rather than dropped: a rescan someone has not looked at yet is exactly the
+         * thing this table exists to hold, and losing it on an upgrade would lose the photographs'
+         * only remaining purpose too — the source tag is what lets dismissing the last suggestion
+         * remove them. Every column becomes a key, `NULL`s excepted; a row that held nothing but its
+         * id carries nothing over.
+         */
+        /**
+         * A category for records nothing classified, and it becomes the fallback.
+         *
+         * Every capture with no opinion about its category takes the fallback, so whatever holds
+         * that role is stamped on a great many records that have nothing to do with it — and
+         * afterwards a stamped record cannot be told from one that genuinely belongs there. A
+         * fallback naming its own emptiness is the only one that stays honest at that volume.
+         *
+         * It takes the role unconditionally, including from a category that already held it: any
+         * category with a meaning of its own is the wrong answer to "nothing chose one". Position -1
+         * so it also wins the ordering fallback if its star is ever moved, and grey rather than a
+         * hue because it is the absence of a category rather than one more of them. Moving the star
+         * elsewhere is one tap in Categories.
+         */
+        private fun seedUncategorised(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "INSERT INTO categories (name, colorArgb, position, createdAt, isDefault) " +
+                    "SELECT 'Uncategorised', ${0xFF9E9E9EL}, -1, ${System.currentTimeMillis()}, 0 " +
+                    "WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'Uncategorised')"
+            )
+            // Exactly one carries it — the invariant ExpensesRepository keeps, applied here in the
+            // one statement pair that moves it, since a moment with none is as illegal as a moment
+            // with two.
+            db.execSQL("UPDATE categories SET isDefault = 0")
+            db.execSQL("UPDATE categories SET isDefault = 1 WHERE name = 'Uncategorised'")
+        }
+
+        /**
+         * The fallback category and the casing of every category name, applied again.
+         *
+         * Both steps are idempotent — the insert is conditional on the row's absence, the star ends
+         * up in exactly one place, and a cased name cases to itself — so running them from either
+         * version reaches the same state, and an upgrade crossing both runs the chain once.
+         */
+        /** A category may carry a short piece of text identifying it — see [Category.icon]. */
+        private val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE categories ADD COLUMN icon TEXT")
+            }
+        }
+
+        private val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                seedUncategorised(db)
+                titleCaseCategories(db)
+            }
+        }
+
+        private val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                seedUncategorised(db)
+                titleCaseCategories(db)
+            }
+        }
+
+        /**
+         * Existing names take the shape new ones are written in.
+         *
+         * In Kotlin rather than SQL because SQLite's `upper`/`lower` only know ASCII, and every
+         * Romanian name carrying a diacritic would come back mangled — a category renamed wrongly is
+         * worse than one cased inconsistently. A name that would collide with one already there is
+         * left as it is: merging two categories moves records between them, which is the auto-merge
+         * screen's job and not something a migration should do behind someone's back.
+         */
+        private fun titleCaseCategories(db: SupportSQLiteDatabase) {
+            val renames = mutableListOf<Pair<Long, String>>()
+            db.query("SELECT id, name FROM categories").use { cursor ->
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(0)
+                    val name = cursor.getString(1) ?: continue
+                    val cased = NameCasing.titleCased(name) ?: continue
+                    if (cased != name) renames += id to cased
+                }
+            }
+            for ((id, cased) in renames) {
+                val taken = db.query("SELECT COUNT(*) FROM categories WHERE name = ?", arrayOf<Any>(cased))
+                    .use { it.moveToFirst() && it.getInt(0) > 0 }
+                if (!taken) db.execSQL("UPDATE categories SET name = ? WHERE id = ?", arrayOf<Any>(cased, id))
+            }
+        }
+
+        private val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                seedUncategorised(db)
+            }
+        }
+
+        private val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS field_suggestions (" +
+                        "recordId INTEGER NOT NULL, fieldKey TEXT NOT NULL, value TEXT, " +
+                        "sourceTag TEXT, PRIMARY KEY(recordId, fieldKey))"
+                )
+                val columns = listOf(
+                    "title" to "title", "vendor" to "vendor", "bank" to "bank",
+                    "totalAmount" to "totalAmount", "currencyCode" to "currencyCode",
+                    "category" to "category", "location" to "location",
+                    "dateTime" to "dateTime", "comments" to "comments", "itemsJson" to "items"
+                )
+                for ((column, key) in columns) {
+                    db.execSQL(
+                        "INSERT OR REPLACE INTO field_suggestions (recordId, fieldKey, value, sourceTag) " +
+                            "SELECT expenseId, '" + key + "', CAST(" + column + " AS TEXT), sourceGroupId " +
+                            "FROM pending_field_suggestions WHERE " + column + " IS NOT NULL"
+                    )
+                }
+                db.execSQL("DROP TABLE IF EXISTS pending_field_suggestions")
+            }
+        }
+
         private val MIGRATION_25_26 = object : Migration(25, 26) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -432,7 +553,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate
@@ -441,6 +562,9 @@ abstract class ExpensesDatabase : RoomDatabase() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
                         seedDefaultDuplicateRules(db)
+                        // Same reason: a first record with nothing to classify it should land
+                        // somewhere that says so, not on whichever category was created first.
+                        seedUncategorised(db)
                     }
                 })
                 .build()

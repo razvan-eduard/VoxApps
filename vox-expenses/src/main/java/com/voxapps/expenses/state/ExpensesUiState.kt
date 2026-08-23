@@ -25,9 +25,11 @@ sealed interface ExpensesUiState {
         val selectedDateMillis: Long,
         val dateFrom: Long?,
         val dateTo: Long?,
-        val selectedBank: String? = null,
-        val selectedVendor: String? = null,
+        val selectedBank: FilterValue? = null,
+        val selectedLocation: FilterValue? = null,
+        val selectedVendor: FilterValue? = null,
         val availableBanks: List<String> = emptyList(),
+        val availableLocations: List<String> = emptyList(),
         val availableVendors: List<String> = emptyList(),
         val nextScheduledDedupMillis: Long? = null
     ) : ExpensesUiState {

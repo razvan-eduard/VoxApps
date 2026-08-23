@@ -18,7 +18,7 @@ import com.voxapps.expenses.data.ALREADY_PRESENT_RESULT
 import com.voxapps.expenses.data.RECOGNIZED_NOT_INSERTED
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.NearDuplicateConfig
-import com.voxapps.expenses.data.PendingFieldSuggestion
+import com.voxapps.expenses.data.ExpenseSuggestionTarget
 import com.voxapps.expenses.data.PendingLineItemsJson
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.toNearDuplicateConfig
@@ -371,13 +371,12 @@ class LlmResultReceiver : BroadcastReceiver() {
             LlmTasks.EXPENSE_LINEITEMS_RESCAN -> {
                 // A photo attached to an already-saved expense after the fact — see
                 // ExpenseScanCleanupRequestSender.sendLineItemsRescan's doc comment. Nothing here is
-                // applied directly to the Expense/line-item tables — everything (including items) is
-                // staged as a PendingFieldSuggestion for ExpenseEditScreen to show as a tappable
-                // chip/banner. An earlier version wrote items straight to the DB; that made an
-                // already-open edit screen look like nothing happened, since its line-items list is a
-                // local snapshot that never observes the database (see PendingFieldSuggestion's doc
-                // comment) — routing through the same live-observed suggestion row every other field
-                // already uses fixes that, and also means items are reviewable like everything else.
+                // applied directly to the Expense/line-item tables — everything, items included, is
+                // staged as a proposal for ExpenseEditScreen to show as a tappable chip or banner
+                // (see :core:suggestions). An edit screen already open holds its line items as a
+                // local snapshot and never observes the database, so a direct write would land
+                // where nobody is looking; the suggestion row it does observe reaches it either
+                // way, and items become reviewable like every other field.
                 val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
                 val sourceGroupId = taskParts.getOrNull(2)?.takeIf { it.isNotEmpty() }
                 val rawJson = result.rawJson
@@ -417,8 +416,9 @@ class LlmResultReceiver : BroadcastReceiver() {
                         }
                         var didSomething = false
                         if (parsed != null && existing != null) {
-                            buildFieldSuggestion(parsed, existing)?.let {
-                                container.expensesRepository.setPendingFieldSuggestion(it.copy(sourceGroupId = sourceGroupId))
+                            val offered = buildFieldSuggestion(parsed, existing)
+                            if (offered.isNotEmpty()) {
+                                container.suggestionStore.offer(existing.expense.id, offered, sourceGroupId)
                                 didSomething = true
                             }
                         }
@@ -747,13 +747,13 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
     }
 
-    /** Diffs [parsed] against [existing]'s current field values, returning a [PendingFieldSuggestion]
+    /** Diffs [parsed] against [existing]'s current field values, returning the fields worth offering
      *  with only the fields that genuinely differ (or fill a current blank) set — never null,
      *  never-blank, never-unchanged fields stay null so ExpenseEditScreen only renders a chip where
      *  there's an actual difference to offer. Returns null (nothing to persist) if every field
      *  already matches. Category is compared by name (the record's current category, if any) since
      *  [ExpenseParseResultParser.Parsed.category] is a raw name, not an id. */
-    private fun buildFieldSuggestion(parsed: ExpenseParseResultParser.Parsed, existing: ExpenseWithDetails): PendingFieldSuggestion? {
+    private fun buildFieldSuggestion(parsed: ExpenseParseResultParser.Parsed, existing: ExpenseWithDetails): Map<String, String?> {
         val expense = existing.expense
         fun String?.diffOrNull(current: String?): String? {
             val clean = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
@@ -775,23 +775,19 @@ class LlmResultReceiver : BroadcastReceiver() {
         // fields above) — the full parsed list, offered as one apply-all-or-nothing suggestion.
         val itemsJson = PendingLineItemsJson.encode(parsed.items)
 
-        if (title == null && vendor == null && bank == null && location == null && currencyCode == null &&
-            category == null && totalAmount == null && dateTime == null && itemsJson == null
-        ) {
-            return null
-        }
-        return PendingFieldSuggestion(
-            expenseId = expense.id,
-            title = title,
-            vendor = vendor,
-            bank = bank,
-            totalAmount = totalAmount,
-            currencyCode = currencyCode,
-            category = category,
-            location = location,
-            dateTime = dateTime,
-            itemsJson = itemsJson
-        )
+        // Only what actually differs, keyed by field. An empty map is a rescan that found nothing
+        // new — the caller says so rather than storing a row nobody would be shown.
+        return mapOf(
+            ExpenseSuggestionTarget.KEY_TITLE to title,
+            ExpenseSuggestionTarget.KEY_VENDOR to vendor,
+            ExpenseSuggestionTarget.KEY_BANK to bank,
+            ExpenseSuggestionTarget.KEY_AMOUNT to totalAmount?.toString(),
+            ExpenseSuggestionTarget.KEY_CURRENCY to currencyCode,
+            ExpenseSuggestionTarget.KEY_CATEGORY to category,
+            ExpenseSuggestionTarget.KEY_LOCATION to location,
+            ExpenseSuggestionTarget.KEY_DATE_TIME to dateTime?.toString(),
+            ExpenseSuggestionTarget.KEY_ITEMS to PendingLineItemsJson.encode(parsed.items)
+        ).filterValues { it != null }
     }
 
     private fun launchExpensesForEdit(context: Context, expenseId: Long) {

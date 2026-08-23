@@ -53,10 +53,16 @@ class ExpensesContainer(context: Context) {
         appContext,
         attachmentDao,
         duplicateRuleDao,
-        database.pendingFieldSuggestionDao(),
         fieldCorrectionMemory,
         recurringPaymentRepository
     )
+
+    /** Proposals a record holds until someone accepts them — storage and lifecycle from
+     *  :core:suggestions, meaning from [ExpenseSuggestionTarget]. */
+    val suggestionStore = com.voxapps.suggestions.SuggestionStore(
+        database.fieldSuggestionDao(),
+        com.voxapps.expenses.data.ExpenseSuggestionTarget(expensesRepository)
+    ).also { expensesRepository.suggestions = it }
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 

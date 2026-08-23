@@ -285,6 +285,16 @@ private fun RecentExpensesList(
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             Row(modifier = GlanceModifier.defaultWeight(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+                // Text, which is the whole reason the icon is stored as text: a widget renders no
+                // vectors of its own, and a name pointing into a drawable set would point at nothing
+                // here.
+                item.category?.icon?.let { icon ->
+                    Text(
+                        text = icon,
+                        style = TextStyle(fontSize = 14.sp),
+                        modifier = GlanceModifier.padding(end = 4.dp)
+                    )
+                }
                 Text(
                     text = item.expense.title?.takeIf { it.isNotBlank() } ?: item.expense.vendor ?: "—",
                     maxLines = 1,

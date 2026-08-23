@@ -4,7 +4,7 @@ import android.content.Context
 import com.voxapps.docread.ScanReading
 import com.voxapps.docread.InvoiceTotalsReconciler
 import com.voxapps.docread.TaxBreakdown
-import com.voxapps.expenses.data.PendingFieldSuggestion
+import com.voxapps.expenses.data.ExpenseSuggestionTarget
 import com.voxapps.expenses.data.PendingLineItemsJson
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
@@ -290,18 +290,21 @@ class ExpenseScanFlow(
         val offerBody = !applies(FieldWeight.BODY) && parsed.items.isNotEmpty()
         if (!offerHead && !offerBody) return
 
-        container.expensesRepository.setPendingFieldSuggestion(
-            PendingFieldSuggestion(
-                expenseId = recordId,
-                title = parsed.title.takeIf { offerHead },
-                vendor = parsed.vendor.takeIf { offerHead },
-                bank = parsed.bank.takeIf { offerHead },
-                category = parsed.category.takeIf { offerHead },
-                location = parsed.location.takeIf { offerHead },
-                itemsJson = if (offerBody) PendingLineItemsJson.encode(parsed.items) else null
-            )
+        container.suggestionStore.offer(
+            recordId,
+            mapOf(
+                ExpenseSuggestionTarget.KEY_TITLE to parsed.title.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_VENDOR to parsed.vendor.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_BANK to parsed.bank.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_CATEGORY to parsed.category.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_LOCATION to parsed.location.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_ITEMS to if (offerBody) {
+                    PendingLineItemsJson.encode(parsed.items)
+                } else {
+                    null
+                }
+            ).filterValues { it != null }
         )
-        Logger.d(TAG, "Offered on record $recordId: head=$offerHead body=$offerBody")
     }
 
 }
