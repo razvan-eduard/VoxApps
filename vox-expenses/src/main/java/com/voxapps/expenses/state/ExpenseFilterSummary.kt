@@ -59,9 +59,18 @@ object ExpenseFilterSummary {
         else -> null
     }
 
-    /** A bracket, written the way its chip is written, so the button and the sheet agree. */
+    /**
+     * A bracket, written the way its chip is written, so the button and the sheet agree.
+     *
+     * An open upper end reads as "500+" rather than as a range to infinity: a person asking for
+     * everything above a figure has not named a second one, and printing one they did not choose
+     * would be answering a different question on their behalf.
+     */
     fun amountLabel(range: VoxRange, formatAmount: (Double) -> String): String =
-        formatAmount(range.from) + TO + formatAmount(range.to)
+        if (range.to.isFinite()) formatAmount(range.from) + TO + formatAmount(range.to)
+        else formatAmount(range.from) + ABOVE
+
+    private const val ABOVE = "+"
 
     /** Whether anything at all is narrowing the list — what decides if a clear is offered. */
     fun anyActive(

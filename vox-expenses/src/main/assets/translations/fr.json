@@ -619,5 +619,12 @@
   "account_currency": "Devise",
   "account_belongs_to": "Appartient à",
   "account_belongs_to_none": "Rien",
-  "edit": "Modifier"
+  "edit": "Modifier",
+  "add_account": "Ajouter une carte ou un compte",
+  "add_account_hint": "Numéro de carte, IBAN ou une fin comme ••4535",
+  "add_account_unrecognised": "Ni numéro de carte, ni IBAN, ni fin masquée",
+  "amount_custom": "Personnalisé…",
+  "amount_custom_title": "Montant entre",
+  "amount_custom_from": "De",
+  "amount_custom_to": "À"
 }

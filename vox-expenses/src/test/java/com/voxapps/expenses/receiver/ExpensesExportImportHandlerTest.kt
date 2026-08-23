@@ -3,6 +3,7 @@ package com.voxapps.expenses.receiver
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.expenses.data.BankAccount
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
@@ -69,6 +70,9 @@ class ExpensesExportImportHandlerTest {
         coEvery { expensesRepo.learnedFieldCorrectionsSnapshot() } returns emptyList()
         coEvery { expensesRepo.setDefaultCategory(any()) } just Runs
         coEvery { expensesRepo.addCategory(any(), any(), any(), any(), any()) } returns 1L
+        coEvery { expensesRepo.bankAccountsSnapshot() } returns emptyList()
+        coEvery { expensesRepo.addBankAccount(any()) } returns 1L
+        coEvery { expensesRepo.updateBankAccount(any()) } just Runs
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
         coEvery { duplicateRuleDao.getAll() } returns emptyList()
     }
@@ -368,5 +372,71 @@ class ExpensesExportImportHandlerTest {
         handler.import("""{"categories":[{"id":1,"name":"Groceries","icon":"🛒"}]}""")
 
         coVerify(exactly = 1) { expensesRepo.addCategory("Groceries", any(), any(), any(), "🛒") }
+    }
+
+    // --- the cards and accounts money went through ---
+
+    private fun account(id: Long, digits: String, parent: Long? = null) = BankAccount(
+        id = id, digits = digits, kind = "CARD_TAIL", parentId = parent,
+        currencyCode = "RON", label = "Everyday", createdAt = 0L
+    )
+
+    @Test
+    fun `export carries the accounts and what each record went through`() = runTest {
+        coEvery { expensesRepo.bankAccountsSnapshot() } returns listOf(account(7, "4535"))
+        every { expensesRepo.expensesWithDetails } returns flowOf(
+            listOf(
+                ExpenseWithDetails(
+                    expense = Expense(id = 1, totalAmount = 10.0, currencyCode = "RON", dateTime = 0L, bankAccountId = 7),
+                    items = emptyList(), category = null
+                )
+            )
+        )
+
+        val json = JSONObject(handler.export().text)
+        val accounts = json.getJSONArray("bankAccounts")
+        assertEquals(1, accounts.length())
+        assertEquals("4535", accounts.getJSONObject(0).getString("digits"))
+        assertEquals("Everyday", accounts.getJSONObject(0).getString("label"))
+        assertEquals(7L, json.getJSONArray("expenses").getJSONObject(0).getLong("bankAccountId"))
+    }
+
+    /** A card the device already knows is landed on, not collided with — the digits are unique. */
+    @Test
+    fun `import lands on an account this device already has`() = runTest {
+        coEvery { expensesRepo.bankAccountsSnapshot() } returns listOf(account(99, "4535"))
+
+        handler.import("""{"bankAccounts":[{"id":1,"digits":"4535","kind":"CARD_TAIL","currencyCode":"RON"}]}""")
+
+        coVerify(exactly = 0) { expensesRepo.addBankAccount(any()) }
+    }
+
+    @Test
+    fun `import creates an account this device has never seen`() = runTest {
+        handler.import("""{"bankAccounts":[{"id":1,"digits":"9999","kind":"CARD_TAIL","currencyCode":"EUR","label":"Travel"}]}""")
+
+        coVerify(exactly = 1) {
+            expensesRepo.addBankAccount(match { it.digits == "9999" && it.label == "Travel" })
+        }
+    }
+
+    /** A card may be listed before the account it belongs to, so the link is made in a second pass. */
+    @Test
+    fun `import restores which account a card belongs to`() = runTest {
+        coEvery { expensesRepo.bankAccountsSnapshot() } returnsMany listOf(
+            emptyList(),
+            listOf(account(10, "RO49"), account(11, "4535")),
+            listOf(account(10, "RO49"), account(11, "4535"))
+        )
+        coEvery { expensesRepo.addBankAccount(any()) } returnsMany listOf(11L, 10L)
+
+        handler.import(
+            """{"bankAccounts":[
+                {"id":2,"digits":"4535","kind":"CARD_TAIL","currencyCode":"RON","parentId":1},
+                {"id":1,"digits":"RO49","kind":"IBAN","currencyCode":"RON"}
+            ]}"""
+        )
+
+        coVerify { expensesRepo.updateBankAccount(match { it.id == 11L && it.parentId == 10L }) }
     }
 }

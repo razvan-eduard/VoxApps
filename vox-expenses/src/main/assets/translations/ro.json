@@ -619,5 +619,12 @@
   "account_currency": "Monedă",
   "account_belongs_to": "Aparține de",
   "account_belongs_to_none": "Nimic",
-  "edit": "Editează"
+  "edit": "Editează",
+  "add_account": "Adaugă un card sau cont",
+  "add_account_hint": "Număr de card, IBAN sau o terminație precum ••4535",
+  "add_account_unrecognised": "Nu este număr de card, IBAN sau terminație mascată",
+  "amount_custom": "Personalizat…",
+  "amount_custom_title": "Sumă între",
+  "amount_custom_from": "De la",
+  "amount_custom_to": "Până la"
 }

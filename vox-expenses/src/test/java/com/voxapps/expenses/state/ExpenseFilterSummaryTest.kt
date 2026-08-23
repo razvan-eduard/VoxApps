@@ -133,6 +133,30 @@ class ExpenseFilterSummaryTest {
         assertTrue(ExpenseFilterSummary.anyActive(null, null, null, null, null, null, "EUR", null, null, SortMode.NEWEST))
     }
 
+    // --- a range somebody typed rather than one the data suggested ---
+
+    /** "Everything over 500" names one figure, so only one is printed. */
+    @Test
+    fun `an open upper end reads as a floor`() {
+        assertEquals("m500+", ExpenseFilterSummary.amountLabel(VoxRange(500.0, Double.POSITIVE_INFINITY), money))
+    }
+
+    @Test
+    fun `a closed range still reads as a range`() {
+        assertEquals("m10 – m20", ExpenseFilterSummary.amountLabel(VoxRange(10.0, 20.0), money))
+    }
+
+    /** An open end starts at nothing, which is a range like any other. */
+    @Test
+    fun `an open lower end reads from zero`() {
+        assertEquals("m0 – m20", ExpenseFilterSummary.amountLabel(VoxRange(0.0, 20.0), money))
+    }
+
+    @Test
+    fun `a typed range is reported on the button like any other`() {
+        assertEquals(listOf("m500+"), parts(amount = VoxRange(500.0, Double.POSITIVE_INFINITY)))
+    }
+
     /** The chips that set a sort and the summary that reports it read from the same map. */
     @Test
     fun `every sort has its own name`() {

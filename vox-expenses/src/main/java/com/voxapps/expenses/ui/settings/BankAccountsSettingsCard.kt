@@ -1,5 +1,7 @@
 package com.voxapps.expenses.ui.settings
 
+import com.voxapps.textmatch.extract.AccountIdentifiers
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,11 +62,13 @@ fun BankAccountsSettingsCard(
     onDefaultCurrencyChange: (String) -> Unit,
     onUpdate: (BankAccount) -> Unit,
     onDelete: (BankAccount) -> Unit,
+    onAdd: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
     var editing by remember { mutableStateOf<BankAccount?>(null) }
     var pendingDelete by remember { mutableStateOf<BankAccount?>(null) }
+    var adding by remember { mutableStateOf(false) }
 
     SettingsSectionCard(languageManager.getString("bank_accounts_title"), modifier = modifier) {
         Text(
@@ -118,6 +122,24 @@ fun BankAccountsSettingsCard(
                 )
             }
         }
+
+        // Captures are the usual way one appears, but they cannot be the only way: with both
+        // switches off, or before any message has arrived, there would otherwise be no way to set
+        // up the cards you already know you have.
+        TextButton(onClick = { adding = true }, modifier = Modifier.padding(top = 8.dp)) {
+            Icon(Icons.Filled.Add, contentDescription = null)
+            Text(
+                languageManager.getString("add_account"),
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
+    }
+
+    if (adding) {
+        AddAccountDialog(
+            onConfirm = { typed -> onAdd(typed); adding = false },
+            onDismiss = { adding = false }
+        )
     }
 
     editing?.let { account ->
@@ -149,6 +171,54 @@ fun BankAccountsSettingsCard(
             }
         )
     }
+}
+
+/**
+ * Typing an account rather than waiting for one to arrive.
+ *
+ * The same reader the captures use judges what was typed — see
+ * [com.voxapps.textmatch.extract.AccountIdentifiers] — so a hand-made account is the same kind of
+ * thing as a captured one, and a typo that is not an account is refused here rather than stored as a
+ * row nothing will ever match.
+ */
+@Composable
+private fun AddAccountDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    var typed by remember { mutableStateOf("") }
+    val reading = remember(typed) { AccountIdentifiers.single(typed) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(languageManager.getString("add_account")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    label = { Text(languageManager.getString("add_account_hint")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // Says what it made of the text as the text is typed, so nobody has to guess whether
+                // a card number was understood before committing to it.
+                Text(
+                    reading?.let { BankAccount.defaultLabel(it.kind.name, it.digits) }
+                        ?: languageManager.getString("add_account_unrecognised"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (reading != null) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(typed) }, enabled = reading != null) {
+                Text(languageManager.getString("save"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        }
+    )
 }
 
 @Composable

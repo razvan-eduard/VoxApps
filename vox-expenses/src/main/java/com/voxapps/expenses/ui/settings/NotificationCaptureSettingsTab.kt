@@ -514,7 +514,13 @@ fun NotificationCaptureSettingsTab(
             onAutoCreateFromNotificationsChange = { stateManager.setAutoCreateAccountsFromNotifications(it) },
             onDefaultCurrencyChange = { stateManager.setDefaultAccountCurrency(it) },
             onUpdate = { stateManager.updateBankAccount(it) },
-            onDelete = { stateManager.deleteBankAccount(it) }
+            onDelete = { stateManager.deleteBankAccount(it) },
+            onAdd = { typed ->
+                stateManager.addTypedBankAccount(
+                    typed,
+                    settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency }
+                )
+            }
         )
 
         VocabularySettingsCard(

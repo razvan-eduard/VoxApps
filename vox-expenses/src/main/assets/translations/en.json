@@ -619,5 +619,12 @@
   "account_currency": "Currency",
   "account_belongs_to": "Belongs to",
   "account_belongs_to_none": "Nothing",
-  "edit": "Edit"
+  "edit": "Edit",
+  "add_account": "Add a card or account",
+  "add_account_hint": "Card number, IBAN, or an ending like ••4535",
+  "add_account_unrecognised": "Not a card number, an IBAN or a masked ending",
+  "amount_custom": "Custom…",
+  "amount_custom_title": "Amount between",
+  "amount_custom_from": "From",
+  "amount_custom_to": "To"
 }
