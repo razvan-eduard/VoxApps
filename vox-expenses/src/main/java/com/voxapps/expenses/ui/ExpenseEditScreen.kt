@@ -112,6 +112,7 @@ import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
+import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.design.settings.VoxSuggestionChip
 import com.voxapps.expenses.data.ExpenseSuggestionTarget
 import com.voxapps.suggestions.OfferedSuggestion
@@ -225,6 +226,23 @@ fun ExpenseEditScreen(
     var currency by remember { mutableStateOf(existing?.expense?.currencyCode ?: defaultCurrency) }
     var vendor by remember { mutableStateOf(existing?.expense?.vendor ?: "") }
     var bank by remember { mutableStateOf(existing?.expense?.bank ?: "") }
+    var namingBank by remember { mutableStateOf(false) }
+    var namingVendor by remember { mutableStateOf(false) }
+    val bankScope = rememberCoroutineScope()
+    // The issuer vocabulary, merged the way every reader of it merges: supplied, less what this
+    // device switched off, plus its own.
+    val settingsSnapshot by settingsRepository.settingsFlow
+        .collectAsStateWithLifecycle(initialValue = ExpensesSettings())
+    val vendorNames = remember(settingsSnapshot.customVendors, settingsSnapshot.disabledVendors) {
+        FieldVocabularies.merge(emptyList(), settingsSnapshot.customVendors, settingsSnapshot.disabledVendors)
+    }
+    val bankNames = remember(settingsSnapshot.customBanks, settingsSnapshot.disabledBanks) {
+        FieldVocabularies.merge(
+            FieldVocabularies.provided(context).banks,
+            settingsSnapshot.customBanks,
+            settingsSnapshot.disabledBanks
+        )
+    }
     var location by remember { mutableStateOf(existing?.expense?.location ?: "") }
     // New expense only (never overrides a real edit) — resolveCurrentCity's own first step is a
     // synchronous cache check, so this resolves near-instantly when a fresh city is already cached,
@@ -554,21 +572,60 @@ fun ExpenseEditScreen(
                             { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "title" }) { title = suggested } }
                         }
                     )
-                    PaperField(
-                        label = languageManager.getString("expense_vendor"),
-                        value = vendor,
-                        onValueChange = { vendor = it },
-                        suggestion = suggested[ExpenseSuggestionTarget.KEY_VENDOR]?.takeIf { it != vendor && "vendor" !in dismissedSuggestionFields }?.let { suggested ->
-                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "vendor" }) { vendor = suggested } }
-                        }
+                    // The shops you named, looked up rather than retyped. Nobody supplies this list
+                    // — merchants are unbounded and personal — so it is yours entirely, and a shop
+                    // named here is one a later capture can be recognised by. Whatever this record
+                    // already says stays on offer even when it was never listed.
+                    suggested[ExpenseSuggestionTarget.KEY_VENDOR]?.takeIf { it != vendor && "vendor" !in dismissedSuggestionFields }?.let { proposed ->
+                        FieldSuggestionChip(proposed, onDismiss = { dismissedSuggestionFields += "vendor" }) { vendor = proposed }
+                    }
+                    Text(
+                        languageManager.getString("expense_vendor"),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
-                    PaperField(
-                        label = languageManager.getString("expense_bank"),
-                        value = bank,
-                        onValueChange = { bank = it },
-                        suggestion = suggested[ExpenseSuggestionTarget.KEY_BANK]?.takeIf { it != bank && "bank" !in dismissedSuggestionFields }?.let { suggested ->
-                            { FieldSuggestionChip(suggested, onDismiss = { dismissedSuggestionFields += "bank" }) { bank = suggested } }
-                        }
+                    Picklist(
+                        items = remember(vendorNames, vendor) {
+                            if (vendor.isNotBlank() && vendorNames.none { it.equals(vendor, ignoreCase = true) }) {
+                                listOf(vendor) + vendorNames
+                            } else vendorNames
+                        },
+                        selected = vendor.takeIf { it.isNotBlank() },
+                        itemLabel = { it },
+                        onSelect = { vendor = it },
+                        noneLabel = languageManager.getString("none"),
+                        onNoneSelected = { vendor = "" },
+                        searchPlaceholder = languageManager.getString("filter_search_hint"),
+                        actionLabel = languageManager.getString("expense_vendor_new"),
+                        onAction = { namingVendor = true }
+                    )
+                    // Chosen from the banks this app recognises, not typed: the same list a message
+                    // is read by, so a record's bank and a capture's bank are one vocabulary rather
+                    // than two that happen to agree. A name a model wrote and nobody listed is kept
+                    // and shown — it is what this record says — but adding one adds it to the list,
+                    // where a later notification can be read by it too.
+                    suggested[ExpenseSuggestionTarget.KEY_BANK]?.takeIf { it != bank && "bank" !in dismissedSuggestionFields }?.let { proposed ->
+                        FieldSuggestionChip(proposed, onDismiss = { dismissedSuggestionFields += "bank" }) { bank = proposed }
+                    }
+                    Text(
+                        languageManager.getString("expense_bank"),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Picklist(
+                        items = remember(bankNames, bank) {
+                            if (bank.isNotBlank() && bankNames.none { it.equals(bank, ignoreCase = true) }) {
+                                listOf(bank) + bankNames
+                            } else bankNames
+                        },
+                        selected = bank.takeIf { it.isNotBlank() },
+                        itemLabel = { it },
+                        onSelect = { bank = it },
+                        noneLabel = languageManager.getString("none"),
+                        onNoneSelected = { bank = "" },
+                        searchPlaceholder = languageManager.getString("filter_search_hint"),
+                        actionLabel = languageManager.getString("account_bank_new"),
+                        onAction = { namingBank = true }
                     )
                     // Search-first entry (OpenStreetMap place search + GPS lock). The GPS lambda
                     // routes through resolveCurrentCityName — live fix, then the TTL'd cache,
@@ -880,6 +937,70 @@ fun ExpenseEditScreen(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (namingVendor) {
+        var typedVendor by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { namingVendor = false },
+            title = { Text(languageManager.getString("expense_vendor_new")) },
+            text = {
+                OutlinedTextField(
+                    value = typedVendor,
+                    onValueChange = { typedVendor = it },
+                    label = { Text(languageManager.getString("expense_vendor")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val named = typedVendor.trim()
+                        vendor = named
+                        bankScope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, named) }
+                        namingVendor = false
+                    },
+                    enabled = typedVendor.isNotBlank()
+                ) { Text(languageManager.getString("save")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { namingVendor = false }) { Text(languageManager.getString("cancel")) }
+            }
+        )
+    }
+
+    if (namingBank) {
+        // Added to the vocabulary as well as to this record: a bank named here is one a later
+        // notification can be read by, which is the whole reason it is a list and not a text field.
+        var typedBank by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { namingBank = false },
+            title = { Text(languageManager.getString("account_bank_new")) },
+            text = {
+                OutlinedTextField(
+                    value = typedBank,
+                    onValueChange = { typedBank = it },
+                    label = { Text(languageManager.getString("expense_bank")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val named = typedBank.trim()
+                        bank = named
+                        bankScope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, named) }
+                        namingBank = false
+                    },
+                    enabled = typedBank.isNotBlank()
+                ) { Text(languageManager.getString("save")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { namingBank = false }) { Text(languageManager.getString("cancel")) }
+            }
+        )
     }
 
     if (showTimePicker) {

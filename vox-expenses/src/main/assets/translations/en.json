@@ -687,5 +687,6 @@
   "widget_budget_left": "%s left",
   "account_bank_name": "Bank",
   "account_bank_new": "New bank…",
-  "account_belongs_to_new": "New account…"
+  "account_belongs_to_new": "New account…",
+  "expense_vendor_new": "New shop…"
 }
