@@ -238,7 +238,9 @@ https://github.com/user-attachments/assets/d348e5ca-4c92-4b45-b615-1f9e62f9bfee
 
 
 
-→ [Full feature list](docs/APPS_OVERVIEW.md#vox-expenses)
+→ [Full feature list](docs/APPS_OVERVIEW.md#vox-expenses) ·
+[Money model](docs/EXPENSES_MONEY_MODEL.md) ·
+[Budget flow](docs/EXPENSES_BUDGET_FLOW.md)
 
 ### 📅 Vox Calendar
 
