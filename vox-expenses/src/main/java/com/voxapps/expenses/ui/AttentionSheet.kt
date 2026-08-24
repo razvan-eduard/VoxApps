@@ -7,6 +7,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -21,7 +32,9 @@ import androidx.compose.ui.unit.dp
 data class AttentionItem(
     val labelKey: String,
     val count: Int,
-    val onOpen: () -> Unit
+    val onOpen: () -> Unit,
+    /** Marks this kind as seen. Nothing is deleted — see [AttentionDismissals]. */
+    val onDismiss: () -> Unit
 )
 
 /**
@@ -43,6 +56,7 @@ fun AttentionSheet(
 ) {
     val languageManager = LocalLanguageManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var confirming by remember { mutableStateOf<AttentionItem?>(null) }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -73,8 +87,35 @@ fun AttentionSheet(
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    IconButton(onClick = { confirming = item }) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = languageManager.getString("attention_dismiss"),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
+    }
+
+    confirming?.let { item ->
+        AlertDialog(
+            onDismissRequest = { confirming = null },
+            title = { Text(languageManager.getString(item.labelKey)) },
+            // Says what it does and what it does not: the things themselves stay, and anything new
+            // of the same kind will be counted again. Otherwise "dismiss" reads as "delete".
+            text = { Text(languageManager.getString("attention_dismiss_confirm")) },
+            confirmButton = {
+                TextButton(onClick = { item.onDismiss(); confirming = null; onDismiss() }) {
+                    Text(languageManager.getString("attention_dismiss"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = null }) {
+                    Text(languageManager.getString("cancel"))
+                }
+            }
+        )
     }
 }

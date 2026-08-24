@@ -721,5 +721,7 @@
   "gap_amount": "fără sumă",
   "gap_name": "fără nume",
   "gap_category": "fără categorie",
-  "gap_account": "fără card"
+  "gap_account": "fără card",
+  "attention_dismiss": "Le-am văzut",
+  "attention_dismiss_confirm": "Nu se șterge nimic — astea nu se mai numără, iar ce apare nou de același fel se va număra din nou."
 }

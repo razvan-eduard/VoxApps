@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,7 +38,11 @@ fun VoxPendingStrip(
     modifier: Modifier = Modifier,
     /** Opens whatever shows them. A line that names something and cannot be followed is a line that
      *  gets read once and then ignored. */
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    /** Says "I have seen all of this". Drawn only when there is somewhere for it to lead — a strip
+     *  nobody can act on needs no way to act on all of it. */
+    onClearAll: (() -> Unit)? = null,
+    clearContentDescription: String = ""
 ) {
     AnimatedVisibility(visible = count > 0) {
         Row(
@@ -54,8 +62,19 @@ fun VoxPendingStrip(
             Text(
                 text(count),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
             )
+            onClearAll?.let { clear ->
+                IconButton(onClick = clear, modifier = Modifier.size(20.dp)) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = clearContentDescription,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 }
