@@ -1,5 +1,6 @@
 package com.voxapps.expenses.di
 
+import com.voxapps.expenses.domain.rules.RuleAlertNotifier
 import android.content.Context
 import androidx.glance.appwidget.updateAll
 import com.voxapps.expenses.data.ExchangeRateRepository
@@ -60,7 +61,10 @@ class ExpensesContainer(context: Context) {
         duplicateRuleDao,
         fieldCorrectionMemory,
         recurringPaymentRepository,
-        bankAccountDao
+        bankAccountDao,
+        onRuleAlerts = { alerts ->
+            RuleAlertNotifier.notify(appContext, languageManager, settingsRepository.getSnapshot(), alerts)
+        }
     )
 
     /** Proposals a record holds until someone accepts them — storage and lifecycle from
