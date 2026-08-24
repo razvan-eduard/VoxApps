@@ -3,6 +3,7 @@ package com.voxapps.expenses.domain.accounts
 import com.voxapps.expenses.data.BankAccount
 import com.voxapps.textmatch.extract.AccountIdentifiers
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -128,6 +129,50 @@ class BankAccountsTest {
         val stored = account("GB82WEST12345698765432", kind = AccountIdentifiers.Kind.IBAN)
         val same = AccountIdentifiers.AccountRef(AccountIdentifiers.Kind.IBAN, "GB82WEST12345698765432")
         assertFalse(BankAccounts.widens(stored, same))
+    }
+
+    // --- where a newly seen card lands ---
+
+    @Test
+    fun `a card of the bank you keep one account with is filed under it`() {
+        val ing = account("RO49AAAA1B31007593840000", kind = AccountIdentifiers.Kind.IBAN)
+            .copy(id = 1L, bankName = "ING")
+        val found = BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.CARD_TAIL, listOf(ing))
+        assertEquals(ing.id, found?.id)
+        // However the message spelled it.
+        assertEquals(ing.id, BankAccounts.soleAccountOf(" ing ", AccountIdentifiers.Kind.CARD_TAIL, listOf(ing))?.id)
+    }
+
+    /** Two accounts at one bank is a real ambiguity, and the bank's name cannot say which. */
+    @Test
+    fun `two accounts at the same bank leave the card where it landed`() {
+        val one = account("RO49AAAA1B31007593840000", kind = AccountIdentifiers.Kind.IBAN).copy(id = 1L, bankName = "ING")
+        val two = one.copy(id = 2L, digits = "RO49AAAA1B31007593840001")
+        assertNull(BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.CARD_TAIL, listOf(one, two)))
+    }
+
+    @Test
+    fun `an account of another bank, or none named, adopts nothing`() {
+        val ing = account("4535").copy(id = 1L, bankName = "ING")
+        assertNull(BankAccounts.soleAccountOf("Revolut", AccountIdentifiers.Kind.CARD_TAIL, listOf(ing)))
+        assertNull(BankAccounts.soleAccountOf(null, AccountIdentifiers.Kind.CARD_TAIL, listOf(ing)))
+        assertNull(BankAccounts.soleAccountOf("  ", AccountIdentifiers.Kind.CARD_TAIL, listOf(ing)))
+        assertNull(BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.CARD_TAIL, emptyList()))
+    }
+
+    /** An IBAN names an account outright; it is not a way of reaching another one. */
+    @Test
+    fun `an account is never filed under another account`() {
+        val ing = account("4535").copy(id = 1L, bankName = "ING")
+        assertNull(BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.IBAN, listOf(ing)))
+    }
+
+    /** A card already under an account is not itself somewhere to put cards — the one-level rule. */
+    @Test
+    fun `only a row nothing sits under can adopt`() {
+        val account = account("RO49AAAA1B31007593840000", kind = AccountIdentifiers.Kind.IBAN).copy(id = 1L, bankName = "ING")
+        val card = account.copy(id = 2L, digits = "4535", kind = AccountIdentifiers.Kind.CARD_TAIL.name, parentId = 1L)
+        assertEquals(1L, BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.CARD_TAIL, listOf(account, card))?.id)
     }
 
     // --- how an account names itself ---

@@ -79,6 +79,26 @@ object BankAccounts {
     )
 
     /**
+     * The account a newly seen card belongs under, when only one answer is possible.
+     *
+     * A card arrives naming its bank, and an account of that bank is where its money comes from — so
+     * where exactly one such account exists, there is nothing to decide and leaving the card loose
+     * would only mean asking a question with one answer. Two accounts at the same bank is a real
+     * ambiguity and the card stays where it landed: the name of the bank cannot say which of them,
+     * and the one thing worse than an unparented card is a card silently spending the wrong
+     * account's budget.
+     *
+     * Only cards. An IBAN names an account outright and is not a way of reaching another one.
+     */
+    fun soleAccountOf(bankName: String?, kind: AccountIdentifiers.Kind, existing: List<BankAccount>): BankAccount? {
+        if (kind == AccountIdentifiers.Kind.IBAN) return null
+        val bank = bankName?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+        return existing
+            .filter { it.parentId == null && it.bankName?.trim()?.lowercase() == bank }
+            .singleOrNull()
+    }
+
+    /**
      * Whether a stored account should take a fuller spelling of itself.
      *
      * A card first seen as "••00" and later as a full number is the same card known better. Widening
