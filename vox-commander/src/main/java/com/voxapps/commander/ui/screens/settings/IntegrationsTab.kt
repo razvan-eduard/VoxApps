@@ -1,5 +1,8 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.commander.VoxApplication
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.background
@@ -36,6 +39,15 @@ fun IntegrationsTab(
     settingsRepo: SettingsRepository
 ) {
         val languageManager = LocalLanguageManager.current
+        VoxHintDialog(
+            store = (LocalContext.current.applicationContext as VoxApplication)
+                .container.appStateManager.hintStoreForUi,
+            hintKey = VoxHintKeys.INTEGRATIONS,
+            title = languageManager.getString("hint_integrations_title"),
+            body = languageManager.getString("hint_integrations_body"),
+            okLabel = languageManager.getString("hint_ok"),
+            dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+        )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     // Every declared integration, rendered by one card. This screen used to hold a single

@@ -1,5 +1,8 @@
 package com.voxapps.expenses.ui.settings
 
+import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -74,6 +77,14 @@ fun CategoriesSettingsTab(
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
+    VoxHintDialog(
+        store = (LocalContext.current.applicationContext as ExpensesApplication).container.hintStore,
+        hintKey = VoxHintKeys.CATEGORIES,
+        title = languageManager.getString("hint_categories_title"),
+        body = languageManager.getString("hint_categories_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     val context = LocalContext.current
     var addingNew by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }

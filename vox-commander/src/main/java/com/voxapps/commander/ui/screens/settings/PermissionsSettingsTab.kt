@@ -1,5 +1,7 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import android.widget.Toast
@@ -27,6 +29,14 @@ fun PermissionsSettingsTab(
     onRequestBatteryOptimization: () -> Unit = {}
 ) {
         val languageManager = LocalLanguageManager.current
+        VoxHintDialog(
+            store = appStateManager.hintStoreForUi,
+            hintKey = VoxHintKeys.PERMISSIONS,
+            title = languageManager.getString("hint_permissions_title"),
+            body = languageManager.getString("hint_permissions_body"),
+            okLabel = languageManager.getString("hint_ok"),
+            dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+        )
     val context = LocalContext.current
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
 

@@ -26,4 +26,5 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.foundation:foundation")
+    implementation(libs.androidx.datastore.preferences)
 }

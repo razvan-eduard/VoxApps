@@ -1,5 +1,7 @@
 package com.voxapps.calendarapp.ui.settings
 
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,6 +37,14 @@ private const val DOMAIN = "calendar"
 @Composable
 fun BackupSettingsSection(settingsRepo: CalendarSettingsRepository, settings: CalendarSettings) {
     val languageManager = LocalLanguageManager.current
+    VoxHintDialog(
+        store = (LocalContext.current.applicationContext as CalendarApplication).container.hintStore,
+        hintKey = VoxHintKeys.BACKUP,
+        title = languageManager.getString("hint_backup_title"),
+        body = languageManager.getString("hint_backup_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val container = remember { (context.applicationContext as CalendarApplication).container }

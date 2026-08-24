@@ -1,5 +1,8 @@
 package com.voxapps.calendarapp.ui.settings
 
+import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -57,6 +60,14 @@ fun IcsSettingsTab(
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
+    VoxHintDialog(
+        store = (LocalContext.current.applicationContext as CalendarApplication).container.hintStore,
+        hintKey = VoxHintKeys.ICS,
+        title = languageManager.getString("hint_ics_title"),
+        body = languageManager.getString("hint_ics_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val layers by calendarRepository.layers.collectAsStateWithLifecycle(initialValue = emptyList())

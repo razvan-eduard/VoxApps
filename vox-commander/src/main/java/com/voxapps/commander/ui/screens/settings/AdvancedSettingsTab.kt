@@ -1,5 +1,7 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import com.voxapps.commander.ui.LocalLanguageManager
 
 import androidx.compose.foundation.clickable
@@ -48,6 +50,14 @@ fun AdvancedSettingsTab(
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
+        VoxHintDialog(
+            store = appStateManager.hintStoreForUi,
+            hintKey = VoxHintKeys.ADVANCED,
+            title = languageManager.getString("hint_advanced_title"),
+            body = languageManager.getString("hint_advanced_body"),
+            okLabel = languageManager.getString("hint_ok"),
+            dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+        )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -327,6 +337,9 @@ fun AdvancedSettingsTab(
             Button(
                 onClick = {
                     appStateManager.setTutorialCompleted(false)
+                    // Replaying is a decision about the whole app, not only the tour: a tutorial
+                    // that ran again while every page stayed silent would be half an answer.
+                    appStateManager.resetHints()
                     appStateManager.setFirstLaunchCompleted(false)
                     restartApp(context)
                 },

@@ -1,5 +1,8 @@
 package com.voxapps.expenses.ui.settings
 
+import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -138,6 +141,14 @@ fun DuplicatesSettingsPage(
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
+    VoxHintDialog(
+        store = (LocalContext.current.applicationContext as ExpensesApplication).container.hintStore,
+        hintKey = VoxHintKeys.CLEANUP_RULES,
+        title = languageManager.getString("hint_cleanup_rules_title"),
+        body = languageManager.getString("hint_cleanup_rules_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     val context = LocalContext.current
     val pendingGroups by stateManager.pendingExpenseDuplicateGroups.collectAsStateWithLifecycle(initialValue = emptyList())
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }

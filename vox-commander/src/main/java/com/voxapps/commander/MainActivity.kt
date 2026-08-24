@@ -26,7 +26,9 @@ import com.voxapps.commander.domain.voice.VoiceManager
 import com.voxapps.commander.service.OpenWakeWordEngine
 import com.voxapps.commander.ui.screens.main.MainScreen
 import com.voxapps.commander.ui.screens.onboarding.LanguageSelectionScreen
-import com.voxapps.commander.ui.screens.onboarding.TutorialScreen
+import com.voxapps.onboarding.OnboardingTutorialScreen
+import com.voxapps.onboarding.TutorialPage
+import com.voxapps.onboarding.TutorialStep
 import com.voxapps.commander.ui.screens.splash.SplashLoadingScreen
 import com.voxapps.commander.ui.theme.VoxCommanderTheme
 import com.voxapps.commander.ui.LocalLanguageManager
@@ -271,17 +273,28 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (showTutorial) {
-                    TutorialScreen(
-                        tutorialManager = tutorialManager,
-                        langCode = appContainer.settingsRepository.getSettingsSnapshot().language,
-                        onSkip = {
-                            showTutorial = false
-                            showPermissions = true
+                    // The screen is shared (`:core:onboarding`); what it says is not. Sections come
+                    // from this app's per-language asset and are mapped into the shared page shape,
+                    // so the tour reads the same in every app while saying something different.
+                    val lm = appContainer.languageManager
+                    OnboardingTutorialScreen(
+                        pages = remember(settingsSnapshot.language) {
+                            tutorialManager
+                                .getSections(appContainer.settingsRepository.getSettingsSnapshot().language)
+                                .map { section ->
+                                    TutorialPage(
+                                        title = section.title,
+                                        paragraphs = section.paragraphs,
+                                        steps = section.steps.map { TutorialStep(it.element, it.description) }
+                                    )
+                                }
                         },
-                        onFinish = {
-                            showTutorial = false
-                            showPermissions = true
-                        }
+                        skipLabel = lm.getString("tutorial_skip"),
+                        backLabel = lm.getString("tutorial_back"),
+                        nextLabel = lm.getString("tutorial_next"),
+                        finishLabel = lm.getString("tutorial_finish"),
+                        onSkip = { showTutorial = false; showPermissions = true },
+                        onFinish = { showTutorial = false; showPermissions = true }
                     )
                     return@VoxCommanderTheme
                 }

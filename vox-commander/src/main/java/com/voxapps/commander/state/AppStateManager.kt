@@ -77,6 +77,10 @@ class AppStateManager private constructor(
     private val repo: SettingsRepository,
     private val context: Context
 ) {
+    private val hintStore = com.voxapps.onboarding.VoxHintStore(
+        com.voxapps.commander.data.preferences.DataStoreProvider.get(context)
+    )
+
     private val voiceMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -347,6 +351,15 @@ class AppStateManager private constructor(
 
     fun setFirstLaunchCompleted(completed: Boolean) {
         scope.launch { repo.setFirstLaunchCompleted(completed) }
+    }
+
+    /** The store a settings page consults before offering its hint. Exposed rather than duplicated:
+     *  the reset and the reads must agree about which store they mean. */
+    val hintStoreForUi: com.voxapps.onboarding.VoxHintStore get() = hintStore
+
+    /** Every settings page explains itself again — see [com.voxapps.onboarding.VoxHintStore]. */
+    fun resetHints() {
+        scope.launch { hintStore.resetAll() }
     }
 
     fun setTutorialCompleted(completed: Boolean) {

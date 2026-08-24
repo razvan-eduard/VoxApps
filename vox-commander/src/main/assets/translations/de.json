@@ -565,5 +565,22 @@
   "youtube_url_engine": "YouTube-URL-Engine",
   "piped_section": "Piped",
   "logs_settings_title": "Protokolle",
-  "tab_diagnostics": "Diagnose"
+  "tab_diagnostics": "Diagnose",
+  "tutorial_skip": "Überspringen",
+  "tutorial_back": "Zurück",
+  "tutorial_next": "Weiter",
+  "tutorial_finish": "Fertig",
+  "replay_tutorial_desc": "Zeigt die Tour erneut und lässt jede Einstellungsseite sich noch einmal erklären.",
+  "hint_ok": "Verstanden",
+  "hint_dont_show_again": "Nicht mehr anzeigen",
+  "hint_models_title": "Engines und Modelle",
+  "hint_models_body": "Jede Aufgabe — das Weckwort hören, Sprache in Text wandeln, sie verstehen — hat ihre eigene Engine, jede kann lokal oder in der Cloud laufen. Heruntergeladenes bleibt, bis du es entfernst.",
+  "hint_integrations_title": "Verbundene Apps",
+  "hint_integrations_body": "Welche App welche Art von Anfrage beantwortet. Nichts davon ist Pflicht: eine Anfrage ohne zuständige App wird abgelehnt statt geraten.",
+  "hint_permissions_title": "Berechtigungen",
+  "hint_permissions_body": "Jede wird mit genanntem Grund erfragt und darf abgelehnt werden. Das Overlay lässt das Sprachfenster über anderen Apps erscheinen; ohne es funktioniert der Assistent weiter, nur nicht obenauf.",
+  "hint_advanced_title": "Erweitert",
+  "hint_advanced_body": "Downloads, Rückfallebenen und Wartung. Der Offline-Rückfall entscheidet, was passiert, wenn eine Cloud-Engine nicht rechtzeitig antwortet.",
+  "hint_diagnostics_title": "Diagnose",
+  "hint_diagnostics_body": "Was dieses Gerät tatsächlich geladen hat und wie schnell es lief. Nützlich, wenn sich eine Engine hier anders verhält als anderswo."
 }

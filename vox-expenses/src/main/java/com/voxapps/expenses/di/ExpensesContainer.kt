@@ -36,6 +36,10 @@ class ExpensesContainer(context: Context) {
     val settingsRepository: ExpensesSettingsRepository = ExpensesSettingsRepositoryImpl(appContext)
 
     private val database = ExpensesDatabase.get(appContext)
+    /** What each settings page says the first time somebody lands on it — and what replaying the
+     *  tutorial makes it say again. See [com.voxapps.onboarding.VoxHintStore]. */
+    val hintStore = com.voxapps.onboarding.VoxHintStore(com.voxapps.expenses.data.preferences.DataStoreProvider.get(appContext))
+
     val attachmentDao = database.attachmentDao()
     val duplicateRuleDao = database.duplicateRuleDao()
     val fieldCorrectionMemory = com.voxapps.fieldmemory.FieldCorrectionMemory(database.learnedFieldCorrectionDao())

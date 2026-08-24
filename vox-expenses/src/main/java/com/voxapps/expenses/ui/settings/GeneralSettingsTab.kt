@@ -307,6 +307,18 @@ fun GeneralSettingsTab(
                 }
             }
         }
+
+        SettingsSectionCard(languageManager.getString("tutorial_section")) {
+            Text(
+                languageManager.getString("replay_tutorial_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            androidx.compose.material3.OutlinedButton(
+                onClick = { stateManager.replayTutorial() },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) { Text(languageManager.getString("replay_tutorial")) }
+        }
     }
 }
 

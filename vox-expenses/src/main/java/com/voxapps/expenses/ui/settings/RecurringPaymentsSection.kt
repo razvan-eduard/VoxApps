@@ -1,5 +1,9 @@
 package com.voxapps.expenses.ui.settings
 
+import androidx.compose.ui.platform.LocalContext
+import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +43,15 @@ fun RecurringPaymentsSection(
     languageManager: LanguageManager,
     notificationSettings: @Composable () -> Unit
 ) {
+    VoxHintDialog(
+        store = (LocalContext.current.applicationContext as ExpensesApplication).container.hintStore,
+        hintKey = VoxHintKeys.RECURRING,
+        title = languageManager.getString("hint_recurring_title"),
+        body = languageManager.getString("hint_recurring_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
+
     val proposals = payments.filter { !it.confirmed && it.occurrences >= threshold && threshold > 0 }
     val arrangements = payments.filter { it.confirmed }
 

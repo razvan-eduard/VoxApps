@@ -565,5 +565,22 @@
   "youtube_url_engine": "Moteur d'URL YouTube",
   "piped_section": "Piped",
   "logs_settings_title": "Journaux",
-  "tab_diagnostics": "Diagnostics"
+  "tab_diagnostics": "Diagnostics",
+  "tutorial_skip": "Passer",
+  "tutorial_back": "Retour",
+  "tutorial_next": "Suivant",
+  "tutorial_finish": "Terminer",
+  "replay_tutorial_desc": "Réaffiche la visite et laisse chaque page de réglages s'expliquer à nouveau.",
+  "hint_ok": "J'ai compris",
+  "hint_dont_show_again": "Ne plus afficher",
+  "hint_models_title": "Moteurs et modèles",
+  "hint_models_body": "Chaque tâche — entendre le mot de réveil, transcrire la parole, la comprendre — a son moteur, local ou dans le cloud. Ce qui est téléchargé reste jusqu'à suppression.",
+  "hint_integrations_title": "Applications connectées",
+  "hint_integrations_body": "Quelle application répond à quel type de demande. Rien n'est obligatoire : une demande sans application pour la servir est refusée, pas devinée.",
+  "hint_permissions_title": "Autorisations",
+  "hint_permissions_body": "Chacune est demandée pour une raison nommée et peut être refusée. La surimpression permet à la fenêtre vocale d'apparaître au-dessus des autres applications.",
+  "hint_advanced_title": "Avancé",
+  "hint_advanced_body": "Téléchargements, replis et maintenance. Le repli hors-ligne décide de ce qui se passe quand un moteur cloud ne répond pas à temps.",
+  "hint_diagnostics_title": "Diagnostics",
+  "hint_diagnostics_body": "Ce que cet appareil a réellement chargé et à quelle vitesse. Utile quand un moteur se comporte différemment ici qu'ailleurs."
 }

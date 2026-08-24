@@ -1,5 +1,8 @@
 package com.voxapps.expenses.ui.settings
 
+import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
@@ -132,6 +135,14 @@ fun NotificationCaptureSettingsTab(
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
+    VoxHintDialog(
+        store = (LocalContext.current.applicationContext as ExpensesApplication).container.hintStore,
+        hintKey = VoxHintKeys.NOTIFICATION_CAPTURE,
+        title = languageManager.getString("hint_notification_capture_title"),
+        body = languageManager.getString("hint_notification_capture_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 

@@ -256,6 +256,24 @@ class ExpensesStateManager(
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanModelUse(mode: String) { scope.launch { settingsRepo.setScanModelUse(mode) } }
     fun setNotificationModelUse(mode: String) { scope.launch { settingsRepo.setNotificationModelUse(mode) } }
+    /**
+     * The tour runs again, and every settings page explains itself again.
+     *
+     * Both halves, because replaying is a decision about the whole app: a tutorial that ran again
+     * while every page stayed silent would be half an answer. See
+     * [com.voxapps.onboarding.VoxHintStore].
+     */
+    fun replayTutorial() {
+        scope.launch {
+            hintStore.resetAll()
+            settingsRepo.setOnboardingCompleted(false)
+        }
+    }
+
+    private val hintStore = com.voxapps.onboarding.VoxHintStore(
+        com.voxapps.expenses.data.preferences.DataStoreProvider.get(appContext)
+    )
+
     fun setCaptureAmountlessPayments(enabled: Boolean) { scope.launch { settingsRepo.setCaptureAmountlessPayments(enabled) } }
 
     // --- cards and accounts (see BankAccount) ---
