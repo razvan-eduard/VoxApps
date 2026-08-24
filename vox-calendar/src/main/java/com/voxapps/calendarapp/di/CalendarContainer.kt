@@ -32,6 +32,10 @@ class CalendarContainer(context: Context) {
     val settingsRepository: CalendarSettingsRepository = CalendarSettingsRepositoryImpl(appContext)
 
     private val database = CalendarDatabase.get(appContext)
+    /** What each settings page says the first time somebody lands on it — and what replaying the
+     *  tutorial makes it say again. See [com.voxapps.onboarding.VoxHintStore]. */
+    val hintStore = com.voxapps.onboarding.VoxHintStore(com.voxapps.calendarapp.data.preferences.DataStoreProvider.get(appContext))
+
     val attachmentDao = database.attachmentDao()
     val toDoListDao = database.toDoListDao()
     val fieldCorrectionMemory = com.voxapps.fieldmemory.FieldCorrectionMemory(database.learnedFieldCorrectionDao())
@@ -55,7 +59,8 @@ class CalendarContainer(context: Context) {
         calendarRepository,
         sessionManager,
         attachmentDao,
-        fieldCorrectionMemory
+        fieldCorrectionMemory,
+        hintStore
     )
 
     /**

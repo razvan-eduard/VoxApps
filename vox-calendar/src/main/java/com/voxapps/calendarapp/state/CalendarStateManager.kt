@@ -44,9 +44,20 @@ class CalendarStateManager(
     private val calendarRepo: CalendarRepository,
     private val sessionManager: SessionManager,
     private val attachmentDao: AttachmentDao,
-    private val fieldCorrectionMemory: com.voxapps.fieldmemory.FieldCorrectionMemory
+    private val fieldCorrectionMemory: com.voxapps.fieldmemory.FieldCorrectionMemory,
+    /** What each settings page says the first time — reset together with the tour. */
+    private val hintStore: com.voxapps.onboarding.VoxHintStore? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /** The tour runs again, and every settings page explains itself again — see
+     *  [com.voxapps.onboarding.VoxHintStore]. */
+    fun replayTutorial() {
+        scope.launch {
+            hintStore?.resetAll()
+            settingsRepo.setOnboardingCompleted(false)
+        }
+    }
 
     private data class Runtime(
         val selectedTags: Set<String> = emptySet(),

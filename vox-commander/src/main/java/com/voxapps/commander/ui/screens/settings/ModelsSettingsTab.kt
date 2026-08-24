@@ -1,5 +1,7 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.design.picklist.PicklistCompactAnchor
 import com.voxapps.commander.ui.LocalLanguageManager
@@ -52,6 +54,14 @@ fun ModelsSettingsTab(
     refreshTrigger: Int = 0
 ) {
         val languageManager = LocalLanguageManager.current
+        VoxHintDialog(
+            store = appStateManager.hintStoreForUi,
+            hintKey = VoxHintKeys.MODELS,
+            title = languageManager.getString("hint_models_title"),
+            body = languageManager.getString("hint_models_body"),
+            okLabel = languageManager.getString("hint_ok"),
+            dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+        )
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()
     val nluModels = remember(uiState.availableModels) { uiState.availableModels["nlu_llm"] ?: emptyList() }
 

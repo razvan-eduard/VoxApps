@@ -1,5 +1,7 @@
 package com.voxapps.commander.ui.screens.settings
 
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.ui.LocalLanguageManager
 import android.content.Intent
@@ -49,6 +51,14 @@ fun BenchmarkSettingsTab(
     header: (@Composable () -> Unit)? = null
 ) {
         val languageManager = LocalLanguageManager.current
+        VoxHintDialog(
+            store = appStateManager.hintStoreForUi,
+            hintKey = VoxHintKeys.DIAGNOSTICS,
+            title = languageManager.getString("hint_diagnostics_title"),
+            body = languageManager.getString("hint_diagnostics_body"),
+            okLabel = languageManager.getString("hint_ok"),
+            dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+        )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val uiState by appStateManager.uiState.collectAsStateWithLifecycle()

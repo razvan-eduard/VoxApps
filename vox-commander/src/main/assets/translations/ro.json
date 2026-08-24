@@ -565,5 +565,22 @@
   "youtube_url_engine": "Motor URL YouTube",
   "piped_section": "Piped",
   "logs_settings_title": "Jurnale",
-  "tab_diagnostics": "Diagnosticare"
+  "tab_diagnostics": "Diagnosticare",
+  "tutorial_skip": "Sari peste",
+  "tutorial_back": "Înapoi",
+  "tutorial_next": "Înainte",
+  "tutorial_finish": "Gata",
+  "replay_tutorial_desc": "Arată turul din nou și lasă fiecare pagină de setări să se explice încă o dată.",
+  "hint_ok": "Am înțeles",
+  "hint_dont_show_again": "Nu mai arăta asta",
+  "hint_models_title": "Motoare și modele",
+  "hint_models_body": "Fiecare sarcină — auzirea cuvântului de trezire, transformarea vorbirii în text, înțelegerea ei — are motorul ei, iar fiecare poate rula pe dispozitiv sau în cloud. Ce se descarcă rămâne până îl ștergi.",
+  "hint_integrations_title": "Aplicații conectate",
+  "hint_integrations_body": "Care aplicație răspunde la ce fel de cerere. Nimic de aici nu e obligatoriu: o cerere fără aplicație care s-o servească este refuzată, nu ghicită.",
+  "hint_permissions_title": "Permisiuni",
+  "hint_permissions_body": "Fiecare e cerută cu un motiv anume și poate fi refuzată. Suprapunerea e cea care lasă fereastra de voce să apară peste alte aplicații; fără ea asistentul funcționează, dar nu deasupra.",
+  "hint_advanced_title": "Avansat",
+  "hint_advanced_body": "Descărcări, rezerve și întreținere. Rezerva offline decide ce se întâmplă când un motor din cloud nu răspunde la timp.",
+  "hint_diagnostics_title": "Diagnostic",
+  "hint_diagnostics_body": "Ce a încărcat efectiv acest dispozitiv și cât de repede a rulat. Util când un motor se comportă altfel aici decât în altă parte."
 }

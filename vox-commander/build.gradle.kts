@@ -584,6 +584,7 @@ val hashLlamaLibs = tasks.register<HashEngineLibs>("recordLlamaDigests") {
 }
 
 dependencies {
+    implementation(project(":core:onboarding"))
     implementation(project(":core:design"))
     implementation(project(":core:apppicker"))
     implementation(project(":core:location"))

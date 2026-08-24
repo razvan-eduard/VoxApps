@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -162,6 +163,18 @@ fun GeneralSettingsTab(
                     onCheckedChange = { stateManager.setTodoBleedToCalendar(it) }
                 )
             }
+        }
+
+        SettingsSectionCard(languageManager.getString("tutorial_section")) {
+            Text(
+                languageManager.getString("replay_tutorial_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { stateManager.replayTutorial() },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) { Text(languageManager.getString("replay_tutorial")) }
         }
     }
 }

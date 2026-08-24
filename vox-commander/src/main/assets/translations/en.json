@@ -565,5 +565,22 @@
   "youtube_url_engine": "YouTube URL engine",
   "piped_section": "Piped",
   "logs_settings_title": "Logs",
-  "tab_diagnostics": "Diagnostics"
+  "tab_diagnostics": "Diagnostics",
+  "tutorial_skip": "Skip",
+  "tutorial_back": "Back",
+  "tutorial_next": "Next",
+  "tutorial_finish": "Finish",
+  "replay_tutorial_desc": "Shows the tour again, and lets every settings page explain itself once more.",
+  "hint_ok": "Got it",
+  "hint_dont_show_again": "Don't show this again",
+  "hint_models_title": "Engines and models",
+  "hint_models_body": "Each job — hearing the wake word, turning speech into text, understanding it — has its own engine, and each can run on the device or in the cloud. What is downloaded stays until you remove it.",
+  "hint_integrations_title": "Connected apps",
+  "hint_integrations_body": "Which app answers which kind of request. Nothing here is required: a request with no app to serve it is declined rather than guessed at.",
+  "hint_permissions_title": "Permissions",
+  "hint_permissions_body": "Each one is asked for a named reason and can be refused. The overlay is what lets the voice window appear over other apps; without it the assistant still works, just not on top.",
+  "hint_advanced_title": "Advanced",
+  "hint_advanced_body": "Downloads, fallbacks and maintenance. The offline fallback decides what happens when a cloud engine does not answer in time.",
+  "hint_diagnostics_title": "Diagnostics",
+  "hint_diagnostics_body": "What this device actually loaded and how fast it ran. Useful when an engine behaves differently here than elsewhere."
 }

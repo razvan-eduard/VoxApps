@@ -1,5 +1,9 @@
 package com.voxapps.calendarapp.ui.todo
 
+import androidx.compose.ui.platform.LocalContext
+import com.voxapps.calendarapp.CalendarApplication
+import com.voxapps.onboarding.VoxHintKeys
+import com.voxapps.onboarding.VoxHintDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +72,14 @@ fun ToDoListsScreen(
     openTaskTrigger: Int = 0
 ) {
     val languageManager = LocalLanguageManager.current
+    VoxHintDialog(
+        store = (LocalContext.current.applicationContext as CalendarApplication).container.hintStore,
+        hintKey = VoxHintKeys.TODO_LISTS,
+        title = languageManager.getString("hint_todo_lists_title"),
+        body = languageManager.getString("hint_todo_lists_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     val scope = rememberCoroutineScope()
     val lists by toDoRepository.lists.collectAsStateWithLifecycle(initialValue = emptyList())
     val listState = rememberLazyListState()
