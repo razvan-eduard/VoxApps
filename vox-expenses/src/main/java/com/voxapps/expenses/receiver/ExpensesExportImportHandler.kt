@@ -274,7 +274,9 @@ class ExpensesExportImportHandler(
                     enabled = r.optBoolean("enabled", true),
                     sortOrder = r.optInt("sortOrder", 0),
                     updatedAt = r.optLong("updatedAt", System.currentTimeMillis()),
-                    fuzzJson = r.optString("fuzzJson", "{}")
+                    fuzzJson = r.optString("fuzzJson", "{}"),
+                    suggestJson = r.optString("suggestJson", "{}"),
+                    alertEnabled = r.optBoolean("alertEnabled", false)
                 )
             )
         }
@@ -633,6 +635,8 @@ private fun RemapRuleEntity.toJson(): JSONObject = JSONObject().apply {
     put("setJson", setJson)
     put("origin", origin)
     put("fuzzJson", fuzzJson)
+    put("suggestJson", suggestJson)
+    put("alertEnabled", alertEnabled)
     put("enabled", enabled)
     put("sortOrder", sortOrder)
     put("updatedAt", updatedAt)

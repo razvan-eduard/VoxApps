@@ -1,5 +1,6 @@
 package com.voxapps.calendarapp.data.preferences
 
+import com.voxapps.design.notifications.VoxNotificationPrefs
 import com.voxapps.recordflow.FieldWeight
 import com.voxapps.recordflow.FlowSupport
 import com.voxapps.recordflow.LlmLevel
@@ -163,3 +164,13 @@ data class CalendarSettings(
         const val CORRECTION_SPEED_SLOW = 5
     }
 }
+
+/** How this app was told to sound its alerts, in the shape [VoxNotifier] takes. */
+fun CalendarSettings.notificationPrefs() = VoxNotificationPrefs(
+    systemDefault = notificationsSystemDefault,
+    channelVersion = notificationsChannelVersion,
+    soundUri = notificationsSoundUri,
+    volume = notificationsVolume,
+    length = notificationsLength,
+    vibrationEnabled = notificationsVibrationEnabled
+)

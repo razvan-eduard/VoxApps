@@ -63,7 +63,10 @@ object ExpenseRemapFields {
         // Triggering on an amount is not re-mapping it: the rule reads the figure and writes
         // something descriptive. Setting one would be a falsification, which is why this field
         // appears here and has no counterpart in setFields.
-        RemapMatchField(ID_AMOUNT, "duplicate_rule_field_amount") { amountKey(it.totalAmount) },
+        //
+        // The one field that answers "over" and "under" as well as "is": cents compare as the
+        // quantity they are, which of any other field would be a question about nothing.
+        RemapMatchField(ID_AMOUNT, "duplicate_rule_field_amount", numeric = true) { amountKey(it.totalAmount) },
         RemapMatchField(ID_TITLE, "duplicate_rule_field_title") { it.title },
         RemapMatchField(ID_VENDOR, "duplicate_rule_field_vendor") { it.vendor },
         RemapMatchField(ID_BANK, "duplicate_rule_field_bank") { it.bank },

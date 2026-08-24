@@ -19,10 +19,13 @@ object RemapValueKey {
     fun normalize(value: String?): String? = value?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 }
 
-/** A field a rule may match on. [valueOf] reads the record's current value; the engine normalizes. */
+/** A field a rule may match on. [valueOf] reads the record's current value; the engine normalizes.
+ *  [numeric] admits the ordering comparisons — a field whose values are quantities can be asked
+ *  whether it is *over* something, which of a name would be a question with no answer. */
 data class RemapMatchField<T>(
     val id: String,
     val labelKey: String,
+    val numeric: Boolean = false,
     val valueOf: (T) -> String?
 )
 
@@ -41,13 +44,89 @@ data class RemapSetField<T>(
  *  write. [fuzz]: fieldId → fuzziness level for that match entry (absent or 0 = exact; 1..3 =
  *  progressively easier matches, resolved by the engine's injected matcher). [sortOrder] orders
  *  rules the user ranked; [id] is the storage identity. */
+/**
+ * One thing a rule tests: a field, the value it must carry, and how exactly.
+ *
+ * A list rather than a map keyed by field, because the same field is asked about more than once in
+ * the most ordinary rule there is — "vendor is Lidl OR vendor is Carrefour" is one question about
+ * one field with two acceptable answers, and a map can only hold the last of them.
+ */
+data class RemapCondition(
+    val fieldId: String,
+    val value: String,
+    val fuzz: Int = 0,
+    val op: RemapOp = RemapOp.EQ
+)
+
+/**
+ * How a condition compares.
+ *
+ * Equality is the whole of it for text: a shop is the one named or it is not. A quantity is
+ * different — the useful thing to say about an amount is almost never that it equals a figure but
+ * that it passed one, and there is no way to write that as a set of equalities.
+ *
+ * The symbols are the stored form, so a rule reads the same in the database as on screen.
+ */
+enum class RemapOp(val symbol: String) {
+    EQ("="), GT(">"), GTE(">="), LT("<"), LTE("<=");
+
+    companion object {
+        fun of(symbol: String?): RemapOp = entries.firstOrNull { it.symbol == symbol } ?: EQ
+    }
+}
+
+/**
+ * A trigger: the alternatives, any one of which fires the rule.
+ *
+ * Sum of products — OR between groups, AND inside one — which is the shape that expresses what people
+ * actually write. "Lidl or Carrefour" is one group per shop; "Lidl in Cluj" is one group of two;
+ * "(Lidl and Cluj) or Carrefour" needs both at once, and a single AND/OR switch on the rule cannot
+ * say it. The same shape Commander's fast-map rules already use for spoken triggers.
+ *
+ * One group of one condition is the ordinary rule, and reads as one.
+ */
+data class RemapTrigger(val groups: List<List<RemapCondition>>) {
+
+    val isEmpty: Boolean get() = groups.none { it.isNotEmpty() }
+
+    /**
+     * How much a record has to satisfy for this trigger to fire, counted by its *weakest* group.
+     *
+     * A rule fires on whichever alternative is easiest to satisfy, so that is what says how
+     * demanding it really is — adding a broad alternative to a narrow rule makes the whole rule
+     * broader, and counting the total conditions would report the opposite.
+     */
+    val demand: Int get() = groups.filter { it.isNotEmpty() }.minOfOrNull { it.size } ?: 0
+
+    companion object {
+        /** The everyday case: every condition has to hold. */
+        fun all(conditions: List<RemapCondition>) = RemapTrigger(listOf(conditions))
+
+        /** One field, several acceptable answers. */
+        fun anyOf(fieldId: String, values: List<String>, fuzz: Int = 0) =
+            RemapTrigger(values.map { listOf(RemapCondition(fieldId, it, fuzz)) })
+    }
+}
+
+/**
+ * A rule: what it recognises, and what follows from that.
+ *
+ * [set] rewrites the record, [alert] says the person wants to hear about it, and a rule may carry
+ * either or both. A rule that only alerts changes nothing at all about the record — it is the
+ * standing request to be told, which is a real thing to want and was impossible to say while the
+ * only expressible consequence was a rewrite.
+ */
 data class RemapRule(
     val id: Long,
-    val match: Map<String, String>,
+    val trigger: RemapTrigger,
     val set: Map<String, String>,
     val sortOrder: Int = 0,
-    val fuzz: Map<String, Int> = emptyMap()
+    val alert: Boolean = false
 )
+
+/** What a record's pass through the engine came to: the record as it stands, and the rules that
+ *  recognised it — the second is how a consequence that is not a field gets acted on. */
+data class RemapOutcome<T>(val record: T, val fired: List<RemapRule>)
 
 class RemapEngine<T>(
     private val matchFields: List<RemapMatchField<T>>,
@@ -70,25 +149,34 @@ class RemapEngine<T>(
      * later matching rules may still fill set-fields nobody has claimed. All matching runs against
      * the pre-remap [record] snapshot (no chaining, see file doc).
      */
-    fun apply(record: T, rules: List<RemapRule>): T {
+    fun apply(record: T, rules: List<RemapRule>): T = evaluate(record, rules).record
+
+    /** As [apply], and also names the rules that recognised the record — a consequence that is not
+     *  a field (see [RemapRule.alert]) is the caller's to carry out, and it needs to know which. */
+    fun evaluate(record: T, rules: List<RemapRule>): RemapOutcome<T> {
         val fieldsById = matchFields.associateBy { it.id }
         val ordered = rules
-            .filter { it.match.isNotEmpty() && it.set.isNotEmpty() }
-            .sortedWith(compareBy({ -it.match.size }, { it.sortOrder }, { it.id }))
+            .filter { !it.trigger.isEmpty && (it.set.isNotEmpty() || it.alert) }
+            .sortedWith(compareBy({ -it.trigger.demand }, { it.sortOrder }, { it.id }))
         var out = record
         val claimed = mutableSetOf<String>()
+        val fired = mutableListOf<RemapRule>()
         for (rule in ordered) {
-            val matches = rule.match.all { (fieldId, expected) ->
-                val field = fieldsById[fieldId] ?: return@all false
+            fun holds(condition: RemapCondition): Boolean {
+                val field = fieldsById[condition.fieldId] ?: return false
                 val actual = field.valueOf(record)
-                val level = rule.fuzz[fieldId] ?: 0
-                if (level > 0 && leveledMatcher != null) {
-                    actual != null && leveledMatcher.invoke(actual, expected, level)
-                } else {
-                    RemapValueKey.normalize(actual) == expected
+                return when {
+                    condition.op != RemapOp.EQ -> compares(field, actual, condition)
+                    condition.fuzz > 0 && leveledMatcher != null ->
+                        actual != null && leveledMatcher.invoke(actual, condition.value, condition.fuzz)
+                    else -> RemapValueKey.normalize(actual) == condition.value
                 }
             }
+            val matches = rule.trigger.groups.any { group ->
+                group.isNotEmpty() && group.all { holds(it) }
+            }
             if (!matches) continue
+            fired += rule
             for ((fieldId, value) in rule.set) {
                 if (fieldId in claimed) continue
                 val setter = setFields.firstOrNull { it.id == fieldId } ?: continue
@@ -97,6 +185,25 @@ class RemapEngine<T>(
                 claimed += fieldId
             }
         }
-        return out
+        return RemapOutcome(out, fired)
+    }
+
+    /**
+     * An ordering comparison, which only a numeric field answers.
+     *
+     * Anything unreadable as a number says no rather than guessing: a record with no amount is not
+     * under every threshold, it is a record the question was never about.
+     */
+    private fun compares(field: RemapMatchField<T>, actual: String?, condition: RemapCondition): Boolean {
+        if (!field.numeric) return false
+        val left = actual?.trim()?.replace(',', '.')?.toDoubleOrNull() ?: return false
+        val right = condition.value.trim().replace(',', '.').toDoubleOrNull() ?: return false
+        return when (condition.op) {
+            RemapOp.GT -> left > right
+            RemapOp.GTE -> left >= right
+            RemapOp.LT -> left < right
+            RemapOp.LTE -> left <= right
+            RemapOp.EQ -> left == right
+        }
     }
 }

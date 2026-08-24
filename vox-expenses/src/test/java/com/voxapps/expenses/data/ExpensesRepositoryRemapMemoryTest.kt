@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.datahygiene.RemapCondition
 import android.content.Context
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -47,6 +48,10 @@ class ExpensesRepositoryRemapMemoryTest {
     private fun edited(id: Long, vendor: String?, categoryId: Long? = null, title: String? = "t") =
         details(id, vendor, categoryId, title).expense
 
+    /** The conditions a stored trigger holds, flattened — every proposal drafts one group. */
+    private fun triggerOf(rule: RemapRuleEntity): List<Pair<String, String>> =
+        RemapConditionsJson.decode(rule.matchJson).flatten().map { it.fieldId to it.value }
+
     @Before
     fun setup() {
         categoryDao = mockk(relaxed = true)
@@ -93,7 +98,7 @@ class ExpensesRepositoryRemapMemoryTest {
         coVerify(exactly = 1) {
             remapRuleDao.upsert(match { rule ->
                 !rule.enabled && rule.origin == RemapRuleEntity.ORIGIN_PROPOSED &&
-                    RemapRuleJson.decode(rule.matchJson) == mapOf("vendor" to "lazar ionut pfa") &&
+                    triggerOf(rule) == listOf("vendor" to "lazar ionut pfa") &&
                     RemapRuleJson.decode(rule.setJson) == mapOf("vendor" to "Lazar's Shop")
             })
         }
@@ -101,10 +106,16 @@ class ExpensesRepositoryRemapMemoryTest {
     }
 
     @Test
-    fun `a different after-value is a separate pattern`() = runTest {
+    /**
+     * Two sightings of one shop that disagree about the result propose nothing.
+     *
+     * Both are counted against the shop, since that is what identifies it — but a set survives only
+     * where every sighting made the same edit, and renaming to two different names twice is not a
+     * habit, it is indecision.
+     */
+    fun `sightings that disagree about the result propose nothing`() = runTest {
         repository.recordRemapPatternSightings(details(1, "LAZAR IONUT PFA"), edited(1, "Lazar's Shop"), threshold = 2)
         repository.recordRemapPatternSightings(details(2, "LAZAR IONUT PFA"), edited(2, "Lazar Market"), threshold = 2)
-        assertEquals(2, sightingDao.rows.size)
         coVerify(exactly = 0) { remapRuleDao.upsert(any()) }
     }
 
@@ -125,7 +136,7 @@ class ExpensesRepositoryRemapMemoryTest {
         coVerify {
             remapRuleDao.upsert(match { rule ->
                 val set = RemapRuleJson.decode(rule.setJson)
-                RemapRuleJson.decode(rule.matchJson) == mapOf("vendor" to "lazar ionut pfa") &&
+                triggerOf(rule) == listOf("vendor" to "lazar ionut pfa") &&
                     set["vendor"] == "Lazar's Shop" &&
                     set["categoryId"] == groceries.id.toString() &&
                     "title" !in set
@@ -133,30 +144,107 @@ class ExpensesRepositoryRemapMemoryTest {
         }
     }
 
+    /**
+     * Recategorising is triggered by the shop, never by the category it was moved out of.
+     *
+     * The old category is what the app guessed, not something true about the spending: a rule keyed
+     * on it would fire on every record that guess was ever wrong about, and would read as
+     * "Transport becomes Groceries", which is not a thing anybody meant to say.
+     */
     @Test
-    fun `a category change is a pattern of its own, name-triggered and id-set`() = runTest {
+    fun `recategorising is triggered by the shop, not by the category left behind`() = runTest {
         repository.recordRemapPatternSightings(
             details(1, "Lidl", categoryId = transport.id), edited(1, "Lidl", categoryId = groceries.id), threshold = 1
         )
         coVerify(exactly = 1) {
             remapRuleDao.upsert(match { rule ->
                 !rule.enabled &&
-                    RemapRuleJson.decode(rule.matchJson) == mapOf("category" to "transport") &&
+                    triggerOf(rule) == listOf("vendor" to "lidl") &&
                     RemapRuleJson.decode(rule.setJson) == mapOf("categoryId" to groceries.id.toString())
             })
         }
     }
 
+    /** With nothing identifying the record, there is nothing a later capture could be recognised
+     *  by — so no rule is drafted at all. */
+    @Test
+    fun `an edit on a record with no vendor drafts nothing`() = runTest {
+        repository.recordRemapPatternSightings(
+            details(1, null, categoryId = transport.id), edited(1, null, categoryId = groceries.id), threshold = 1
+        )
+        assertTrue(sightingDao.rows.isEmpty())
+        coVerify(exactly = 0) { remapRuleDao.upsert(any()) }
+    }
+
     @Test
     fun `an existing rule for the trigger suppresses the proposal`() = runTest {
         coEvery { remapRuleDao.getByMatch(any()) } returns RemapRuleEntity(
-            id = 1, name = "existing", matchJson = RemapRuleJson.encode(mapOf("vendor" to "lazar ionut pfa")),
+            id = 1, name = "existing",
+            matchJson = RemapConditionsJson.encode(listOf(listOf(RemapCondition("vendor", "lazar ionut pfa")))),
             setJson = "{}", origin = RemapRuleEntity.ORIGIN_USER, updatedAt = 0L
         )
         repository.recordRemapPatternSightings(details(1, "LAZAR IONUT PFA"), edited(1, "Lazar's Shop"), threshold = 1)
 
         coVerify(exactly = 0) { remapRuleDao.upsert(any()) }
         assertTrue(sightingDao.rows.isEmpty())
+    }
+
+    /**
+     * A proposal triggers on the shop alone and offers the rest.
+     *
+     * Everything those captures also had in common is a narrowing somebody might want — the same
+     * shop, but only on that card. Putting it into the trigger unasked would write a rule nobody
+     * wrote; leaving it out entirely would throw away the only evidence there is.
+     */
+    @Test
+    fun `what every capture also carried is offered, not imposed`() = runTest {
+        repository.recordRemapPatternSightings(
+            details(1, "Lidl", categoryId = null).let {
+                it.copy(expense = it.expense.copy(bank = "ING", location = "Cluj"))
+            },
+            edited(1, "Lidl", categoryId = groceries.id), threshold = 1
+        )
+        coVerify(exactly = 1) {
+            remapRuleDao.upsert(match { rule ->
+                triggerOf(rule) == listOf("vendor" to "lidl") &&
+                    RemapRuleJson.decode(rule.suggestJson) ==
+                    mapOf("bank" to "ing", "location" to "cluj", "totalAmount" to "100", "title" to "t")
+            })
+        }
+    }
+
+    @Test
+    fun `a value only one capture carried is not offered`() = runTest {
+        repository.recordRemapPatternSightings(
+            details(1, "Lidl").let { it.copy(expense = it.expense.copy(bank = "ING", location = "Cluj")) },
+            edited(1, "Lidl", categoryId = groceries.id), threshold = 2
+        )
+        repository.recordRemapPatternSightings(
+            details(2, "Lidl").let { it.copy(expense = it.expense.copy(bank = "ING", location = "Oradea")) },
+            edited(2, "Lidl", categoryId = groceries.id), threshold = 2
+        )
+        coVerify(exactly = 1) {
+            remapRuleDao.upsert(match { rule ->
+                val offered = RemapRuleJson.decode(rule.suggestJson)
+                offered["bank"] == "ing" && "location" !in offered
+            })
+        }
+    }
+
+    /** A corrected field is a result, not identity: offering it would ask a later capture to
+     *  arrive already fixed. */
+    @Test
+    fun `a field the rule writes is never offered as a condition`() = runTest {
+        repository.recordRemapPatternSightings(
+            details(1, "Lidl").let { it.copy(expense = it.expense.copy(location = "Cluj")) },
+            edited(1, "Lidl").copy(location = "Cluj-Napoca"), threshold = 1
+        )
+        coVerify(exactly = 1) {
+            remapRuleDao.upsert(match { rule ->
+                val offered = RemapRuleJson.decode(rule.suggestJson)
+                "location" !in offered && "vendor" !in offered
+            })
+        }
     }
 
     @Test
