@@ -8,6 +8,7 @@ import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import android.util.Base64
 import com.voxapps.expenses.ExpensesApplication
+import com.voxapps.expenses.data.preferences.knownCurrencies
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.NotificationExpenseParsePromptBuilder
@@ -165,7 +166,12 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val fullText = listOfNotNull(text, ticker).joinToString("\n").ifBlank { null }
         val preParse = com.voxapps.expenses.domain.llm.NotificationPreParse.parse(
             title, fullText,
-            com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext, settings)
+            com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext, settings),
+            // What settles "lei" as RON rather than MDL: the currencies this device was already
+            // told about, its own and its cards'.
+            settings.knownCurrencies(
+                container.expensesRepository.bankAccounts.first().map { it.currencyCode }
+            )
         )
         val bankName = preParse.bank ?: knownBankName
         // The template axis: reduce the message to its template's byte-shape and ask the memory
@@ -190,6 +196,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             amount = preParse.amount,
             vendor = preParse.vendor,
             bank = bankName,
+            currency = preParse.currency,
             templateHash = templateHash,
             direction = inheritedDirection,
             knownPayment = paymentKnown

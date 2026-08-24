@@ -24,7 +24,14 @@ package com.voxapps.textmatch.extract
  */
 object TwoFieldPreParse {
 
-    data class Result(val amount: Double?, val vendor: String?, val bank: String?)
+    data class Result(
+        val amount: Double?,
+        val vendor: String?,
+        val bank: String?,
+        /** The currency the message states, under the same certainty rule as the amount: exactly
+         *  one, or none. A figure is almost never sent without saying what it is a figure of. */
+        val currency: String? = null
+    )
 
     /**
      * Which vocabularies mean what, named by the caller.
@@ -65,7 +72,10 @@ object TwoFieldPreParse {
         title: String?,
         text: String?,
         vocabularies: List<VocabularyClassifier.Vocabulary>,
-        roles: Roles
+        roles: Roles,
+        /** The currencies this app already deals in. A spelling that names one currency ignores
+         *  them; one that names several resolves only against these — see [CurrencyCodes.codeOf]. */
+        knownCurrencies: Set<String> = emptySet()
     ): Result {
         val fields = listOf(title?.trim().orEmpty(), text?.trim().orEmpty())
         val findings = VocabularyClassifier.classifyFields(fields, vocabularies)
@@ -134,7 +144,14 @@ object TwoFieldPreParse {
             } else null
         }
 
-        return Result(amount = singleMarkedAmount(fields), vendor = vendor, bank = bank)
+        return Result(
+            amount = singleMarkedAmount(fields),
+            vendor = vendor,
+            bank = bank,
+            // Read from the whole message rather than from beside the figure: a line states its
+            // currency once and it is the same currency wherever in the line it stands.
+            currency = CurrencyCodes.find(fields.joinToString("\n"), knownCurrencies)
+        )
     }
 
     /**

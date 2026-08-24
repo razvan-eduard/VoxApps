@@ -317,4 +317,38 @@ class NotificationPreParseTest {
         )
         assertNull(NotificationPreParse.parse("LIDL", "12,00 RON", named).vendor)
     }
+
+    // --- the currency, read the same way the amount is ---
+
+    /** What this device deals in — what settles a spelling that names more than one currency. */
+    private val known = setOf("RON", "EUR")
+
+    @Test
+    fun `the wallet line states its currency and the reading keeps it`() {
+        val r = NotificationPreParse.parse("LIDL RO-490", "315,07 RON with ING Card ••4535", vocabularies, known)
+        assertEquals("RON", r.currency)
+        assertEquals(315.07, r.amount!!, 0.001)
+    }
+
+    /** "lei" is RON here and MDL across the border; what makes it RON is that this device was told
+     *  RON, not that RON is the likelier guess. */
+    @Test
+    fun `a currency named in another spelling resolves against what the device knows`() {
+        assertEquals("RON", NotificationPreParse.parse("BRISTOL MED SRL", "60,00 lei cu cardul ING", vocabularies, known).currency)
+        assertEquals("EUR", NotificationPreParse.parse("Carrefour", "Ai platit 45,20 EUR", vocabularies, known).currency)
+        assertNull(NotificationPreParse.parse("BRISTOL MED SRL", "60,00 lei cu cardul ING", vocabularies).currency)
+    }
+
+    /** A purchase quoted with the balance left in another currency states two, and choosing between
+     *  them is not a reading — the same rule the amount already follows. */
+    @Test
+    fun `two currencies leave the field unread`() {
+        val r = NotificationPreParse.parse("Revolut", "Paid 10 EUR, balance 200 RON", vocabularies, known)
+        assertNull(r.currency)
+    }
+
+    @Test
+    fun `a message with no currency reads none`() {
+        assertNull(NotificationPreParse.parse("Revolut", "Your card was delivered", vocabularies, known).currency)
+    }
 }

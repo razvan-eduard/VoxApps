@@ -48,6 +48,9 @@ data class CapturedNotification(
     val amount: Double?,
     val vendor: String?,
     val bank: String?,
+    /** The currency the message states, read from its own characters. It outranks the model's
+     *  answer for the same reason the amount does: it was never in doubt. */
+    val currency: String?,
     val templateHash: String?,
     val direction: TransactionDirection?,
     val knownPayment: Boolean
@@ -149,7 +152,7 @@ class NotificationExpenseFlow(
             notificationTitle = f.title,
             notificationText = f.text,
             existingCategories = existingCategories,
-            defaultCurrency = settings.defaultCurrency,
+            defaultCurrency = f.currency ?: settings.defaultCurrency,
             languageCode = settings.language,
             knownBankName = f.bank,
             isLocalEngine = VoxCapabilityClient.isLocalEngine(context.applicationContext),
@@ -210,7 +213,7 @@ class NotificationExpenseFlow(
         val record = ExpenseParseResultParser.Parsed(
             title = parsed?.title.orRead(title(f?.vendor, f?.bank, category?.name)),
             totalAmount = parsed?.totalAmount ?: f?.amount ?: return null,
-            currency = parsed?.currency.orRead(settings.defaultCurrency),
+            currency = f?.currency.orRead(parsed?.currency.orRead(settings.defaultCurrency)),
             vendor = parsed?.vendor.orRead(f?.vendor),
             bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
             location = null,
@@ -312,7 +315,8 @@ class NotificationExpenseFlow(
                 title = parsed?.title.orRead(title(f?.vendor, f?.bank, category?.name))
                     ?: title(f?.vendor, f?.bank, category?.name),
                 totalAmount = amount,
-                currency = parsed?.currency.orRead(settings.defaultCurrency) ?: settings.defaultCurrency,
+                currency = f?.currency.orRead(parsed?.currency.orRead(settings.defaultCurrency))
+                    ?: settings.defaultCurrency,
                 vendor = vendorForEntry,
                 // Only where nothing identified a merchant. The title is where a wallet puts the
                 // shop, so it is the line worth pointing at — but no list claimed it, so it is
@@ -404,7 +408,7 @@ class NotificationExpenseFlow(
     ) = ExpenseParseResultParser.Parsed(
         title = parsed?.title.orRead(title(f?.vendor, f?.bank, categoryName)),
         totalAmount = amount,
-        currency = parsed?.currency.orRead(settings.defaultCurrency),
+        currency = f?.currency.orRead(parsed?.currency.orRead(settings.defaultCurrency)),
         vendor = parsed?.vendor.orRead(f?.vendor),
         bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
         location = null,

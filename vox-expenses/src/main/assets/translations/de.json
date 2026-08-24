@@ -575,7 +575,7 @@
   "vocabulary_legal_desc": "Eine Zeile mit einem dieser Zusätze ist der Händler, was sonst darin steht. Keine Liste von Geschäften — ein Geschäftsname bewirkt hier nichts.",
   "vocabulary_add_term": "Wort hinzufügen",
   "vocabulary_yours": "Deine",
-  "vocabulary_provided": "Mit der App geliefert (%d)",
+  "vocabulary_provided": "Mit der App geliefert",
   "vocabulary_disable_term": "Wort abschalten",
   "vocabulary_enable_term": "Wort wieder einschalten",
   "vocabulary_rejected_empty": "Bitte zuerst ein Wort eingeben.",
@@ -612,7 +612,7 @@
   "bank_accounts_none": "Noch keine. Eine erscheint, wenn eine Erfassung eine Karte oder ein Konto nennt und der Schalter oben es erlaubt.",
   "auto_create_accounts_notifications": "Aus Benachrichtigungen hinzufügen",
   "auto_create_accounts_scans": "Aus Scans hinzufügen",
-  "default_account_currency": "Währung für neue",
+  "default_account_currency": "Währung für neue Karten und Konten",
   "default_currency_follows_app": "Der App-Währung folgen",
   "delete_account_message": "Die Einträge, die darüber liefen, bleiben — sie nennen es nur nicht mehr.",
   "account_name": "Name",
@@ -664,5 +664,7 @@
   "rule_alert_channel_name": "Regel-Meldungen",
   "rule_alert_title": "Regel-Meldung",
   "vocabulary_stop_title": "Nie erfassen",
-  "vocabulary_stop_desc": "Eine Nachricht mit einem dieser Wörter wird gar nicht gelesen — keine Ausgabe, kein Prüfeintrag, nichts wird irgendwohin gesendet. Für Ablehnungen, Stornierungen und alles andere, was keine Zahlung ist. Die Benachrichtigung selbst bleibt stehen."
+  "vocabulary_stop_desc": "Eine Nachricht mit einem dieser Wörter wird gar nicht gelesen — keine Ausgabe, kein Prüfeintrag, nichts wird irgendwohin gesendet. Für Ablehnungen, Stornierungen und alles andere, was keine Zahlung ist. Die Benachrichtigung selbst bleibt stehen.",
+  "default_account_currency_desc": "Eine aus einer Erfassung angelegte Karte oder ein Konto startet in dieser Währung. Leer gelassen, folgt sie der Währung der App.",
+  "account_currency_from_capture": "Aus der Erfassung"
 }

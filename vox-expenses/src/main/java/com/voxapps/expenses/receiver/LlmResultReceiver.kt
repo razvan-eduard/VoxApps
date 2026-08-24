@@ -14,6 +14,7 @@ import com.voxapps.expenses.data.ExpenseLineItem
 import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.preferences.accountCurrencyFor
 import com.voxapps.expenses.data.ALREADY_PRESENT_RESULT
 import com.voxapps.expenses.data.RECOGNIZED_NOT_INSERTED
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
@@ -536,7 +537,9 @@ class LlmResultReceiver : BroadcastReceiver() {
                     scansEnabled = settings.autoCreateAccountsFromScans,
                     notificationsEnabled = settings.autoCreateAccountsFromNotifications
                 ),
-                defaultCurrency = settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency },
+                // The account starts in whatever its setting says — including, when that is what
+                // it says, the currency this very capture stated.
+                defaultCurrency = settings.accountCurrencyFor(parsed.currency),
                 bankName = parsed.bank
             )
         )

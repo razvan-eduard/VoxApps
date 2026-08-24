@@ -516,14 +516,12 @@ fun NotificationCaptureSettingsTab(
             accounts = accounts,
             autoCreateFromScans = settings.autoCreateAccountsFromScans,
             autoCreateFromNotifications = settings.autoCreateAccountsFromNotifications,
-            defaultCurrency = settings.defaultAccountCurrency,
             knownCurrencies = remember(accounts, settings.defaultCurrency) {
                 (accounts.map { it.currencyCode } + settings.defaultCurrency)
                     .filter { it.isNotBlank() }.distinct().sorted()
             },
             onAutoCreateFromScansChange = { stateManager.setAutoCreateAccountsFromScans(it) },
             onAutoCreateFromNotificationsChange = { stateManager.setAutoCreateAccountsFromNotifications(it) },
-            onDefaultCurrencyChange = { stateManager.setDefaultAccountCurrency(it) },
             onUpdate = { stateManager.updateBankAccount(it) },
             onDelete = { stateManager.deleteBankAccount(it) },
             onAdd = { typed ->

@@ -18,6 +18,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.design.picklist.Picklist
+import com.voxapps.textmatch.extract.CurrencyCodes
 import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExchangeRateRepository
@@ -51,7 +54,6 @@ fun CurrencySettingsTab(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var homeCurrencyText by remember(settings.homeCurrency) { mutableStateOf(settings.homeCurrency) }
     var apiKeyText by remember { mutableStateOf(ExchangeRateApiKeyStore.get(context) ?: "") }
     var fetching by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf<String?>(null) }
@@ -59,6 +61,13 @@ fun CurrencySettingsTab(
     // The declared currency services, and whichever the user picked. Adding a provider is a schema
     // edit; this screen only chooses between what is declared — the same arrangement the search
     // providers use, through the same picklist.
+    // What the records already name, so the account default is chosen from currencies in use.
+    val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val knownCurrencies = remember(accounts, settings.defaultCurrency) {
+        (accounts.map { it.currencyCode } + settings.defaultCurrency)
+            .filter { it.isNotBlank() }.distinct().sorted()
+    }
+
     val services = remember { ExternalServiceConfig.currencyServices(context) }
     val service = remember(services, settings.exchangeRateServiceId) {
         ExternalServiceConfig.chosenCurrencyService(context, settings.exchangeRateServiceId)
@@ -71,15 +80,15 @@ fun CurrencySettingsTab(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedTextField(
-                value = homeCurrencyText,
-                onValueChange = {
-                    homeCurrencyText = it.uppercase().take(3)
-                    stateManager.setHomeCurrency(homeCurrencyText)
-                },
-                modifier = Modifier.fillMaxWidth()
+            // Chosen, not typed: a currency is one of a fixed set, and three free characters is a
+            // field where "RO" and "LEI" are as acceptable as "RON" — neither of which any rate
+            // provider will convert. Ordered so the currencies of this app's language come first.
+            Picklist(
+                items = remember(settings.language) { CurrencyCodes.ordered(settings.language) },
+                selected = settings.homeCurrency.takeIf { it.isNotBlank() },
+                itemLabel = { it },
+                onSelect = { stateManager.setHomeCurrency(it) }
             )
-
         }
 
         // Drawn whatever the count. With one declared provider the button is still the answer to
@@ -89,6 +98,32 @@ fun CurrencySettingsTab(
         // What appears beneath it — the key field, the reachability test — is decided from what the
         // provider declares, by the same component the engine and search screens use. Frankfurter
         // needs no key and shows none; ExchangeRate-API shows both.
+        // Beside the app's own currency rather than beside the cards it applies to: both answer
+        // "which currency", and a person looking for one of them looks here.
+        SettingsSectionCard(languageManager.getString("default_account_currency")) {
+            Text(
+                languageManager.getString("default_account_currency_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // Offered from what is already in use, plus whatever is typed: a list of every currency
+            // in the world is a list nobody scrolls, and the one a person needs is nearly always one
+            // their own records already name.
+            // Three answers in one list: follow the capture, name a currency, or follow the app.
+            Picklist(
+                items = listOf(ExpensesSettings.ACCOUNT_CURRENCY_FROM_CAPTURE) + knownCurrencies,
+                selected = settings.defaultAccountCurrency.takeIf { it.isNotBlank() },
+                itemLabel = {
+                    if (it == ExpensesSettings.ACCOUNT_CURRENCY_FROM_CAPTURE) {
+                        languageManager.getString("account_currency_from_capture")
+                    } else it
+                },
+                onSelect = { stateManager.setDefaultAccountCurrency(it) },
+                noneLabel = languageManager.getString("default_currency_follows_app"),
+                onNoneSelected = { stateManager.setDefaultAccountCurrency("") }
+            )
+        }
+
         SettingsSectionCard(languageManager.getString("exchange_rate_provider_label")) {
             ServicePicklist(
                 items = services,
@@ -129,7 +164,7 @@ fun CurrencySettingsTab(
                     fetching = true
                     statusText = null
                     scope.launch {
-                        val result = exchangeRateRepository.getRates(homeCurrencyText, forceRefresh = true)
+                        val result = exchangeRateRepository.getRates(settings.homeCurrency, forceRefresh = true)
                         statusText = when (result) {
                             is ExchangeRateRepository.RatesResult.Success -> String.format(
                                 languageManager.getString("exchange_rate_fetch_success"),

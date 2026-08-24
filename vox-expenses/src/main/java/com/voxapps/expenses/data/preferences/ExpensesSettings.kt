@@ -342,6 +342,16 @@ data class ExpensesSettings(
         const val DEFAULT_LANGUAGE = "en"
         const val DEFAULT_CURRENCY = "RON"
 
+        /**
+         * [defaultAccountCurrency]'s third answer: a card or account created from a capture takes
+         * the currency that capture stated, falling back to [defaultCurrency] when it stated none.
+         *
+         * A sentinel rather than a second setting, because it belongs in the same list as the
+         * currencies it stands beside — and no ISO code can collide with it, three letters being
+         * the whole of what one may be.
+         */
+        const val ACCOUNT_CURRENCY_FROM_CAPTURE = "@capture"
+
         const val INTERVAL_OFF = "OFF"
 
         /** Never shown. A scan that finds a breakdown says so once, rather than silently dropping it. */
@@ -532,6 +542,33 @@ data class ExpensesSettings(
         const val LENGTH_LONG = "LONG"
     }
 }
+
+/**
+ * The currency a card or account created from a capture starts in.
+ *
+ * Three answers, one list: a currency named outright, the app's own, or whatever the capture that
+ * created it stated. The last falls back to the app's when the message named none — an account has
+ * to be in some currency, and inventing one from silence is not better than following the default.
+ */
+fun ExpensesSettings.accountCurrencyFor(captured: String?): String = when (defaultAccountCurrency) {
+    "" -> defaultCurrency
+    ExpensesSettings.ACCOUNT_CURRENCY_FROM_CAPTURE ->
+        captured?.takeIf { it.isNotBlank() } ?: defaultCurrency
+    else -> defaultAccountCurrency
+}
+
+/**
+ * The currencies this device already deals in — what settles a spelling that names several.
+ *
+ * "lei" is RON here and MDL across the border, and neither reading is more correct than the other;
+ * what makes it RON is that this app was told RON. [accountCurrencies] carries what the stored cards
+ * and accounts add to that.
+ */
+fun ExpensesSettings.knownCurrencies(accountCurrencies: Collection<String> = emptyList()): Set<String> =
+    (listOf(defaultCurrency, homeCurrency, defaultAccountCurrency) + accountCurrencies)
+        .filter { it.isNotBlank() && it != ExpensesSettings.ACCOUNT_CURRENCY_FROM_CAPTURE }
+        .map { it.uppercase() }
+        .toSet()
 
 /** How this app was told to sound its alerts, in the shape [VoxNotifier] takes. */
 fun ExpensesSettings.notificationPrefs() = VoxNotificationPrefs(

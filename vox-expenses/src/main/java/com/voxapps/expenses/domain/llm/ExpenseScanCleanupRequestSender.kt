@@ -6,6 +6,8 @@ import com.voxapps.docread.ScanItemsReader
 import com.voxapps.docread.ScanReading
 import com.voxapps.docread.TableItemsPreParse
 import android.content.Context
+import com.voxapps.expenses.data.preferences.accountCurrencyFor
+import com.voxapps.expenses.data.preferences.knownCurrencies
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
 import com.voxapps.logging.Logger
@@ -203,10 +205,17 @@ object ExpenseScanCleanupRequestSender {
      */
     private suspend fun accountFrom(container: ExpensesContainer, plainText: String): Long? {
         val settings = container.settingsRepository.getSnapshot()
+        val accountCurrencies = container.expensesRepository.bankAccounts.first().map { it.currencyCode }
         return container.expensesRepository.resolveBankAccount(
             text = plainText,
             autoCreate = settings.autoCreateAccountsFromScans,
-            defaultCurrency = settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency },
+            // The page states its currency where it states its figures; a card created from it
+            // starts there when the setting says to follow the capture.
+            defaultCurrency = settings.accountCurrencyFor(
+                com.voxapps.textmatch.extract.CurrencyCodes.find(
+                    plainText, settings.knownCurrencies(accountCurrencies)
+                )
+            ),
             bankName = null
         )
     }
