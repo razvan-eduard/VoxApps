@@ -143,7 +143,14 @@ class ExpensesRepository(
             }
             is BankAccounts.Outcome.Unknown -> {
                 if (!autoCreate) return null
+                // A card of a bank you keep exactly one account with has one possible parent, so
+                // it is put there rather than left beside it — see BankAccounts.soleAccountOf.
+                val parent = BankAccounts.soleAccountOf(bankName, outcome.ref.kind, existing)
                 val created = BankAccounts.newAccount(outcome.ref, defaultCurrency, bankName, nowMillis)
+                    .copy(parentId = parent?.id)
+                if (parent != null) {
+                    Logger.d(TAG_ACCOUNTS, "New card filed under ${parent.id}, its bank's only account")
+                }
                 // IGNORE on conflict, so a race between two captures naming one card leaves one row
                 // rather than failing the second capture outright.
                 val id = dao.insert(created)
