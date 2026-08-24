@@ -99,6 +99,8 @@ fun SettingsScreen(
     val categories = (ui as? ExpensesUiState.Unlocked)?.categories ?: emptyList()
     val expenses = (ui as? ExpensesUiState.Unlocked)?.expenses?.map { it.expense } ?: emptyList()
     val spendingLimits by stateManager.spendingLimits.collectAsStateWithLifecycle(initialValue = emptyList())
+    val budgetAccounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val accountBudgets by stateManager.accountBudgets.collectAsStateWithLifecycle(initialValue = emptyList())
     val recurringPayments by stateManager.recurringPayments.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var page by remember { mutableStateOf(SettingsPage.MENU) }
@@ -153,7 +155,7 @@ fun SettingsScreen(
         SettingsPage.CLEANUP_TEMPLATES -> languageManager.getString("cleanup_templates_title")
         SettingsPage.CURRENCY -> languageManager.getString("currency_settings_title")
         SettingsPage.NOTIFICATION_CAPTURE -> languageManager.getString("notification_capture_title")
-        SettingsPage.SPENDING_LIMITS -> languageManager.getString("spending_limits_title")
+        SettingsPage.SPENDING_LIMITS -> languageManager.getString("budget_and_limits_title")
         SettingsPage.RECURRING -> languageManager.getString("recurring_payments_title")
         SettingsPage.BACKUP -> languageManager.getString("backup_restore_title")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
@@ -226,7 +228,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CURRENCY }
                 )
                 ListItem(
-                    headlineContent = { Text(languageManager.getString("spending_limits_title")) },
+                    headlineContent = { Text(languageManager.getString("budget_and_limits_title")) },
                     leadingContent = { Icon(Icons.Filled.Shield, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SPENDING_LIMITS }
                 )
@@ -388,6 +390,13 @@ fun SettingsScreen(
                 limits = spendingLimits,
                 categories = categories,
                 homeCurrency = settings.homeCurrency,
+                accounts = budgetAccounts,
+                budgets = accountBudgets,
+                expenses = expenses,
+                knownCurrencies = remember(budgetAccounts, settings.homeCurrency, settings.defaultCurrency) {
+                    (budgetAccounts.map { it.currencyCode } + settings.homeCurrency + settings.defaultCurrency)
+                        .filter { it.isNotBlank() }.distinct().sorted()
+                },
                 stateManager = stateManager,
                 modifier = mod
             )

@@ -789,6 +789,18 @@ class ExpensesStateManager(
 
     val spendingLimits: Flow<List<SpendingLimit>> = expensesRepo.spendingLimits
 
+    // --- budgets: what there is left to spend, per account and currency ---
+
+    val accountBudgets = expensesRepo.accountBudgets
+
+    fun upsertAccountBudget(budget: com.voxapps.expenses.data.AccountBudget) {
+        scope.launch { expensesRepo.upsertAccountBudget(budget) }
+    }
+
+    fun deleteAccountBudget(budget: com.voxapps.expenses.data.AccountBudget) {
+        scope.launch { expensesRepo.deleteAccountBudget(budget) }
+    }
+
     fun addSpendingLimit(categoryId: Long?, amountHomeCurrency: Double, period: String) {
         scope.launch { expensesRepo.addSpendingLimit(categoryId, amountHomeCurrency, period) }
     }

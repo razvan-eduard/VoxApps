@@ -666,5 +666,16 @@
   "vocabulary_stop_title": "Never capture",
   "vocabulary_stop_desc": "A message carrying one of these words is not read at all — no expense, no review entry, nothing sent anywhere. For refusals, reversals and anything else that is not a payment. The notification itself is left in place.",
   "default_account_currency_desc": "A card or account created from a capture starts in this currency. Left empty, it follows the app's own currency.",
-  "account_currency_from_capture": "From the capture"
+  "account_currency_from_capture": "From the capture",
+  "budget_and_limits_title": "Budget and spending limits",
+  "budgets_title": "Budgets",
+  "budgets_desc": "What there is left to spend on an account, in each currency it holds. Cards under an account spend the account's budget. Nothing is kept as a running total — what is left is counted from your records every time it is shown.",
+  "budgets_no_accounts": "No cards or accounts yet. One appears when a capture names one, or you can add it in From Notifications.",
+  "budget_add": "Add a budget",
+  "budget_amount_label": "Amount",
+  "budget_of_amount": "of %s",
+  "budget_mode_monthly": "Monthly",
+  "budget_mode_weekly": "Weekly",
+  "budget_mode_pot": "Until topped up",
+  "budget_topped_up": "Topped up"
 }

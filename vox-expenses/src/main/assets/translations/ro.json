@@ -666,5 +666,16 @@
   "vocabulary_stop_title": "Nu captura niciodată",
   "vocabulary_stop_desc": "Un mesaj care conține unul dintre aceste cuvinte nu e citit deloc — nicio cheltuială, nicio intrare de revizuit, nimic trimis nicăieri. Pentru refuzuri, stornări și orice altceva nu e o plată. Notificarea rămâne pe ecran.",
   "default_account_currency_desc": "Un card sau cont creat dintr-o captură pornește în moneda asta. Lăsat gol, urmează moneda aplicației.",
-  "account_currency_from_capture": "Din captură"
+  "account_currency_from_capture": "Din captură",
+  "budget_and_limits_title": "Buget și limite de cheltuială",
+  "budgets_title": "Bugete",
+  "budgets_desc": "Cât a mai rămas de cheltuit pe un cont, în fiecare monedă pe care o ține. Cardurile de sub un cont cheltuie bugetul contului. Nu se ține niciun total curent — ce a rămas se numără din înregistrările tale de fiecare dată când e arătat.",
+  "budgets_no_accounts": "Niciun card sau cont încă. Apare unul când o captură îl numește, sau îl adaugi din Din notificări.",
+  "budget_add": "Adaugă un buget",
+  "budget_amount_label": "Sumă",
+  "budget_of_amount": "din %s",
+  "budget_mode_monthly": "Lunar",
+  "budget_mode_weekly": "Săptămânal",
+  "budget_mode_pot": "Până la realimentare",
+  "budget_topped_up": "Realimentat"
 }

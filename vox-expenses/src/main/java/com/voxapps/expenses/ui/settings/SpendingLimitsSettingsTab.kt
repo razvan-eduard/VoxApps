@@ -47,6 +47,10 @@ fun SpendingLimitsSettingsTab(
     limits: List<SpendingLimit>,
     categories: List<Category>,
     homeCurrency: String,
+    accounts: List<com.voxapps.expenses.data.BankAccount>,
+    budgets: List<com.voxapps.expenses.data.AccountBudget>,
+    expenses: List<com.voxapps.expenses.data.Expense>,
+    knownCurrencies: List<String>,
     stateManager: ExpensesStateManager,
     modifier: Modifier = Modifier
 ) {
@@ -58,6 +62,17 @@ fun SpendingLimitsSettingsTab(
     var categoryMenuExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // What you meant to spend comes before what you refuse to exceed: the budget is the plan,
+        // the limit is the guard on it.
+        AccountBudgetsSection(
+            accounts = accounts,
+            budgets = budgets,
+            expenses = expenses,
+            knownCurrencies = knownCurrencies,
+            onUpsert = { stateManager.upsertAccountBudget(it) },
+            onDelete = { stateManager.deleteAccountBudget(it) }
+        )
+
         SettingsSectionCard(languageManager.getString("spending_limits_title")) {
             Text(
                 languageManager.getString("spending_limits_desc"),

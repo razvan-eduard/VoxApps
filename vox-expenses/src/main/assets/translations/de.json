@@ -666,5 +666,16 @@
   "vocabulary_stop_title": "Nie erfassen",
   "vocabulary_stop_desc": "Eine Nachricht mit einem dieser Wörter wird gar nicht gelesen — keine Ausgabe, kein Prüfeintrag, nichts wird irgendwohin gesendet. Für Ablehnungen, Stornierungen und alles andere, was keine Zahlung ist. Die Benachrichtigung selbst bleibt stehen.",
   "default_account_currency_desc": "Eine aus einer Erfassung angelegte Karte oder ein Konto startet in dieser Währung. Leer gelassen, folgt sie der Währung der App.",
-  "account_currency_from_capture": "Aus der Erfassung"
+  "account_currency_from_capture": "Aus der Erfassung",
+  "budget_and_limits_title": "Budget und Ausgabengrenzen",
+  "budgets_title": "Budgets",
+  "budgets_desc": "Was auf einem Konto noch zu verausgaben ist, in jeder Währung, die es führt. Karten unter einem Konto verbrauchen dessen Budget. Nichts wird als laufende Summe geführt — was übrig ist, wird bei jeder Anzeige aus deinen Einträgen gezählt.",
+  "budgets_no_accounts": "Noch keine Karten oder Konten. Eines erscheint, sobald eine Erfassung es nennt, oder du fügst es unter „Aus Benachrichtigungen\" hinzu.",
+  "budget_add": "Budget hinzufügen",
+  "budget_amount_label": "Betrag",
+  "budget_of_amount": "von %s",
+  "budget_mode_monthly": "Monatlich",
+  "budget_mode_weekly": "Wöchentlich",
+  "budget_mode_pot": "Bis zur Aufladung",
+  "budget_topped_up": "Aufgeladen"
 }
