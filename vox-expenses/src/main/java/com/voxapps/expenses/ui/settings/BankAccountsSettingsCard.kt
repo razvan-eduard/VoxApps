@@ -314,12 +314,17 @@ private fun AccountEditDialog(
                 // there — two things worth having are one action.
                 Text(languageManager.getString("account_bank_name"), style = MaterialTheme.typography.labelLarge)
                 Picklist(
-                    items = bankNames,
-                    selected = bankNames.firstOrNull { it.equals(bankName, ignoreCase = true) },
+                    // A name a capture wrote and nobody listed is still what this row says, so it
+                    // is offered alongside the list rather than silently reading as unset.
+                    items = if (bankName.isNotBlank() && bankNames.none { it.equals(bankName, ignoreCase = true) }) {
+                        listOf(bankName) + bankNames
+                    } else bankNames,
+                    selected = bankName.takeIf { it.isNotBlank() },
                     itemLabel = { it },
                     onSelect = { bankName = it },
                     noneLabel = languageManager.getString("none"),
                     onNoneSelected = { bankName = "" },
+                    searchPlaceholder = languageManager.getString("filter_search_hint"),
                     actionLabel = languageManager.getString("account_bank_new"),
                     onAction = { namingBank = true }
                 )
@@ -348,6 +353,7 @@ private fun AccountEditDialog(
                         // The account a card belongs to may not exist yet, and sending somebody back
                         // to the list to make one, then in again to point at it, is three steps for
                         // one intention.
+                        searchPlaceholder = languageManager.getString("filter_search_hint"),
                         actionLabel = languageManager.getString("account_belongs_to_new"),
                         onAction = { addingParent = true }
                     )

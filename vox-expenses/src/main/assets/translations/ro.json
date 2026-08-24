@@ -687,5 +687,6 @@
   "widget_budget_left": "%s rămași",
   "account_bank_name": "Banca",
   "account_bank_new": "Bancă nouă…",
-  "account_belongs_to_new": "Cont nou…"
+  "account_belongs_to_new": "Cont nou…",
+  "expense_vendor_new": "Magazin nou…"
 }
