@@ -524,6 +524,12 @@ fun NotificationCaptureSettingsTab(
             onAutoCreateFromNotificationsChange = { stateManager.setAutoCreateAccountsFromNotifications(it) },
             onUpdate = { stateManager.updateBankAccount(it) },
             onDelete = { stateManager.deleteBankAccount(it) },
+            // The same list the classifier reads a message's issuer with, so an account's bank and
+            // a capture's bank cannot drift into being two different vocabularies.
+            bankNames = remember(provided.banks, settings.customBanks, settings.disabledBanks) {
+                FieldVocabularies.merge(provided.banks, settings.customBanks, settings.disabledBanks)
+            },
+            onAddBank = { name -> scope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, name) } },
             onAdd = { typed ->
                 stateManager.addTypedBankAccount(
                     typed,

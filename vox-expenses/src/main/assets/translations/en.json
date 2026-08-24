@@ -685,5 +685,7 @@
   "widget_budget_selected": "Chosen accounts",
   "widget_budget_none_yet": "No account has a budget yet.",
   "widget_budget_left": "%s left",
-  "account_bank_name": "Bank"
+  "account_bank_name": "Bank",
+  "account_bank_new": "New bank…",
+  "account_belongs_to_new": "New account…"
 }
