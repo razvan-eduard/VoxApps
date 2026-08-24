@@ -529,6 +529,210 @@ bank/payment notifications, or entered by hand.
   on a conflicting edit, deletions propagate via tombstones
 - Multi-language UI (English, Romanian, German, French)
 
+### The money model — bank, name, shop, currency, card, expense
+
+What a record knows about money, and what points at what. The companion below follows what is
+*left* to spend.
+
+#### Rows in the database
+
+    categories                bank_accounts                     account_budgets
+      id                        id                                id
+      name                      digits        <- the identity      accountId  --+
+      colorArgb                 kind  IBAN|CARD|CARD_TAIL          currencyCode | unique
+      icon                      parentId --+  one level only       amount       | together
+      isDefault  <- fallback    label      |  a free alias         mode  PERIOD|POT
+      position                  bankName   |  text                 period, startedAt
+      createdAt                 currencyCode                       reconciledAt
+                                icon, autoCreated                  reconciledRemaining
+                                           |                                   |
+                                 <---------+                        <----------+
+    expenses
+      id, uid
+      totalAmount        \
+      currencyCode        }  the facts — no rule rewrites these
+      dateTime           /
+      vendor      text
+      bank        text
+      location    text
+      title, comments
+      direction   OUTGOING | INCOMING
+      categoryId      ----------------->  categories.id
+      bankAccountId   ----------------->  bank_accounts.id   (the card OR the account, whichever was recognised)
+      source  VOICE | SCAN | NOTIFICATION
+
+**Vocabularies are not tables.** They live in settings (DataStore) plus a signed schema file, and
+there are four: banks (76 supplied + yours - the ones switched off), legal forms, shops (yours only),
+stop words. Their job is recognition inside a message, not storage.
+
+**Currencies are not a table either.** `CurrencyCodes` in `:core:textmatch` holds the ISO codes and
+the ways people write them. Settings hold three: the app's own currency, the currency of a new
+expense, and the currency of new cards (which may say "from the capture").
+
+#### What points at what
+
+- **Expense -> account/card**: one id. A notification carrying `**4535` files it on the card, one
+  carrying an IBAN on the account, and a message with no account format leaves it null.
+- **Card -> account**: `parentId`, one level. A card with no parent *is* an account.
+- **Budget -> (account, currency)**: unique per pair. An account holding RON and EUR carries two.
+  Cards hold none: their spending comes out of the account family's budget.
+- **Expense -> budget**: no stored link at all. It is derived on every read — same account family,
+  same currency, inside the current window.
+- **`expenses.bank` vs `bank_accounts.bankName`**: two fields, both text. The first is what that
+  message said; the second is who the account is held with. A message can name either alone.
+
+#### Where each value comes from at capture
+
+| field            | source, in order                                                                   |
+|------------------|------------------------------------------------------------------------------------|
+| amount           | read from the text (figures marked by a currency)                                   |
+| currency         | read 1:1 from the text -> what a model said -> the default                          |
+| vendor / bank    | vocabulary (token-sequence match) -> model                                          |
+| account/card     | `AccountIdentifiers` on the digits -> existing row, else created; auto-parented when that bank has exactly one account |
+| category         | rules -> name resolution -> the fallback category                                   |
+| budget           | nothing is written — it is recomputed                                               |
+
+#### What each field offers in the UI
+
+| field              | the list                                   | search also reaches        | "new" adds to      |
+|--------------------|--------------------------------------------|----------------------------|--------------------|
+| Vendor             | shops you have paid                        | your own shop vocabulary   | the vocabulary     |
+| Bank (expense)     | banks your records and accounts name        | all 76 supplied + yours    | the vocabulary     |
+| Bank (account)     | the same                                    | the same                   | the vocabulary     |
+| Belongs to         | accounts that may be a parent               | —                          | creates an account |
+| Currency           | codes the reader knows, your language first | —                          | —                  |
+
+The rule applied throughout: **the list shows what you use; the dictionary stays one search away.**
+
+### Budget flow, downstream
+
+The same thing followed downstream: what holds the money, what draws on it, what is counted.
+
+#### The chain
+
+    BUDGET            one per (account, currency)          "1500 RON this month"
+      |                account_budgets
+      |
+      v
+    ACCOUNT           the row money lives in               ING, RO49...0000
+      |                bank_accounts, parentId = null
+      |
+      +--> CARD       a way of reaching that account       ING **4535   (parentId -> account)
+      +--> CARD       another way of reaching it           ING **9999
+      |                cards hold no budget of their own
+      v
+    EXPENSE           filed against whichever row was recognised
+                       expenses.bankAccountId + expenses.currencyCode
+
+An expense filed on a card draws on its account's budget. An expense filed on the account draws on
+the same budget. An expense filed on nothing (no account format in the message) draws on no budget
+at all — and that is honest, not a gap: the app cannot say whose money it was.
+
+#### What is stored, what is worked out
+
+Stored is only the intent:
+
+    amount                what the period grants, or what the pot was filled with
+    mode                  PERIOD | POT
+    period                WEEKLY | MONTHLY        (PERIOD only)
+    startedAt             when the pot was filled (POT only)
+    reconciledAt          when a statement was believed        (nullable)
+    reconciledRemaining   what that statement said was left    (nullable)
+
+**Nothing is ever decremented.** What is left is computed on every read:
+
+    windowStart   = max( mode's own start , reconciledAt )
+                      PERIOD -> the calendar's window (SpendingPeriod: this week / this month)
+                      POT    -> startedAt
+
+    opening       = reconciledRemaining ?: amount
+
+    movement      = sum over expenses where
+                        expense.bankAccountId is in the account's family (account + its cards)
+                        AND expense.currencyCode == budget.currencyCode   (case-insensitive)
+                        AND expense.dateTime >= windowStart
+                    counting  -amount for OUTGOING, +amount for INCOMING
+
+    remaining     = opening + movement
+    spent         = opening - remaining
+
+The alternative — a running figure decremented as records arrive — is wrong the first time a capture
+is missed, edited or deleted, and stays wrong with nothing to notice it. Derived, whatever the
+expense list says today is what the budget says today.
+
+#### What counts, what does not
+
+| a record …                              | counted? | why                                                     |
+|-----------------------------------------|----------|---------------------------------------------------------|
+| on the account                          | yes      | the money left there                                     |
+| on a card under the account             | yes      | the card is a way of reaching that account               |
+| on a card under a *different* account   | no       | different money                                          |
+| in another currency the account holds   | no       | that currency has its own budget                         |
+| dated before the window                 | no       | it belonged to the period that has closed                |
+| dated before a believed statement       | no       | the bank had already subtracted it                       |
+| incoming (refund, transfer in)          | yes, adds| money that came back into the same pot                   |
+| on an archived card                     | yes      | it still left the account; archiving is a display fact   |
+| with no account at all                  | no       | nothing says whose money it was                          |
+
+#### Believing a statement
+
+Most bank notifications state the balance left. Taking one is not an adjustment, it is a new
+starting point:
+
+    before:  1500 granted, we saw 3 payments, remaining 1080
+    bank says "disponibil 1043.20" at 15:12
+
+    after:   reconciledAt = 15:12, reconciledRemaining = 1043.20
+             remaining = 1043.20 + (only what happens after 15:12)
+
+Everything the app may have missed before that moment stops mattering from that moment. This is why
+the pair is stored rather than the difference: a difference would have to be re-applied for ever,
+while a starting point simply replaces what came before it.
+
+#### Upward again: one figure for a glance
+
+The widget header is the only place budgets are added together.
+
+    OFF        nothing is drawn at all — a home screen is read on a lock screen and over shoulders
+    TOTAL      every budget
+    SELECTED   only the accounts ticked
+
+    all budgets in one currency  ->  plain sum, stated in that currency, no rate involved
+    mixed currencies             ->  each converted into the home currency
+                                     a budget with no fetched rate is left out, never added as if
+                                     it were already home currency
+    nothing convertible          ->  no header rather than a wrong number
+
+#### Two things next to each other that are not the same
+
+**Budget** — per account and currency, a pot or a period, answers "how much is left to spend".
+**Spending limit** — per category, per period, in the home currency, answers "tell me when I have
+gone past this". They share a settings page (*Budget and spending limits*) and nothing else: one is
+the plan, the other is the guard on it, and neither is computed from the other.
+
+#### Worked example
+
+    Account: ING, RO49...0000, RON              budget: 1500 RON, monthly
+      card ING **4535 (archived on the 12th)
+      card ING **9999 (issued on the 12th)
+
+    Aug 3   LIDL          315.07 RON   on **4535     -> counted    remaining 1184.93
+    Aug 9   refund         50.00 RON   on **4535 in  -> counted +  remaining 1234.93
+    Aug 12  card replaced, **4535 archived                          nothing changes
+    Aug 14  BRISTOL MED    60.00 RON   on **9999     -> counted    remaining 1174.93
+    Aug 15  bank states "1043.20 available"                        opening becomes 1043.20 at Aug 15
+    Aug 20  SIMARSI       108.13 RON   on **9999     -> counted    remaining  935.07
+    Aug 24  EUR purchase   12.00 EUR   on **9999     -> not counted (the account's EUR budget, if any)
+    Sep 1   the window rolls over                                   remaining 1500.00 again
+
+#### What was deliberately not built
+
+- **No budget per card.** Two cards on one account spend the same money; two budgets over it would
+  count that money twice, and the sum of all budgets would stop meaning anything.
+- **No automatic budget from past spending.** What you meant to spend is a decision, not an average.
+- **No rewriting of an expense's account** when a card is archived or re-parented. The record says
+  which card paid, because that is what happened.
+
 ## Vox Calendar
 
 Standalone, encrypted on-device calendar (`com.voxapps.calendar`, Kotlin/AGP namespace
