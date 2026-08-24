@@ -19,7 +19,10 @@ import com.voxapps.textmatch.extract.VocabularyClassifier
  */
 data class VocabulariesSchema(
     @SerializedName("legal_forms") val legalForms: List<String> = emptyList(),
-    @SerializedName("banks") val banks: List<String> = emptyList()
+    @SerializedName("banks") val banks: List<String> = emptyList(),
+    /** Words that say no money moved. Supplied like the rest, because which words a bank uses to
+     *  announce a refusal is exactly the kind of thing that differs per bank and per language. */
+    @SerializedName("stop_words") val stopWords: List<String> = emptyList()
 )
 
 object FieldVocabularies {
@@ -39,6 +42,16 @@ object FieldVocabularies {
      * bounded by exactly the right thing.
      */
     const val VOCAB_VENDOR = "vendor"
+
+    /**
+     * Words that stop a capture before it starts.
+     *
+     * Deliberately not one of the classification vocabularies: those decide which field a token
+     * belongs to, and a refusal belongs to no field. A message carrying one of these is not a
+     * message that was read badly — it is a message about a payment that never happened, and the
+     * only correct amount to file for it is none.
+     */
+    const val VOCAB_STOP = "stopWord"
 
     private val schema = RemoteSchema(
         fileName = "field_vocabularies.json",
@@ -79,6 +92,19 @@ object FieldVocabularies {
                 VOCAB_BANK,
                 merge(value.banks, settings.customBanks, settings.disabledBanks)
             )
+        )
+    }
+
+    /**
+     * The words a capture is refused for — supplied, less what this device switched off, plus its
+     * own, exactly as the classification lists are built.
+     */
+    fun stopWords(context: Context, settings: ExpensesSettings): List<String> {
+        if (!schema.isLoaded) init(context)
+        return merge(
+            schema.value?.stopWords.orEmpty(),
+            settings.customStopWords,
+            settings.disabledStopWords
         )
     }
 
@@ -125,6 +151,12 @@ object FieldVocabularies {
      * resolving a vendor, with nothing on screen to say why.
      */
     fun rejectionFor(term: String, vocabulary: String, context: Context, settings: ExpensesSettings): Rejection? {
+        // The stop list is judged against itself alone: it assigns no field, so a word it shares
+        // with a vocabulary that does assign one breaks nothing. "Refused" naming a bank and also
+        // stopping a capture are both true at once.
+        if (vocabulary == VOCAB_STOP) {
+            return rejectionFor(term, own = stopWords(context, settings), other = emptyList())
+        }
         val lists = vocabularies(context, settings)
         return rejectionFor(
             term = term,

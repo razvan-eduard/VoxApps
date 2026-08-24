@@ -123,6 +123,24 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val ticker = sbn.notification.tickerText?.toString()?.takeIf { it.isNotBlank() && it != title && it != text }
         if (title.isNullOrBlank() && text.isNullOrBlank()) return
 
+        // A refusal is not a transaction. Before any field is read, any template is looked up or any
+        // sentence is sent anywhere: if the message carries a word from the stop list, this app has
+        // nothing to file. Everything downstream — the pre-parse, the template memory, the model,
+        // the review queue — exists to work out what a payment was, and a declined card is not a
+        // payment that needs working out.
+        //
+        // Marked handled so the same message is not reconsidered on every rebind, and deliberately
+        // never dismissed: a refusal is exactly the kind of message you still want to see.
+        val stopWord = com.voxapps.textmatch.extract.VocabularyClassifier.firstTerm(
+            listOfNotNull(title, text, ticker).joinToString("\n"),
+            com.voxapps.expenses.data.FieldVocabularies.stopWords(applicationContext, settings)
+        )
+        if (stopWord != null) {
+            Logger.d(TAG, "Stopped by \"$stopWord\": ${sbn.packageName}")
+            processedKeys.markProcessed(sbn.key)
+            return
+        }
+
         // Deterministic, not a guess: the user explicitly starred this exact package as a bank app.
         // LauncherAppsCache is only a display-name convenience cache (persisted from whatever the
         // device's app list looked like at the last scan) — it can legitimately miss a package that

@@ -662,5 +662,7 @@
   "remap_rule_alert_label": "Alert me",
   "remap_rule_alert_desc": "Post a notification when this rule recognises a payment. It can do this alongside setting fields, or instead of it",
   "rule_alert_channel_name": "Rule alerts",
-  "rule_alert_title": "Rule alert"
+  "rule_alert_title": "Rule alert",
+  "vocabulary_stop_title": "Never capture",
+  "vocabulary_stop_desc": "A message carrying one of these words is not read at all — no expense, no review entry, nothing sent anywhere. For refusals, reversals and anything else that is not a payment. The notification itself is left in place."
 }

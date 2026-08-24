@@ -97,6 +97,21 @@ object VocabularyClassifier {
     fun termKey(term: String): String = tokenize(term).joinToString(" ")
 
     /**
+     * The first of [terms] that [text] carries, or null.
+     *
+     * The same matching as everywhere else — token sequences, so punctuation and case never decide
+     * — asked as a yes-or-no question rather than as a field assignment. What the answer is for is
+     * the caller's: a list of words can name a thing, and it can equally say that a message must
+     * not be read at all.
+     */
+    fun firstTerm(text: String?, terms: Collection<String>): String? {
+        if (text.isNullOrBlank() || terms.isEmpty()) return null
+        return classify(text, listOf(Vocabulary(STOP_LIST, terms))).firstOrNull()?.term
+    }
+
+    private const val STOP_LIST = "terms"
+
+    /**
      * Whether [term] is the fuller spelling of [name] — its tokens contain the name's, in order.
      *
      * The mirror of how a term is normally found. A list entry is matched *inside* a line, so a
