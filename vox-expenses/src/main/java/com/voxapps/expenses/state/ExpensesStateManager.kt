@@ -69,6 +69,8 @@ class ExpensesStateManager(
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
     private val pendingCaptureCount: kotlinx.coroutines.flow.Flow<Int> = kotlinx.coroutines.flow.flowOf(0),
+    private val pendingCaptureRows: kotlinx.coroutines.flow.Flow<List<com.voxapps.ipc.PendingLlmRequestEntity>> =
+        kotlinx.coroutines.flow.flowOf(emptyList()),
     private val templateDirectionMemory: com.voxapps.expenses.domain.llm.TemplateDirectionMemory,
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
@@ -802,6 +804,20 @@ class ExpensesStateManager(
      * still working on it is the whole fix.
      */
     val pendingCaptures = pendingCaptureCount
+
+    /** The waiting captures themselves, for the sheet the strip opens. */
+    val pendingCaptureList = pendingCaptureRows
+
+    /**
+     * Asks for every queued capture to be re-sent now rather than at the worker's next turn.
+     *
+     * The staleness window is zero here on purpose: a person who opened this list and pressed the
+     * button is telling the app that whatever was wrong — no signal, an engine that was not running
+     * — is no longer wrong.
+     */
+    fun retryPendingCapturesNow(context: Context) {
+        scope.launch { pendingLlmRequestQueue.retryStale(context, staleAfterMillis = 0L) }
+    }
 
     /** Names this device has actually used — see [ExpensesRepository.banksInUse]. */
     val banksInUse = expensesRepo.banksInUse

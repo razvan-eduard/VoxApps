@@ -81,6 +81,9 @@ class ExpensesContainer(context: Context) {
     /** How many captures are waiting for an answer — see [PendingLlmRequestDao.observeCount]. */
     val pendingLlmRequestCount = database.pendingLlmRequestDao().observeCount()
 
+    /** The waiting captures themselves — what the strip above the list opens onto. */
+    val pendingLlmRequests = database.pendingLlmRequestDao().observeAll()
+
     val pendingCategoryMergeRepository = PendingCategoryMergeRepository(appContext)
     val expenseDeduplicationRepository = ExpenseDeduplicationRepository(appContext)
     val pendingNotificationExpenseRepository = PendingNotificationExpenseRepository(appContext)
@@ -102,6 +105,7 @@ class ExpensesContainer(context: Context) {
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,
         pendingLlmRequestCount,
+        pendingLlmRequests,
         templateDirectionMemory,
         attachmentDao,
         duplicateRuleDao,

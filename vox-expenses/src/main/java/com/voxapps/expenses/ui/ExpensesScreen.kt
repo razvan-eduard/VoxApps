@@ -35,6 +35,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -196,10 +197,21 @@ fun ExpensesScreen(
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             // Above the list, because it is about something that will land in it.
             val pending by stateManager.pendingCaptures.collectAsStateWithLifecycle(initialValue = 0)
+            var showPending by rememberSaveable { mutableStateOf(false) }
             VoxPendingStrip(
                 count = pending,
-                text = { n -> languageManager.getString("pending_captures").format(n) }
+                text = { n -> languageManager.getString("pending_captures").format(n) },
+                onClick = { showPending = true }
             )
+            if (showPending) {
+                val pendingRows by stateManager.pendingCaptureList
+                    .collectAsStateWithLifecycle(initialValue = emptyList())
+                PendingCapturesSheet(
+                    entries = pendingRows,
+                    onRetryNow = { stateManager.retryPendingCapturesNow(context) },
+                    onDismiss = { showPending = false }
+                )
+            }
             ExpenseFilterBar(state = state, stateManager = stateManager)
 
             if (state.expenses.isEmpty()) {

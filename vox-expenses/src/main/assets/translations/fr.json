@@ -691,9 +691,19 @@
   "expense_vendor_new": "Nouveau commerçant…",
   "account_archived": "N'est plus utilisée",
   "account_archived_desc": "Conservée pour les enregistrements qui la nomment et toujours comptée par le budget de son compte, mais plus proposée au choix d'une carte.",
-  "pending_captures": "%d capture en attente de réponse",
+  "pending_captures": "%d capture en attente de réponse…",
   "origin_proved": "lu dans le document",
   "origin_matched": "reconnu dans vos listes",
   "origin_answered": "répondu par l'IA",
-  "origin_legend": "👁 lu · ☑ reconnu · ✨ répondu par l'IA"
+  "origin_legend": "👁 lu · ☑ reconnu · ✨ répondu par l'IA",
+  "pending_captures_title": "En attente d'une réponse",
+  "pending_captures_empty": "Rien n'est en attente.",
+  "pending_captures_retry": "Réessayer maintenant",
+  "pending_capture_attempts": "tentative %d",
+  "pending_task_expense_parse": "Dépense dictée",
+  "pending_task_scan": "Reçu scanné",
+  "pending_task_notification": "Notification de paiement",
+  "pending_task_dedup": "Vérification des doublons",
+  "pending_task_categories": "Fusion de catégories",
+  "pending_task_other": "Capture"
 }
