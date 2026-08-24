@@ -37,6 +37,24 @@ interface PendingLlmRequestDao {
     @Query("SELECT COUNT(*) FROM pending_llm_requests")
     fun observeCount(): Flow<Int>
 
+    /** How many are still to be retried — a row that has spent its budget is not waiting for
+     *  anything, and counting it says work is in progress when none is. */
+    @Query("SELECT COUNT(*) FROM pending_llm_requests WHERE attemptCount < :maxAttempts")
+    fun observeLiveCount(maxAttempts: Int): Flow<Int>
+
+    /** Gives a row its budget back, so a person who says "try it now" is asking for something that
+     *  can actually happen. */
+    @Query("UPDATE pending_llm_requests SET attemptCount = 0, lastAttemptAt = 0 WHERE requestId = :requestId")
+    suspend fun resetAttempts(requestId: String)
+
+    @Query("UPDATE pending_llm_requests SET attemptCount = 0, lastAttemptAt = 0")
+    suspend fun resetAllAttempts()
+
+    /** Drops the ones the app gave up on. Nothing is lost that could still arrive — a row past its
+     *  budget is never re-sent — and what it holds is a prompt, not a record. */
+    @Query("DELETE FROM pending_llm_requests WHERE attemptCount >= :maxAttempts")
+    suspend fun deleteExhausted(maxAttempts: Int)
+
     /** The waiting captures themselves, newest first — for a screen that shows what they are rather
      *  than only how many. */
     @Query("SELECT * FROM pending_llm_requests ORDER BY createdAt DESC")

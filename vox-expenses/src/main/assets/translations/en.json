@@ -705,5 +705,15 @@
   "pending_task_notification": "Payment notification",
   "pending_task_dedup": "Duplicate check",
   "pending_task_categories": "Category merge",
-  "pending_task_other": "Capture"
+  "pending_task_other": "Capture",
+  "pending_captures_given_up": "%d the app gave up on",
+  "pending_captures_given_up_desc": "Re-sent until the retry budget ran out and never answered. They will not be tried again on their own.",
+  "pending_captures_forget": "Forget these",
+  "attention_strip": "%d things need you…",
+  "attention_title": "Waiting for you",
+  "attention_incomplete": "Records missing something",
+  "attention_staged": "Captures to review",
+  "attention_rules": "Rules waiting to be approved",
+  "attention_queued": "Captures waiting for an answer",
+  "attention_filter": "Needs you"
 }

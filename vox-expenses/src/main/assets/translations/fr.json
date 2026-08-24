@@ -705,5 +705,15 @@
   "pending_task_notification": "Notification de paiement",
   "pending_task_dedup": "Vérification des doublons",
   "pending_task_categories": "Fusion de catégories",
-  "pending_task_other": "Capture"
+  "pending_task_other": "Capture",
+  "pending_captures_given_up": "%d que l'application a abandonnées",
+  "pending_captures_given_up_desc": "Renvoyées jusqu'à épuisement du budget de tentatives, sans réponse. Elles ne seront plus retentées d'elles-mêmes.",
+  "pending_captures_forget": "Les oublier",
+  "attention_strip": "%d choses vous attendent…",
+  "attention_title": "En attente de vous",
+  "attention_incomplete": "Enregistrements auxquels il manque quelque chose",
+  "attention_staged": "Captures à relire",
+  "attention_rules": "Règles en attente d'approbation",
+  "attention_queued": "Captures en attente de réponse",
+  "attention_filter": "Vous attend"
 }

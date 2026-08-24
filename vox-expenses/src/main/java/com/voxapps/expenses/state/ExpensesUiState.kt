@@ -35,6 +35,8 @@ sealed interface ExpensesUiState {
         val selectedAccountId: Long? = null,
         val selectedCardId: Long? = null,
         val selectedCurrency: String? = null,
+        /** Narrowed to records with something missing — see [com.voxapps.expenses.domain.health.ExpenseGaps]. */
+        val onlyNeedsAttention: Boolean = false,
         val bankAccounts: List<BankAccount> = emptyList(),
         val availableCurrencies: List<String> = emptyList(),
         val availableBanks: List<String> = emptyList(),

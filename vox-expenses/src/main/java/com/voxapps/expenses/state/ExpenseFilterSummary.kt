@@ -26,10 +26,13 @@ object ExpenseFilterSummary {
         dateFrom: Long?,
         dateTo: Long?,
         sort: SortMode,
+        /** The narrowing to records with something missing, named so it can be seen and undone. */
+        needsAttentionLabel: String? = null,
         formatDate: (Long) -> String,
         formatAmount: (Double) -> String,
         sortLabel: (SortMode) -> String
     ): List<String?> = listOf(
+        needsAttentionLabel?.takeIf { it.isNotBlank() },
         category?.takeIf { it.isNotBlank() },
         bank?.text?.takeIf { it.isNotBlank() },
         vendor?.text?.takeIf { it.isNotBlank() },
@@ -83,8 +86,9 @@ object ExpenseFilterSummary {
         currency: String?,
         dateFrom: Long?,
         dateTo: Long?,
-        sort: SortMode
-    ): Boolean = category != null || bank != null || vendor != null || location != null ||
+        sort: SortMode,
+        needsAttention: Boolean = false
+    ): Boolean = needsAttention || category != null || bank != null || vendor != null || location != null ||
         amount != null || accountId != null || currency != null ||
         dateFrom != null || dateTo != null || sort != SortMode.NEWEST
 }

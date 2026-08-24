@@ -19,6 +19,7 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.onboarding.ExpensesOnboardingFlow
+import com.voxapps.expenses.ui.settings.SettingsPage
 import com.voxapps.expenses.ui.settings.SettingsScreen
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -69,6 +70,7 @@ fun ExpensesRoot(
             } else {
                 val ui by container.expensesStateManager.uiState.collectAsStateWithLifecycle()
                 var showSettings by remember { mutableStateOf(false) }
+                var settingsStartPage by remember { mutableStateOf<SettingsPage?>(null) }
                 var showReports by remember { mutableStateOf(false) }
                 var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
@@ -145,7 +147,8 @@ fun ExpensesRoot(
                                 stateManager = container.expensesStateManager,
                                 settingsRepo = container.settingsRepository,
                                 exchangeRateRepository = container.exchangeRateRepository,
-                                onBack = { showSettings = false }
+                                onBack = { showSettings = false; settingsStartPage = null },
+                                startPage = settingsStartPage
                             )
                             showReports -> ReportsScreen(
                                 expenses = state.expenses,
@@ -163,6 +166,7 @@ fun ExpensesRoot(
                                 onAddExpense = { editTarget = EditTarget.New },
                                 onEditExpense = { editTarget = EditTarget.Existing(it) },
                                 onOpenSettings = { showSettings = true },
+                                onOpenSettingsAt = { page -> settingsStartPage = page; showSettings = true },
                                 onOpenReports = { showReports = true },
                                 todayEffect = settings.todayEffect.toEnumOr(TodayEffect.NONE),
                                 todayEffectStyle = settings.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),

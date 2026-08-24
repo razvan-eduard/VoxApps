@@ -44,7 +44,7 @@ fun ExpenseFilterBar(
     val filtersActive = ExpenseFilterSummary.anyActive(
         state.selectedCategoryId, state.selectedBank, state.selectedVendor, state.selectedLocation,
         state.selectedAmount, narrowedTo, state.selectedCurrency,
-        state.dateFrom, state.dateTo, state.sort
+        state.dateFrom, state.dateTo, state.sort, state.onlyNeedsAttention
     )
 
     Row(
@@ -64,6 +64,8 @@ fun ExpenseFilterBar(
                     dateFrom = state.dateFrom,
                     dateTo = state.dateTo,
                     sort = state.sort,
+                    needsAttentionLabel = languageManager.getString("attention_filter")
+                        .takeIf { state.onlyNeedsAttention },
                     formatDate = { dateFormat.format(Date(it)) },
                     formatAmount = { formatAmountPlain(it) },
                     sortLabel = { languageManager.getString(sortKeyOf(it)) }

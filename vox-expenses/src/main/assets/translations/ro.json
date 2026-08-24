@@ -705,5 +705,15 @@
   "pending_task_notification": "Notificare de plată",
   "pending_task_dedup": "Verificare de duplicate",
   "pending_task_categories": "Unificare de categorii",
-  "pending_task_other": "Captură"
+  "pending_task_other": "Captură",
+  "pending_captures_given_up": "%d la care aplicația a renunțat",
+  "pending_captures_given_up_desc": "Retrimise până s-a terminat bugetul de reîncercări și fără niciun răspuns. Nu vor mai fi încercate de la sine.",
+  "pending_captures_forget": "Uită-le",
+  "attention_strip": "%d lucruri te așteaptă…",
+  "attention_title": "Te așteaptă",
+  "attention_incomplete": "Înregistrări cărora le lipsește ceva",
+  "attention_staged": "Capturi de revizuit",
+  "attention_rules": "Reguli care așteaptă aprobarea",
+  "attention_queued": "Capturi care așteaptă un răspuns",
+  "attention_filter": "Te așteaptă"
 }

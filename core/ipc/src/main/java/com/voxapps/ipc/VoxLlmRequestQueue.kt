@@ -142,6 +142,25 @@ class VoxLlmRequestQueue(
         }
     }
 
+    /**
+     * Re-sends everything now, including what the app had given up on.
+     *
+     * A person pressing this is telling the app that whatever was wrong — no engine installed, no
+     * signal, a Commander that was not running — is no longer wrong, which is a reason to try that
+     * the retry budget knows nothing about. So the budget is returned first, and then the same
+     * dispatch the worker uses runs with no staleness window at all.
+     */
+    suspend fun retryEverythingNow(context: Context, maxAttempts: Int = DEFAULT_MAX_ATTEMPTS) {
+        dao.resetAllAttempts()
+        retryStale(context, staleAfterMillis = 0L, maxAttempts = maxAttempts)
+    }
+
+    /** Forgets the rows the budget has run out on — see [PendingLlmRequestDao.deleteExhausted]. */
+    suspend fun forgetGivenUp(maxAttempts: Int = DEFAULT_MAX_ATTEMPTS) = dao.deleteExhausted(maxAttempts)
+
+    /** Forgets one, whatever state it is in. */
+    suspend fun forget(requestId: String) = dao.deleteByRequestId(requestId)
+
     companion object {
         /** How long a row may sit unanswered before the periodic worker re-dispatches it. */
         val DEFAULT_STALE_AFTER_MILLIS: Long = java.util.concurrent.TimeUnit.MINUTES.toMillis(5)

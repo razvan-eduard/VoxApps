@@ -69,7 +69,7 @@ import com.voxapps.logging.ui.LogViewerStrings
 import com.voxapps.design.settings.LogsSettingsTab
 import com.voxapps.design.settings.LogsTabStrings
 
-private enum class SettingsPage {
+enum class SettingsPage {
     MENU, GENERAL, SCANNING, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP,
     CLEANUP_DUPLICATES, CLEANUP_CORRECTIONS, CLEANUP_REMAP, CLEANUP_TEMPLATES,
     CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, RECURRING, BACKUP, LOGS
@@ -90,7 +90,10 @@ fun SettingsScreen(
     stateManager: ExpensesStateManager,
     settingsRepo: ExpensesSettingsRepository,
     exchangeRateRepository: ExchangeRateRepository,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** Where to land. Null opens the menu, which is what every ordinary way in wants; a line saying
+     *  "3 rules waiting" wants the rules, not a menu with the rules somewhere in it. */
+    startPage: SettingsPage? = null
 ) {
     val context = LocalContext.current
     val languageManager = LocalLanguageManager.current
@@ -103,7 +106,7 @@ fun SettingsScreen(
     val accountBudgets by stateManager.accountBudgets.collectAsStateWithLifecycle(initialValue = emptyList())
     val recurringPayments by stateManager.recurringPayments.collectAsStateWithLifecycle(initialValue = emptyList())
 
-    var page by remember { mutableStateOf(SettingsPage.MENU) }
+    var page by remember { mutableStateOf(startPage ?: SettingsPage.MENU) }
 
     val ringtonePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
