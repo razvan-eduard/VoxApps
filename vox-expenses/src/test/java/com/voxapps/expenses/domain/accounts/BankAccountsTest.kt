@@ -175,6 +175,32 @@ class BankAccountsTest {
         assertEquals(1L, BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.CARD_TAIL, listOf(account, card))?.id)
     }
 
+    // --- a card that was replaced ---
+
+    /**
+     * The old card keeps its records and its identity. What changes is that nothing offers it any
+     * more, and that the bank it belonged to counts as having one account rather than two.
+     */
+    @Test
+    fun `an archived account is not the bank's account a new card is filed under`() {
+        val retired = account("RO49AAAA1B31007593840000", kind = AccountIdentifiers.Kind.IBAN)
+            .copy(id = 1L, bankName = "ING", archived = true)
+        val current = retired.copy(id = 2L, digits = "RO49AAAA1B31007593840001", archived = false)
+
+        assertEquals(2L, BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.CARD_TAIL, listOf(retired, current))?.id)
+        // With only the retired one, a new card is left where it landed rather than filed under it.
+        assertNull(BankAccounts.soleAccountOf("ING", AccountIdentifiers.Kind.CARD_TAIL, listOf(retired)))
+    }
+
+    /** Identity is identity: a message naming a retired card belongs to that card, not to a second
+     *  row with the same digits. */
+    @Test
+    fun `a message still resolves to an archived card`() {
+        val old = account("4535").copy(id = 3L, archived = true)
+        val outcome = BankAccounts.resolve("Paid with card ••4535", listOf(old))
+        assertEquals(3L, (outcome as BankAccounts.Outcome.Known).account.id)
+    }
+
     // --- how an account names itself ---
 
     @Test

@@ -64,7 +64,12 @@ fun AccountBudgetsSection(
     val languageManager = LocalLanguageManager.current
     // Only the rows money lives in. A card nested under an account spends the account's budget, so
     // it has none of its own to show — see AccountBudget.
-    val holders = remember(accounts) { BankAccountTree.rootsOf(accounts) }
+    // Retired accounts keep whatever budget they had — the records under them are still counted —
+    // but nothing new is set up on an account nobody uses.
+    val holders = remember(accounts, budgets) {
+        BankAccountTree.rootsOf(accounts)
+            .filter { !it.archived || budgets.any { budget -> budget.accountId == it.id } }
+    }
     var addingFor by remember { mutableStateOf<Long?>(null) }
 
     SettingsSectionCard(languageManager.getString("budgets_title"), modifier = modifier) {

@@ -688,5 +688,7 @@
   "account_bank_name": "Banque",
   "account_bank_new": "Nouvelle banque…",
   "account_belongs_to_new": "Nouveau compte…",
-  "expense_vendor_new": "Nouveau commerçant…"
+  "expense_vendor_new": "Nouveau commerçant…",
+  "account_archived": "N'est plus utilisée",
+  "account_archived_desc": "Conservée pour les enregistrements qui la nomment et toujours comptée par le budget de son compte, mais plus proposée au choix d'une carte."
 }

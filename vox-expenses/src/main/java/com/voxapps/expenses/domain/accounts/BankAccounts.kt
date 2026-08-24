@@ -94,7 +94,9 @@ object BankAccounts {
         if (kind == AccountIdentifiers.Kind.IBAN) return null
         val bank = bankName?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
         return existing
-            .filter { it.parentId == null && it.bankName?.trim()?.lowercase() == bank }
+            // An archived account is not one of the bank's accounts for this purpose: two rows where
+            // one is retired is still one place a new card can belong.
+            .filter { !it.archived && it.parentId == null && it.bankName?.trim()?.lowercase() == bank }
             .singleOrNull()
     }
 

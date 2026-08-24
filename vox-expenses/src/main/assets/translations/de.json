@@ -688,5 +688,7 @@
   "account_bank_name": "Bank",
   "account_bank_new": "Neue Bank…",
   "account_belongs_to_new": "Neues Konto…",
-  "expense_vendor_new": "Neues Geschäft…"
+  "expense_vendor_new": "Neues Geschäft…",
+  "account_archived": "Nicht mehr in Gebrauch",
+  "account_archived_desc": "Bleibt für die Einträge erhalten, die ihn nennen, und zählt weiter zum Budget seines Kontos, wird aber bei der Kartenauswahl nicht mehr angeboten."
 }

@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -238,11 +239,12 @@ private fun AccountRow(entry: BankAccountTree.Entry, onEdit: () -> Unit, onDelet
         ) {
             Text(account.icon ?: "＋", fontSize = if (account.icon != null) 17.sp else 13.sp)
         }
-        Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+        Column(modifier = Modifier.weight(1f).padding(start = 8.dp).alpha(if (account.archived) 0.5f else 1f)) {
             Text(account.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             val beneath = listOfNotNull(
                 account.currencyCode.takeIf { it.isNotBlank() },
-                account.bankName?.takeIf { it.isNotBlank() }
+                account.bankName?.takeIf { it.isNotBlank() },
+                languageManager.getString("account_archived").takeIf { account.archived }
             ).joinToString(" · ")
             if (beneath.isNotEmpty()) {
                 Text(
@@ -277,6 +279,7 @@ private fun AccountEditDialog(
     val languageManager = LocalLanguageManager.current
     var label by remember(account.id) { mutableStateOf(account.label.orEmpty()) }
     var bankName by remember(account.id) { mutableStateOf(account.bankName.orEmpty()) }
+    var archived by remember(account.id) { mutableStateOf(account.archived) }
     var currency by remember(account.id) { mutableStateOf(account.currencyCode) }
     var icon by remember(account.id) { mutableStateOf(account.icon) }
     var parentId by remember(account.id) { mutableStateOf(account.parentId) }
@@ -346,6 +349,22 @@ private fun AccountEditDialog(
                 // an empty list still offers making one, and the case with nothing to choose from is
                 // exactly the case where that is the answer. A row already holding cards is the one
                 // that cannot — the one-level rule, see BankAccountTree.canParent.
+                // A card that was replaced, or an account that was closed: kept for the records that
+                // name it, and offered nowhere a new one is being chosen.
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            languageManager.getString("account_archived"),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            languageManager.getString("account_archived_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = archived, onCheckedChange = { archived = it })
+                }
                 if (BankAccountTree.childrenOf(account.id, all).isEmpty()) {
                     Text(languageManager.getString("account_belongs_to"), style = MaterialTheme.typography.labelLarge)
                     Picklist(
@@ -371,6 +390,7 @@ private fun AccountEditDialog(
                     account.copy(
                         label = label.trim().takeIf { it.isNotEmpty() },
                         bankName = bankName.trim().takeIf { it.isNotEmpty() },
+                        archived = archived,
                         currencyCode = currency,
                         icon = icon,
                         parentId = parentId

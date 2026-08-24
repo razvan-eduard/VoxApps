@@ -688,5 +688,7 @@
   "account_bank_name": "Bank",
   "account_bank_new": "New bank…",
   "account_belongs_to_new": "New account…",
-  "expense_vendor_new": "New shop…"
+  "expense_vendor_new": "New shop…",
+  "account_archived": "No longer in use",
+  "account_archived_desc": "Kept for the records that name it and still counted by its account's budget, but no longer offered when choosing a card."
 }
