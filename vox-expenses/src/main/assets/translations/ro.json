@@ -677,5 +677,13 @@
   "budget_mode_monthly": "Lunar",
   "budget_mode_weekly": "Săptămânal",
   "budget_mode_pot": "Până la realimentare",
-  "budget_topped_up": "Realimentat"
+  "budget_topped_up": "Realimentat",
+  "widget_budget_title": "Bugetul pe ecranul principal",
+  "widget_budget_desc": "Widget-ul poate spune cât a mai rămas de cheltuit. Oprit nu arată absolut nimic — ecranul principal se citește de pe ecranul blocat și peste umăr.",
+  "widget_budget_off": "Oprit",
+  "widget_budget_total": "Total",
+  "widget_budget_selected": "Conturi alese",
+  "widget_budget_none_yet": "Niciun cont nu are buget încă.",
+  "widget_budget_left": "%s rămași",
+  "account_bank_name": "Banca"
 }

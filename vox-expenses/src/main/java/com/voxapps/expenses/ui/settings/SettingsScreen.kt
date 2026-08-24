@@ -397,6 +397,8 @@ fun SettingsScreen(
                     (budgetAccounts.map { it.currencyCode } + settings.homeCurrency + settings.defaultCurrency)
                         .filter { it.isNotBlank() }.distinct().sorted()
                 },
+                widgetBudgetMode = settings.widgetBudgetMode,
+                widgetBudgetAccountIds = settings.widgetBudgetAccountIds,
                 stateManager = stateManager,
                 modifier = mod
             )

@@ -43,6 +43,8 @@ import androidx.glance.unit.ColorProvider
 import com.voxapps.attachments.VisionAttachmentCapture
 import com.voxapps.design.toEnumOr
 import com.voxapps.expenses.ExpensesActivity
+import androidx.compose.runtime.produceState
+import com.voxapps.expenses.domain.budget.BudgetHeadline
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.R
 import com.voxapps.expenses.data.ExpenseWithDetails
@@ -116,10 +118,29 @@ class ExpensesWidget : GlanceAppWidget() {
             val settingsSnapshot by container.settingsRepository.settingsFlow
                 .collectAsState(initial = container.settingsRepository.getSnapshot())
             val locale = Locale.forLanguageTag(settingsSnapshot.language)
+            val budgets by container.expensesRepository.accountBudgets.collectAsState(initial = emptyList())
+            // The tree, because a payment is filed against the card it was made with and comes out
+            // of the account that card reaches.
+            val budgetAccounts by container.expensesRepository.bankAccounts.collectAsState(initial = emptyList())
+            // Rates are fetched, so a mixed-currency total is worked out off the composition and
+            // recomputed when either half changes. A rate that has never been fetched leaves its
+            // budget out rather than adding it as though it were already home currency.
+            val budgetLine by produceState<BudgetHeadline.Line?>(null, budgets, budgetAccounts, allExpenses, settingsSnapshot) {
+                value = BudgetHeadline.of(
+                    settings = settingsSnapshot,
+                    budgets = budgets,
+                    expenses = allExpenses.map { it.expense },
+                    accounts = budgetAccounts,
+                    convert = { amount, from ->
+                        container.exchangeRateRepository.convertToHome(amount, from, settingsSnapshot.homeCurrency)
+                    }
+                )
+            }
             val recentExpenses = if (uiState is ExpensesUiState.Unlocked) allExpenses else emptyList()
 
             GlanceTheme {
                 ExpensesWidgetContent(
+                    budgetLine = budgetLine.takeIf { uiState !is ExpensesUiState.Locked },
                     locked = uiState is ExpensesUiState.Locked,
                     expenses = recentExpenses,
                     attachedExpenseIds = attachedExpenseIds.toSet(),
@@ -184,6 +205,7 @@ private fun ExpensesWidgetContent(
     locked: Boolean,
     expenses: List<ExpenseWithDetails>,
     attachedExpenseIds: Set<Long>,
+    budgetLine: BudgetHeadline.Line?,
     languageManager: LanguageManager,
     addIntent: Intent,
     openAppIntent: Intent,
@@ -213,6 +235,20 @@ private fun ExpensesWidgetContent(
             batchDescription = languageManager.getString("capture_mode_batch")
         )
     ) {
+        // Above the list, because it is the summary the list is of. Absent entirely when the
+        // setting says off — see BudgetHeadline.
+        budgetLine?.let { line ->
+            Text(
+                text = languageManager.getString("widget_budget_left")
+                    .format("%.2f %s".format(line.remaining, line.currency)),
+                style = TextStyle(
+                    color = GlanceTheme.colors.onSurface,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                modifier = GlanceModifier.padding(bottom = 6.dp)
+            )
+        }
         RecentExpensesList(
             expenses, attachedExpenseIds, languageManager, locale, borderEnabled, borderThicknessDp, borderColor,
             todayEffect, todayEffectStyle, todayEffectColor

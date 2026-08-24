@@ -51,6 +51,8 @@ fun SpendingLimitsSettingsTab(
     budgets: List<com.voxapps.expenses.data.AccountBudget>,
     expenses: List<com.voxapps.expenses.data.Expense>,
     knownCurrencies: List<String>,
+    widgetBudgetMode: String,
+    widgetBudgetAccountIds: Set<Long>,
     stateManager: ExpensesStateManager,
     modifier: Modifier = Modifier
 ) {
@@ -71,6 +73,15 @@ fun SpendingLimitsSettingsTab(
             knownCurrencies = knownCurrencies,
             onUpsert = { stateManager.upsertAccountBudget(it) },
             onDelete = { stateManager.deleteAccountBudget(it) }
+        )
+
+        WidgetBudgetHeaderCard(
+            mode = widgetBudgetMode,
+            selectedAccountIds = widgetBudgetAccountIds,
+            accounts = accounts,
+            budgets = budgets,
+            onModeChange = { stateManager.setWidgetBudgetMode(it) },
+            onSelectionChange = { stateManager.setWidgetBudgetAccountIds(it) }
         )
 
         SettingsSectionCard(languageManager.getString("spending_limits_title")) {

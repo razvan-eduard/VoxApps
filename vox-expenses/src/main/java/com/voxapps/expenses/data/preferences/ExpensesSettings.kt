@@ -164,6 +164,17 @@ data class ExpensesSettings(
     val disabledLegalForms: Set<String> = emptySet(),
     val disabledBanks: Set<String> = emptySet(),
     /** Words this device added to, or switched off in, the stop list — see FieldVocabularies. */
+    /**
+     * Whether the widget names what is left to spend, and of what.
+     *
+     * Off by default and off as a real answer, not merely an empty selection: a home screen is read
+     * over shoulders and on a lock screen, and a person who wants their balance private wants it
+     * absent rather than small.
+     */
+    val widgetBudgetMode: String = WIDGET_BUDGET_OFF,
+    /** Which accounts the header counts, when it counts some. Empty with [WIDGET_BUDGET_SELECTED]
+     *  is a header with nothing to say, and says nothing. */
+    val widgetBudgetAccountIds: Set<Long> = emptySet(),
     val customStopWords: Set<String> = emptySet(),
     val disabledStopWords: Set<String> = emptySet(),
 
@@ -351,6 +362,15 @@ data class ExpensesSettings(
          * the whole of what one may be.
          */
         const val ACCOUNT_CURRENCY_FROM_CAPTURE = "@capture"
+
+        /** The widget says nothing about money left. */
+        const val WIDGET_BUDGET_OFF = "OFF"
+
+        /** One figure: every budget, converted into the home currency. */
+        const val WIDGET_BUDGET_TOTAL = "TOTAL"
+
+        /** Only the accounts named in [widgetBudgetAccountIds]. */
+        const val WIDGET_BUDGET_SELECTED = "SELECTED"
 
         const val INTERVAL_OFF = "OFF"
 
