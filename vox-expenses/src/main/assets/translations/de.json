@@ -721,5 +721,7 @@
   "gap_amount": "kein Betrag",
   "gap_name": "kein Name",
   "gap_category": "keine Kategorie",
-  "gap_account": "keine Karte"
+  "gap_account": "keine Karte",
+  "attention_dismiss": "Habe ich gesehen",
+  "attention_dismiss_confirm": "Nichts wird gelöscht — diese zählen nicht mehr mit, alles Neue derselben Art wird wieder gezählt."
 }

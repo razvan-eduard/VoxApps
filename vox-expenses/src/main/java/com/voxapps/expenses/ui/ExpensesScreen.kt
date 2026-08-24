@@ -57,6 +57,9 @@ import com.voxapps.design.settings.VoxPendingStrip
 import com.voxapps.expenses.domain.health.ExpenseGap
 import com.voxapps.expenses.domain.health.ExpenseGaps
 import com.voxapps.expenses.ui.settings.SettingsPage
+import com.voxapps.expenses.data.preferences.AttentionKind
+import com.voxapps.expenses.data.preferences.Dismissals
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.expenses.data.RecurringPayment
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.recurring.PaymentPredictor
@@ -203,45 +206,69 @@ fun ExpensesScreen(
             // Above the list, because it is about something that will land in it.
             // Everything waiting for the person, counted in one line. Each of these already
             // existed somewhere; what was missing was one place that says so.
-            val pending by stateManager.pendingCaptures.collectAsStateWithLifecycle(initialValue = 0)
+            val pendingRows by stateManager.pendingCaptureList
+                .collectAsStateWithLifecycle(initialValue = emptyList())
             val stagedCaptures by stateManager.pendingNotificationExpenses
                 .collectAsStateWithLifecycle(initialValue = emptyList())
             val proposedRules by stateManager.proposedRuleCount.collectAsStateWithLifecycle(initialValue = 0)
-            val incomplete = remember(state.expenses, state.categories, state.bankAccounts) {
+            val seen by stateManager.dismissals.collectAsStateWithLifecycle(initialValue = Dismissals())
+            val incomplete = remember(state.expenses, state.categories, state.bankAccounts, seen) {
                 ExpenseGaps.needingAttention(
                     state.expenses,
                     state.categories.firstOrNull { it.isDefault }?.id,
                     accountsInUse = state.bankAccounts.isNotEmpty()
-                ).size
+                ).count { it.expense.createdAt > seen.incompleteBefore }
+            }
+            // Staged captures carry the moment they were staged as their id.
+            val stagedNew = remember(stagedCaptures, seen) { stagedCaptures.count { it.id > seen.stagedBefore } }
+            // Still to be tried, and not already seen — a row past its budget waits for nothing.
+            val pending = remember(pendingRows, seen) {
+                pendingRows.count {
+                    it.attemptCount < VoxLlmRequestQueue.DEFAULT_MAX_ATTEMPTS && it.createdAt > seen.queuedBefore
+                }
             }
             var showAttention by rememberSaveable { mutableStateOf(false) }
             var showPending by rememberSaveable { mutableStateOf(false) }
 
             VoxPendingStrip(
-                count = incomplete + stagedCaptures.size + proposedRules + pending,
+                count = incomplete + stagedNew + proposedRules + pending,
                 text = { n -> languageManager.getString("attention_strip").format(n) },
-                onClick = { showAttention = true }
+                onClick = { showAttention = true },
+                onClearAll = { stateManager.dismissAllAttention() },
+                clearContentDescription = languageManager.getString("attention_dismiss")
             )
             if (showAttention) {
                 AttentionSheet(
                     items = listOf(
-                        AttentionItem("attention_incomplete", incomplete) {
-                            stateManager.setNeedsAttentionFilter(true)
-                        },
-                        AttentionItem("attention_staged", stagedCaptures.size) {
-                            onOpenSettingsAt(SettingsPage.NOTIFICATION_CAPTURE)
-                        },
-                        AttentionItem("attention_rules", proposedRules) {
-                            onOpenSettingsAt(SettingsPage.CLEANUP_REMAP)
-                        },
-                        AttentionItem("attention_queued", pending) { showPending = true }
+                        AttentionItem(
+                            labelKey = "attention_incomplete",
+                            count = incomplete,
+                            onOpen = { stateManager.setNeedsAttentionFilter(true) },
+                            onDismiss = { stateManager.dismissAttention(AttentionKind.INCOMPLETE) }
+                        ),
+                        AttentionItem(
+                            labelKey = "attention_staged",
+                            count = stagedNew,
+                            onOpen = { onOpenSettingsAt(SettingsPage.NOTIFICATION_CAPTURE) },
+                            onDismiss = { stateManager.dismissAttention(AttentionKind.STAGED) }
+                        ),
+                        AttentionItem(
+                            labelKey = "attention_rules",
+                            count = proposedRules,
+                            onOpen = { onOpenSettingsAt(SettingsPage.CLEANUP_REMAP) },
+                            onDismiss = { stateManager.dismissAttention(AttentionKind.RULES) }
+                        ),
+                        AttentionItem(
+                            labelKey = "attention_queued",
+                            count = pending,
+                            onOpen = { showPending = true },
+                            onDismiss = { stateManager.dismissAttention(AttentionKind.QUEUED) }
+                        )
                     ),
                     onDismiss = { showAttention = false }
                 )
             }
             if (showPending) {
-                val pendingRows by stateManager.pendingCaptureList
-                    .collectAsStateWithLifecycle(initialValue = emptyList())
                 PendingCapturesSheet(
                     entries = pendingRows,
                     onRetryNow = { stateManager.retryPendingCapturesNow(context) },

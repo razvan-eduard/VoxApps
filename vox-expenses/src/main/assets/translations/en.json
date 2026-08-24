@@ -721,5 +721,7 @@
   "gap_amount": "no amount",
   "gap_name": "no name",
   "gap_category": "no category",
-  "gap_account": "no card"
+  "gap_account": "no card",
+  "attention_dismiss": "I have seen these",
+  "attention_dismiss_confirm": "Nothing is deleted — these stop being counted, and anything new of the same kind will be counted again."
 }

@@ -721,5 +721,7 @@
   "gap_amount": "aucun montant",
   "gap_name": "aucun nom",
   "gap_category": "aucune catégorie",
-  "gap_account": "aucune carte"
+  "gap_account": "aucune carte",
+  "attention_dismiss": "Je les ai vues",
+  "attention_dismiss_confirm": "Rien n'est supprimé — celles-ci cessent d'être comptées, et toute nouveauté du même genre le sera à nouveau."
 }

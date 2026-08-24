@@ -857,9 +857,28 @@ class ExpensesStateManager(
         scope.launch { pendingLlmRequestQueue.forget(requestId) }
     }
 
+    private val attentionDismissals = com.voxapps.expenses.data.preferences.AttentionDismissals(appContext)
+
+    /** What has been seen, per kind — see [com.voxapps.expenses.data.preferences.AttentionDismissals]. */
+    val dismissals = attentionDismissals.flow
+
+    /** Marks one kind as seen: everything of it older than now stops being counted, everything that
+     *  arrives afterwards is counted again. */
+    fun dismissAttention(kind: com.voxapps.expenses.data.preferences.AttentionKind) {
+        scope.launch { attentionDismissals.dismiss(kind) }
+    }
+
+    fun dismissAllAttention() {
+        scope.launch { attentionDismissals.dismissAll() }
+    }
+
     /** Drafted rules nobody has approved yet — see [RemapRuleEntity.ORIGIN_PROPOSED]. */
-    val proposedRuleCount: kotlinx.coroutines.flow.Flow<Int> = expensesRepo.observeRemapRules()
-        .map { rules -> rules.count { it.origin == RemapRuleEntity.ORIGIN_PROPOSED && !it.enabled } }
+    val proposedRuleCount: kotlinx.coroutines.flow.Flow<Int> =
+        combine(expensesRepo.observeRemapRules(), attentionDismissals.flow) { rules, seen ->
+            rules.count {
+                it.origin == RemapRuleEntity.ORIGIN_PROPOSED && !it.enabled && it.updatedAt > seen.rulesBefore
+            }
+        }
 
     /** Names this device has actually used — see [ExpensesRepository.banksInUse]. */
     val banksInUse = expensesRepo.banksInUse
