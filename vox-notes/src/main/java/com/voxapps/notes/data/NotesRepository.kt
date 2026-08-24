@@ -1,5 +1,6 @@
 package com.voxapps.notes.data
 
+import com.voxapps.datahygiene.CategoryFallback
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentFileStore
@@ -173,8 +174,28 @@ class NotesRepository(
 
     /** Deleting a category leaves its notes intact — they become uncategorized. */
     suspend fun deleteCategory(category: Category) {
-        noteDao.clearCategory(category.id)
+        // The fallback is never deleted: there has to be somewhere for a note with no opinion to
+        // land, and silently electing a new one would move every future note without saying so.
+        if (category.isDefault) return
+        // The notes outlive the category — see CategoryFallback for why they land on the fallback
+        // rather than on nothing at all.
+        val destination = CategoryFallback.destinationFor(
+            categories = categoryDao.getAll(),
+            deletingId = category.id,
+            idOf = { it.id },
+            isFallback = { it.isDefault }
+        )
+        if (destination != null) noteDao.reassignCategory(category.id, destination.id)
+        else noteDao.clearCategory(category.id)
         categoryDao.delete(category)
+    }
+
+    /** Moves the star, keeping exactly one — the invariant every read of it depends on. */
+    suspend fun setDefaultCategory(categoryId: Long) {
+        categoryDao.getAll().forEach { category ->
+            val shouldBe = category.id == categoryId
+            if (category.isDefault != shouldBe) categoryDao.update(category.copy(isDefault = shouldBe))
+        }
     }
 
     /**

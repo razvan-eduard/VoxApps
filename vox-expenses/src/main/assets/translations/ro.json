@@ -64,7 +64,7 @@
   "delete_attachment_group_title": "Ștergi tot acest grup?",
   "delete_attachment_group_message": "Toate fotografiile din acest grup vor fi eliminate.",
   "delete_category_title": "Ștergi categoria?",
-  "delete_category_message": "Cheltuielile din această categorie vor rămâne necategorisite. Cheltuielile în sine nu sunt șterse.",
+  "delete_category_message": "Cheltuielile din această categorie trec în categoria principală. Cheltuielile în sine nu sunt șterse.",
   "cleanup_confirm_title": "Curățăm înainte de salvare?",
   "cleanup_confirm_message": "Următoarele câmpuri conțin doar simboluri sau textul \"null\":",
   "auto_clean": "Curățare automată",

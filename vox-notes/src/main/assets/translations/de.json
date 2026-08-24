@@ -128,7 +128,7 @@
   "debug_section": "Debug",
   "add_test_data": "Testdaten hinzufügen",
   "continue_button": "Weiter",
-  "delete_category_message": "Notizen in dieser Kategorie werden unkategorisiert. Die Notizen selbst werden nicht gelöscht.",
+  "delete_category_message": "Notizen in dieser Kategorie wechseln in die Hauptkategorie. Die Notizen selbst werden nicht gelöscht.",
   "delete_category_title": "Kategorie löschen?",
   "delete_note_message": "Diese Notiz wird dauerhaft gelöscht.",
   "delete_note_title": "Notiz löschen?",
@@ -211,5 +211,7 @@
   "flow_send_everything": "Alles",
   "flow_send_everything_desc_notes": "Der Text wird bereinigt, Titel und Kategorie werden gewählt.",
   "notes_fill_head": "Titel und Kategorie automatisch ausfüllen",
-  "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben."
+  "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben.",
+  "default_category_suffix": "Haupt",
+  "set_default_category": "Zur Hauptkategorie machen"
 }

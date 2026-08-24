@@ -267,6 +267,8 @@ class NotesStateManager(
 
     fun updateCategory(category: Category) { scope.launch { notesRepo.updateCategory(category) } }
 
+    fun setDefaultCategory(categoryId: Long) { scope.launch { notesRepo.setDefaultCategory(categoryId) } }
+
     fun removeCategory(category: Category) {
         scope.launch {
             notesRepo.deleteCategory(category)

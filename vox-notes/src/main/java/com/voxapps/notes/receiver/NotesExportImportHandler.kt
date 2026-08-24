@@ -91,6 +91,13 @@ class NotesExportImportHandler(
         )
         val importedIdToLocalId = merge.idMap
         val categoriesCreated = merge.created
+        // Which category is the fallback is a property of the set rather than of one row, so it is
+        // restored after the merge, onto whichever local row the imported one turned out to be.
+        (0 until importedCategories.length())
+            .map { importedCategories.getJSONObject(it) }
+            .firstOrNull { it.optBoolean("isDefault") }
+            ?.let { importedIdToLocalId[it.optLong("id")] }
+            ?.let { notesRepo.setDefaultCategory(it) }
 
         var notesCreated = 0
         if (root.has("notes")) {
@@ -160,5 +167,6 @@ private fun Category.toJson(): JSONObject = JSONObject().apply {
     put("colorArgb", colorArgb)
     put("position", position)
     put("createdAt", createdAt)
+    put("isDefault", isDefault)
 }
 

@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,30 +61,34 @@ data class VoxCategoryFieldStrings(
 fun VoxCategoryFields(
     name: String,
     onNameChange: (String) -> Unit,
-    icon: String?,
-    onIconChange: (String?) -> Unit,
     color: Long,
     onColorChange: (Long) -> Unit,
     strings: VoxCategoryFieldStrings,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icon: String? = null,
+    /** Null draws no icon slot at all — for an app whose categories have nothing to mark them
+     *  with. An empty slot would promise a field that has nowhere to be stored. */
+    onIconChange: ((String?) -> Unit)? = null
 ) {
     var pickingIcon by remember { mutableStateOf(false) }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Offered whether or not one is set: a slot that only appears once something is in it is
-            // a slot nothing can be put into.
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { pickingIcon = true },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(icon ?: "＋", fontSize = if (icon != null) 22.sp else 15.sp)
+            if (onIconChange != null) {
+                // Offered whether or not one is set: a slot that only appears once something is in
+                // it is a slot nothing can be put into.
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { pickingIcon = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(icon ?: "＋", fontSize = if (icon != null) 22.sp else 15.sp)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
             }
-            Spacer(modifier = Modifier.width(8.dp))
             OutlinedTextField(
                 value = name,
                 onValueChange = onNameChange,
@@ -104,7 +110,7 @@ fun VoxCategoryFields(
         )
     }
 
-    if (pickingIcon) {
+    if (pickingIcon && onIconChange != null) {
         VoxIconPickerDialog(
             title = strings.iconTitle,
             selected = icon,
@@ -115,5 +121,43 @@ fun VoxCategoryFields(
             confirmLabel = strings.save,
             cancelLabel = strings.cancel
         )
+    }
+}
+
+/**
+ * The fields plus the two answers that end an edit — the whole of creating or changing a category.
+ *
+ * Every place a category can be authored ends the same way, so the buttons belong with the fields
+ * rather than being rebuilt around them; a screen that grows a slot should not also have to be told
+ * where Save went.
+ */
+@Composable
+fun VoxCategoryEditCard(
+    name: String,
+    onNameChange: (String) -> Unit,
+    color: Long,
+    onColorChange: (Long) -> Unit,
+    strings: VoxCategoryFieldStrings,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: String? = null,
+    onIconChange: ((String?) -> Unit)? = null
+) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        VoxCategoryFields(
+            name = name,
+            onNameChange = onNameChange,
+            color = color,
+            onColorChange = onColorChange,
+            strings = strings,
+            icon = icon,
+            onIconChange = onIconChange
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // A category with no name is not a category, so the way out of an empty one is Cancel.
+            Button(onClick = onSave, enabled = name.isNotBlank()) { Text(strings.save) }
+            OutlinedButton(onClick = onCancel) { Text(strings.cancel) }
+        }
     }
 }
