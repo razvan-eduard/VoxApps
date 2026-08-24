@@ -666,5 +666,16 @@
   "vocabulary_stop_title": "Ne jamais capturer",
   "vocabulary_stop_desc": "Un message contenant l'un de ces mots n'est pas lu du tout — aucune dépense, aucune entrée à relire, rien d'envoyé nulle part. Pour les refus, les annulations et tout ce qui n'est pas un paiement. La notification elle-même reste affichée.",
   "default_account_currency_desc": "Une carte ou un compte créé depuis une capture démarre dans cette devise. Laissé vide, il suit la devise de l'application.",
-  "account_currency_from_capture": "Depuis la capture"
+  "account_currency_from_capture": "Depuis la capture",
+  "budget_and_limits_title": "Budget et plafonds de dépenses",
+  "budgets_title": "Budgets",
+  "budgets_desc": "Ce qu'il reste à dépenser sur un compte, dans chaque devise qu'il détient. Les cartes rattachées à un compte puisent dans son budget. Aucun total courant n'est conservé — ce qui reste est compté depuis vos enregistrements à chaque affichage.",
+  "budgets_no_accounts": "Aucune carte ni compte pour l'instant. Il en apparaît un dès qu'une capture le nomme, ou ajoutez-le depuis « Depuis les notifications ».",
+  "budget_add": "Ajouter un budget",
+  "budget_amount_label": "Montant",
+  "budget_of_amount": "sur %s",
+  "budget_mode_monthly": "Mensuel",
+  "budget_mode_weekly": "Hebdomadaire",
+  "budget_mode_pot": "Jusqu'à recharge",
+  "budget_topped_up": "Rechargé"
 }

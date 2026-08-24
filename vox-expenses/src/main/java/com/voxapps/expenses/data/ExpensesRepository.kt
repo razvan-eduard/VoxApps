@@ -90,6 +90,7 @@ class ExpensesRepository(
      *  it only counts, and only a person turns a count into an arrangement. */
     private val recurringPayments: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository? = null,
     private val bankAccountDao: BankAccountDao? = null,
+    private val accountBudgetDao: AccountBudgetDao? = null,
     /**
      * Told when rules that asked to be heard recognised a newly captured record.
      *
@@ -196,6 +197,30 @@ class ExpensesRepository(
         expenseDao.observeExpensesWithDetails().distinctUntilChanged()
     val categories: Flow<List<Category>> = categoryDao.observeAll().distinctUntilChanged()
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll().distinctUntilChanged()
+
+    // --- what there is left to spend, per account and currency (see AccountBudget) ---
+
+    val accountBudgets: Flow<List<AccountBudget>> =
+        accountBudgetDao?.observeAll()?.distinctUntilChanged() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    suspend fun upsertAccountBudget(budget: AccountBudget) {
+        accountBudgetDao?.upsert(budget)
+    }
+
+    suspend fun deleteAccountBudget(budget: AccountBudget) {
+        accountBudgetDao?.delete(budget)
+    }
+
+    /**
+     * Believes a statement: from this moment, what is left is this, and only records newer than it
+     * count against it. See [AccountBudget.reconciledAt].
+     */
+    suspend fun reconcileAccountBudget(accountId: Long, currencyCode: String, remaining: Double, atMillis: Long) {
+        val dao = accountBudgetDao ?: return
+        val budget = dao.forAccount(accountId, currencyCode) ?: return
+        dao.update(budget.copy(reconciledAt = atMillis, reconciledRemaining = remaining))
+        Logger.d(TAG_ACCOUNTS, "Budget ${budget.id} believed a statement of $remaining $currencyCode")
+    }
 
     /**
      * Where a proposal goes. Set once by the container rather than injected, because the target this

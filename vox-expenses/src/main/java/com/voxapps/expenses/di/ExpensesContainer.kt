@@ -48,6 +48,7 @@ class ExpensesContainer(context: Context) {
         database.recurringPaymentDao()
     )
     val bankAccountDao = database.bankAccountDao()
+    val accountBudgetDao = database.accountBudgetDao()
 
     val expensesRepository = ExpensesRepository(
         database.expenseDao(),
@@ -62,6 +63,7 @@ class ExpensesContainer(context: Context) {
         fieldCorrectionMemory,
         recurringPaymentRepository,
         bankAccountDao,
+        accountBudgetDao,
         onRuleAlerts = { alerts ->
             RuleAlertNotifier.notify(appContext, languageManager, settingsRepository.getSnapshot(), alerts)
         }
