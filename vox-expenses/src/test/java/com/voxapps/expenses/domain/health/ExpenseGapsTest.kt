@@ -103,4 +103,17 @@ class ExpenseGapsTest {
         val records = listOf(record(), record(categoryId = null), record(amount = 0.0))
         assertEquals(2, ExpenseGaps.needingAttention(records, fallbackCategory).size)
     }
+
+    /**
+     * A device that keeps no cards is not asked which card a payment was on.
+     *
+     * Otherwise every captured record is named for missing something the person never switched on,
+     * and a list that can never be emptied is a list nobody reads.
+     */
+    @Test
+    fun `no card is asked for where no cards are kept`() {
+        val capture = record(accountId = null, source = ExpenseSource.NOTIFICATION)
+        assertTrue(ExpenseGap.NO_ACCOUNT in ExpenseGaps.of(capture, fallbackCategory, accountsInUse = true))
+        assertEquals(emptySet<ExpenseGap>(), ExpenseGaps.of(capture, fallbackCategory, accountsInUse = false))
+    }
 }

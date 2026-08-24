@@ -715,5 +715,11 @@
   "attention_staged": "Captures to review",
   "attention_rules": "Rules waiting to be approved",
   "attention_queued": "Captures waiting for an answer",
-  "attention_filter": "Needs you"
+  "attention_filter": "Needs you",
+  "gap_unread": "never read",
+  "gap_totals": "rows do not add up",
+  "gap_amount": "no amount",
+  "gap_name": "no name",
+  "gap_category": "no category",
+  "gap_account": "no card"
 }

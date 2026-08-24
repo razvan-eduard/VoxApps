@@ -40,7 +40,18 @@ enum class ExpenseGap {
  */
 object ExpenseGaps {
 
-    fun of(record: ExpenseWithDetails, fallbackCategoryId: Long?): Set<ExpenseGap> {
+    fun of(
+        record: ExpenseWithDetails,
+        fallbackCategoryId: Long?,
+        /**
+         * Whether this device tracks cards and accounts at all.
+         *
+         * Asking "which card was this?" only means something where cards are kept. With none on the
+         * device, every captured record would be named for missing one — a list that can never be
+         * emptied, about a feature nobody switched on.
+         */
+        accountsInUse: Boolean = true
+    ): Set<ExpenseGap> {
         val expense = record.expense
         // Seen by a person, and left as it is. That is an answer, not an omission.
         if (expense.manuallyEdited) return emptySet()
@@ -62,13 +73,15 @@ object ExpenseGaps {
             // A capture read a message or a page that named a card; a typed record never had one to
             // lose. Asking a person to attach an account to their own cash is asking for a fiction.
             val captured = expense.source == ExpenseSource.NOTIFICATION || expense.source == ExpenseSource.SCAN
-            if (captured && expense.bankAccountId == null) add(ExpenseGap.NO_ACCOUNT)
+            if (accountsInUse && captured && expense.bankAccountId == null) add(ExpenseGap.NO_ACCOUNT)
         }
     }
 
     /** Every record with anything missing — what a "needs you" list counts. */
     fun needingAttention(
         records: List<ExpenseWithDetails>,
-        fallbackCategoryId: Long?
-    ): List<ExpenseWithDetails> = records.filter { of(it, fallbackCategoryId).isNotEmpty() }
+        fallbackCategoryId: Long?,
+        accountsInUse: Boolean = true
+    ): List<ExpenseWithDetails> =
+        records.filter { of(it, fallbackCategoryId, accountsInUse).isNotEmpty() }
 }

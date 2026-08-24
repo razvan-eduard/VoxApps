@@ -54,6 +54,7 @@ import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.design.settings.VoxPendingStrip
+import com.voxapps.expenses.domain.health.ExpenseGap
 import com.voxapps.expenses.domain.health.ExpenseGaps
 import com.voxapps.expenses.ui.settings.SettingsPage
 import com.voxapps.expenses.data.RecurringPayment
@@ -206,10 +207,11 @@ fun ExpensesScreen(
             val stagedCaptures by stateManager.pendingNotificationExpenses
                 .collectAsStateWithLifecycle(initialValue = emptyList())
             val proposedRules by stateManager.proposedRuleCount.collectAsStateWithLifecycle(initialValue = 0)
-            val incomplete = remember(state.expenses, state.categories) {
+            val incomplete = remember(state.expenses, state.categories, state.bankAccounts) {
                 ExpenseGaps.needingAttention(
                     state.expenses,
-                    state.categories.firstOrNull { it.isDefault }?.id
+                    state.categories.firstOrNull { it.isDefault }?.id,
+                    accountsInUse = state.bankAccounts.isNotEmpty()
                 ).size
             }
             var showAttention by rememberSaveable { mutableStateOf(false) }
@@ -296,7 +298,17 @@ fun ExpensesScreen(
                         ExpenseCard(
                             expenseWithDetails = ewd,
                             onClick = { onEditExpense(ewd) },
-                            recurring = RecurringPayment.vendorKeyOf(ewd.expense.vendor) in confirmedVendorKeys
+                            recurring = RecurringPayment.vendorKeyOf(ewd.expense.vendor) in confirmedVendorKeys,
+                            // Only while the list is narrowed to them: on the ordinary list this
+                            // would be a red line on half the rows, which is not information.
+                            missing = if (!state.onlyNeedsAttention) null else {
+                                ExpenseGaps.of(
+                                    ewd,
+                                    state.categories.firstOrNull { it.isDefault }?.id,
+                                    accountsInUse = state.bankAccounts.isNotEmpty()
+                                ).takeIf { it.isNotEmpty() }
+                                    ?.joinToString(" · ") { languageManager.getString(gapLabelKey(it)) }
+                            }
                         )
                     }
                 }
@@ -304,4 +316,14 @@ fun ExpensesScreen(
         }
     }
 
+}
+
+/** What each missing thing is called on screen. */
+private fun gapLabelKey(gap: ExpenseGap): String = when (gap) {
+    ExpenseGap.UNREAD -> "gap_unread"
+    ExpenseGap.TOTALS_DISAGREE -> "gap_totals"
+    ExpenseGap.NO_AMOUNT -> "gap_amount"
+    ExpenseGap.NO_NAME -> "gap_name"
+    ExpenseGap.NO_CATEGORY -> "gap_category"
+    ExpenseGap.NO_ACCOUNT -> "gap_account"
 }
