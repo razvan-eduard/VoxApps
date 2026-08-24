@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.datahygiene.RemapCondition
 import com.voxapps.textmatch.extract.AccountIdentifiers
 import com.voxapps.expenses.domain.accounts.BankAccounts
 import android.content.Context
@@ -9,7 +10,9 @@ import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.datahygiene.DuplicateChecker
+import com.voxapps.datahygiene.CategoryFallback
 import com.voxapps.datahygiene.RemapValueKey
+import com.voxapps.expenses.domain.rules.RuleAlert
 import com.voxapps.datahygiene.RuleBasedDuplicateChecker
 import com.voxapps.datahygiene.RuleCombinator
 import com.voxapps.datahygiene.findDuplicate
@@ -86,7 +89,15 @@ class ExpensesRepository(
     /** Notices that payments to a vendor keep coming back. Nothing it records changes this record;
      *  it only counts, and only a person turns a count into an arrangement. */
     private val recurringPayments: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository? = null,
-    private val bankAccountDao: BankAccountDao? = null
+    private val bankAccountDao: BankAccountDao? = null,
+    /**
+     * Told when rules that asked to be heard recognised a newly captured record.
+     *
+     * Injected rather than called directly: that a rule fired is this class's business, that it
+     * becomes a notification is not, and a repository that posts alerts cannot be tested without a
+     * notification manager.
+     */
+    private val onRuleAlerts: (suspend (List<RuleAlert>) -> Unit)? = null
 ) {
 
     // --- cards and accounts money moved through (see BankAccount) ---
@@ -310,44 +321,89 @@ class ExpensesRepository(
         }
         if (edits.isEmpty()) return
 
-        val now = System.currentTimeMillis()
-        for ((fieldId, edit) in edits) {
-            val before = edit.before ?: continue
-            val beforeKey = RemapValueKey.normalize(before) ?: continue
-            val patternKey = "$fieldId\u0000$beforeKey\u0000${edit.after}"
-            val companions = edits.filterKeys { it != fieldId }.map { (_, c) -> c.setFieldId to c.setValue }.toMap()
-            remapPatternSightingDao.upsert(
-                RemapPatternSighting(
-                    patternKey = patternKey, recordId = new.id, fieldId = fieldId,
-                    beforeText = before, afterText = edit.after,
-                    setFieldId = edit.setFieldId, setValue = edit.setValue,
-                    companionsJson = RemapRuleJson.encode(companions), createdAt = now
-                )
-            )
-            val sightings = remapPatternSightingDao.getForPattern(patternKey)
-            if (sightings.size < threshold) continue
+        // What identifies the record is what the rule triggers on, and that is the merchant.
+        //
+        // A field somebody corrected cannot be the trigger. Changing a category and having the rule
+        // come out as "old category → new category" reads as nonsense because it is: the old
+        // category is what the app guessed, not something true about the spending, and a rule keyed
+        // on a guess fires on every record that guess was ever wrong about. The vendor is the thing
+        // the record IS; everything corrected alongside it is what should follow from it.
+        //
+        // No vendor, no proposal. A capture with nothing to identify it has nothing a later capture
+        // could be recognised by, and a rule that cannot recognise anything is worse than none.
+        // The vendor AS THE CAPTURE CARRIED IT, before anything was corrected — that is what a later
+        // capture of the same shop will arrive with, and therefore the only thing a rule can
+        // recognise it by. Renaming the vendor is then an ordinary set like any other: trigger on
+        // the name that arrives, write the name you use.
+        val vendor = old.expense.vendor?.trim()?.takeUnless { it.isEmpty() } ?: return
+        val triggerValue = RemapValueKey.normalize(vendor) ?: return
+        val setsFromEdits = edits
+        if (setsFromEdits.isEmpty()) return
 
-            val matchJson = RemapRuleJson.encode(mapOf(fieldId to beforeKey))
-            if (remapRuleDao.getByMatch(matchJson) == null) {
-                // Companions survive only when every sighting edited them to the same value.
-                val consistent = sightings
-                    .map { RemapRuleJson.decode(it.companionsJson) }
-                    .reduce { acc, m -> acc.filter { (k, v) -> m[k] == v } }
-                val set = mapOf(edit.setFieldId to edit.setValue) + consistent
+        // What the record carried in the fields nobody touched. These are not conditions and not
+        // results — they are the other true things about the capture, and the only honest use for
+        // them is to offer them. A corrected field is excluded: its value is what the correction
+        // produced, so triggering on it would ask a later capture to already be fixed.
+        val observed = ExpenseRemapFields.matchFields
+            .filter { it.id != ExpenseRemapFields.ID_VENDOR && it.id !in edits }
+            .mapNotNull { field ->
+                field.valueOf(
+                    ExpenseRemapFields.Draft(
+                        totalAmount = old.expense.totalAmount,
+                        title = old.expense.title, vendor = old.expense.vendor,
+                        bank = old.expense.bank, location = old.expense.location,
+                        comments = old.expense.comments, category = oldCat
+                    )
+                )?.let { v -> RemapValueKey.normalize(v)?.let { field.id to it } }
+            }.toMap()
+
+        val now = System.currentTimeMillis()
+        val patternKey = "${ExpenseRemapFields.ID_VENDOR}\u0000$triggerValue"
+        val proposed = setsFromEdits.map { (_, e) -> e.setFieldId to e.setValue }.toMap()
+        remapPatternSightingDao.upsert(
+            RemapPatternSighting(
+                patternKey = patternKey, recordId = new.id,
+                fieldId = ExpenseRemapFields.ID_VENDOR,
+                beforeText = vendor, afterText = vendor,
+                setFieldId = proposed.keys.first(), setValue = proposed.values.first(),
+                companionsJson = RemapRuleJson.encode(proposed), createdAt = now,
+                observedJson = RemapRuleJson.encode(observed)
+            )
+        )
+        val sightings = remapPatternSightingDao.getForPattern(patternKey)
+        if (sightings.size < threshold) return
+
+        val trigger = RemapConditionsJson.encode(
+            listOf(listOf(RemapCondition(ExpenseRemapFields.ID_VENDOR, triggerValue)))
+        )
+        if (remapRuleDao.getByMatch(trigger) == null) {
+            // A set survives only where every sighting made the same edit. One person changing a
+            // category twice for the same shop is a habit; changing it to something different each
+            // time is not, and proposing either would be proposing a coin toss.
+            val consistent = sightings
+                .map { RemapRuleJson.decode(it.companionsJson) }
+                .reduce { acc, m -> acc.filter { (k, v) -> m[k] == v } }
+            // Only what every sighting carried is offered. A value one of them had and another did
+            // not is evidence against narrowing on it, not for.
+            val shared = sightings
+                .map { RemapRuleJson.decode(it.observedJson) }
+                .reduce { acc, m -> acc.filter { (k, v) -> m[k] == v } }
+            if (consistent.isNotEmpty()) {
                 remapRuleDao.upsert(
                     RemapRuleEntity(
-                        name = "${edit.before} → ${edit.after}",
-                        matchJson = matchJson,
-                        setJson = RemapRuleJson.encode(set),
+                        name = vendor,
+                        matchJson = trigger,
+                        setJson = RemapRuleJson.encode(consistent),
                         origin = RemapRuleEntity.ORIGIN_PROPOSED,
                         enabled = false,
                         sortOrder = remapRuleDao.getAll().size,
-                        updatedAt = now
+                        updatedAt = now,
+                        suggestJson = RemapRuleJson.encode(shared)
                     )
                 )
             }
-            remapPatternSightingDao.deleteForPattern(patternKey)
         }
+        remapPatternSightingDao.deleteForPattern(patternKey)
     }
 
     /**
@@ -362,7 +418,9 @@ class ExpensesRepository(
      * baking it into a standing rule would apply that judgement to names nobody looked at.
      */
     suspend fun addAcceptedRename(fieldId: String, from: String, to: String) {
-        val matchJson = RemapRuleJson.encode(mapOf(fieldId to from))
+        val matchJson = RemapConditionsJson.encode(
+            listOf(listOf(RemapCondition(fieldId, RemapValueKey.normalize(from) ?: return)))
+        )
         if (remapRuleDao.getByMatch(matchJson) != null) return
         remapRuleDao.upsert(
             RemapRuleEntity(
@@ -388,7 +446,7 @@ class ExpensesRepository(
             remapRuleDao.upsert(rule.copy(id = 0))
         } else {
             remapRuleDao.update(
-                existing.copy(name = rule.name, setJson = rule.setJson, fuzzJson = rule.fuzzJson, enabled = rule.enabled, sortOrder = rule.sortOrder, updatedAt = rule.updatedAt)
+                existing.copy(name = rule.name, setJson = rule.setJson, fuzzJson = rule.fuzzJson, suggestJson = rule.suggestJson, alertEnabled = rule.alertEnabled, enabled = rule.enabled, sortOrder = rule.sortOrder, updatedAt = rule.updatedAt)
             )
         }
     }
@@ -778,15 +836,22 @@ class ExpensesRepository(
         // A rule pointing at a since-deleted category declines in the setter and resolution
         // proceeds normally.
         var resolved: FuzzyNameMatcher.Resolved? = null
+        var alerting: List<RemapRuleEntity> = emptyList()
         run {
-            val active = remapRuleDao.getAll().filter { it.enabled }.map { it.toRemapRule() }
+            val enabled = remapRuleDao.getAll().filter { it.enabled }
+            val active = enabled.map { it.toRemapRule() }
             if (active.isNotEmpty()) {
-                val draft = ExpenseRemapFields.engine(cats).apply(
+                val outcome = ExpenseRemapFields.engine(cats).evaluate(
                     ExpenseRemapFields.Draft(
                         totalAmount, effTitle, effVendor, effBank, effLocation, effComments, spokenCategory
                     ),
                     active
                 )
+                val draft = outcome.record
+                // A rule that asked to be heard is answered after the record exists, so the alert
+                // can point at something real.
+                val byId = enabled.associateBy { it.id }
+                alerting = outcome.fired.filter { it.alert }.mapNotNull { byId[it.id] }
                 effTitle = draft.title; effVendor = draft.vendor; effBank = draft.bank
                 effLocation = draft.location; effComments = draft.comments
                 draft.categoryId?.let { id -> cats.firstOrNull { it.id == id } }?.let {
@@ -819,6 +884,21 @@ class ExpensesRepository(
             invoiceOwnAmount = invoiceOwnAmount,
             bankAccountId = bankAccountId
         )
+
+        if (newId > 0 && alerting.isNotEmpty()) {
+            onRuleAlerts?.invoke(
+                alerting.map { rule ->
+                    RuleAlert(
+                        ruleId = rule.id,
+                        ruleName = rule.name,
+                        expenseId = newId,
+                        vendor = effVendor,
+                        amount = totalAmount,
+                        currency = currencyCode
+                    )
+                }
+            )
+        }
 
         // Whatever correction text was NOT written into the row (all of it in SUGGEST mode, the
         // fuzzy tier in AUTO mode) becomes a per-field suggestion. Upserted with REPLACE, so a
@@ -905,7 +985,18 @@ class ExpensesRepository(
         // The fallback is never deleted — there has to be somewhere for a record with no opinion to
         // land, and silently choosing a new one would move every future record without saying so.
         if (category.isDefault) return
-        expenseDao.clearCategory(category.id)
+        // The records outlive the category. They land on the fallback — the category records with no
+        // opinion are filed under — rather than being left with none at all: a record with a null
+        // category drops out of every per-category total and reads as though it was never filed,
+        // when what actually happened is that somebody deleted a label.
+        val fallback = CategoryFallback.destinationFor(
+            categories = categoryDao.getAll(),
+            deletingId = category.id,
+            idOf = { it.id },
+            isFallback = { it.isDefault }
+        )
+        if (fallback != null) expenseDao.reassignCategory(category.id, fallback.id)
+        else expenseDao.clearCategory(category.id)
         spendingLimitDao.clearCategory(category.id)
         // Referential cleanup mirroring the old memory's clearCategory: rules lose the set-entry
         // pointing at the deleted category, and a rule with nothing left to set is deleted — every

@@ -31,6 +31,18 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.HorizontalDivider
+import com.voxapps.design.color.VoxSwatchShapes
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import com.voxapps.design.rememberRequirementGate
 import com.voxapps.ipc.VoxAppsDiscovery
@@ -39,7 +51,10 @@ import com.voxapps.notes.data.Category
 import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.SupportedLanguages
 import com.voxapps.notes.state.NotesStateManager
+import com.voxapps.design.category.VoxCategoryEditCard
+import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.notes.ui.CategoryColors
+import com.voxapps.notes.ui.rememberCategoryFieldStrings
 import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.notes.ui.LocalLanguageManager
 
@@ -59,8 +74,17 @@ fun CategoriesSettingsTab(
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
 
+    /** The category open for editing, or null while the list is just a list. */
+    var editing by remember { mutableStateOf<Category?>(null) }
+    var editName by remember { mutableStateOf("") }
+    var editColor by remember { mutableStateOf(0L) }
+    var addingNew by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var newColor by remember { mutableStateOf(0L) }
+    var pendingDeleteCategory by remember { mutableStateOf<Category?>(null) }
+
     Column(
-        modifier = modifier.padding(16.dp),
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // --- Language (drives both UI copy and Auto-Merge prompt language) ---
@@ -81,6 +105,103 @@ fun CategoriesSettingsTab(
                 }
             )
 
+        }
+
+        // --- The categories themselves: named, coloured, removed ---
+        //
+        // Managed here as well as from the sidebar, because a setting that lists categories and
+        // cannot change them sends you looking for the place that can.
+        SettingsSectionCard(languageManager.getString("categories_settings_title")) {
+            // The fallback first, above a line: a star wherever the sort happens to put it says the
+            // star is a property of that row, while above the line it says the rest fall back to it.
+            val fallback = categories.firstOrNull { it.isDefault }
+            (listOfNotNull(fallback) + categories.filterNot { it.isDefault }).forEach { cat ->
+                if (editing?.id == cat.id) {
+                    // Edited in place, so the row you were looking at is the row that changes.
+                    VoxCategoryEditCard(
+                        name = editName,
+                        onNameChange = { editName = it },
+                        color = editColor,
+                        onColorChange = { editColor = it },
+                        strings = rememberCategoryFieldStrings(),
+                        onSave = {
+                            stateManager.updateCategory(cat.copy(name = editName.trim(), colorArgb = editColor))
+                            editing = null
+                        },
+                        onCancel = { editing = null },
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                editing = cat
+                                editName = cat.name
+                                editColor = cat.colorArgb
+                            }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (cat.isDefault) 17.dp else 14.dp)
+                                .clip(if (cat.isDefault) VoxSwatchShapes.Star else CircleShape)
+                                .background(CategoryColors.fromStored(cat.colorArgb))
+                        )
+                        Text(
+                            if (cat.isDefault) {
+                                "${cat.name} (${languageManager.getString("default_category_suffix")})"
+                            } else {
+                                cat.name
+                            },
+                            modifier = Modifier.weight(1f).padding(start = 8.dp)
+                        )
+                        if (!cat.isDefault) {
+                            IconButton(onClick = { stateManager.setDefaultCategory(cat.id) }) {
+                                Icon(
+                                    Icons.Filled.StarBorder,
+                                    contentDescription = languageManager.getString("set_default_category")
+                                )
+                            }
+                            IconButton(onClick = { pendingDeleteCategory = cat }) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = languageManager.getString("delete_category_title")
+                                )
+                            }
+                        }
+                    }
+                    if (cat.isDefault) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                }
+            }
+
+            if (addingNew) {
+                VoxCategoryEditCard(
+                    name = newName,
+                    onNameChange = { newName = it },
+                    color = newColor,
+                    onColorChange = { newColor = it },
+                    strings = rememberCategoryFieldStrings(),
+                    onSave = {
+                        stateManager.addCategory(newName.trim(), newColor)
+                        newName = ""
+                        addingNew = false
+                    },
+                    onCancel = { addingNew = false; newName = "" }
+                )
+            } else {
+                TextButton(onClick = {
+                    newName = ""
+                    newColor = VoxColorPalette.unusedOrRandomColor(categories.map { it.colorArgb })
+                    addingNew = true
+                }) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Text(languageManager.getString("add_category"), modifier = Modifier.padding(start = 4.dp))
+                }
+            }
         }
 
         // --- Voice notes: which category they land in ---
@@ -227,5 +348,24 @@ fun CategoriesSettingsTab(
                 }
             }
         }
+    }
+
+    pendingDeleteCategory?.let { category ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteCategory = null },
+            title = { Text(languageManager.getString("delete_category_title")) },
+            text = { Text(languageManager.getString("delete_category_message")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    stateManager.removeCategory(category)
+                    pendingDeleteCategory = null
+                }) { Text(languageManager.getString("delete")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteCategory = null }) {
+                    Text(languageManager.getString("cancel"))
+                }
+            }
+        )
     }
 }

@@ -13,5 +13,8 @@ data class Category(
     val name: String,
     val colorArgb: Long,
     val position: Int = 0,
-    val createdAt: Long
+    val createdAt: Long,
+    /** The one category notes fall back to — see [com.voxapps.datahygiene.CategoryFallback].
+     *  Exactly one row carries it, and that row cannot be deleted. */
+    val isDefault: Boolean = false
 )

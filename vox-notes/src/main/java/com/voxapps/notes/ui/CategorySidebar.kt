@@ -31,7 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.voxapps.design.color.VoxColorSwatchPicker
+import com.voxapps.design.category.VoxCategoryFields
 import com.voxapps.notes.data.Category
 import com.voxapps.design.color.VoxColorPalette
 
@@ -151,25 +151,13 @@ private fun AddCategoryDialog(existingColors: List<Long>, onDismiss: () -> Unit,
         onDismissRequest = onDismiss,
         title = { Text(languageManager.getString("add_category")) },
         text = {
-            androidx.compose.foundation.layout.Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(languageManager.getString("category_name")) },
-                    singleLine = true
-                )
-                VoxColorSwatchPicker(
-                    selectedColor = selectedColor,
-                    onColorSelected = { selectedColor = it },
-                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
-                    customColorDialogTitle = languageManager.getString("custom_color_title"),
-                    customColorUseLabel = languageManager.getString("use_color_button"),
-                    customColorCancelLabel = languageManager.getString("cancel"),
-                    customColorHueLabel = languageManager.getString("hue_label"),
-                    customColorSaturationLabel = languageManager.getString("saturation_label"),
-                    customColorBrightnessLabel = languageManager.getString("brightness_label")
-                )
-            }
+            VoxCategoryFields(
+                name = name,
+                onNameChange = { name = it },
+                color = selectedColor,
+                onColorChange = { selectedColor = it },
+                strings = rememberCategoryFieldStrings()
+            )
         },
         confirmButton = {
             TextButton(
@@ -193,25 +181,13 @@ private fun EditCategoryDialog(category: Category, onDismiss: () -> Unit, onConf
         onDismissRequest = onDismiss,
         title = { Text(languageManager.getString("edit_category")) },
         text = {
-            androidx.compose.foundation.layout.Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(languageManager.getString("category_name")) },
-                    singleLine = true
-                )
-                VoxColorSwatchPicker(
-                    selectedColor = selectedColor,
-                    onColorSelected = { selectedColor = it },
-                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
-                    customColorDialogTitle = languageManager.getString("custom_color_title"),
-                    customColorUseLabel = languageManager.getString("use_color_button"),
-                    customColorCancelLabel = languageManager.getString("cancel"),
-                    customColorHueLabel = languageManager.getString("hue_label"),
-                    customColorSaturationLabel = languageManager.getString("saturation_label"),
-                    customColorBrightnessLabel = languageManager.getString("brightness_label")
-                )
-            }
+            VoxCategoryFields(
+                name = name,
+                onNameChange = { name = it },
+                color = selectedColor,
+                onColorChange = { selectedColor = it },
+                strings = rememberCategoryFieldStrings()
+            )
         },
         confirmButton = {
             TextButton(

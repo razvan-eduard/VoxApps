@@ -322,7 +322,7 @@
   "delete_all_confirm_title": "Supprimer TOUTES les dépenses ?",
   "delete_all_expenses": "Supprimer toutes les dépenses",
   "delete_all_expenses_desc": "Supprime définitivement toutes les dépenses de cet appareil",
-  "delete_category_message": "Les dépenses de cette catégorie ne seront plus catégorisées. Les dépenses elles-mêmes ne sont pas supprimées.",
+  "delete_category_message": "Les dépenses de cette catégorie passent dans la catégorie principale. Les dépenses elles-mêmes ne sont pas supprimées.",
   "delete_category_title": "Supprimer la catégorie ?",
   "delete_expense_message": "Cette dépense et ses postes seront définitivement supprimés.",
   "delete_expense_title": "Supprimer la dépense ?",

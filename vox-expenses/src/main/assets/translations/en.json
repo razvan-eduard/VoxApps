@@ -64,7 +64,7 @@
   "delete_attachment_group_title": "Delete this whole group?",
   "delete_attachment_group_message": "Every photo in this group will be removed.",
   "delete_category_title": "Delete category?",
-  "delete_category_message": "Expenses in this category will become uncategorized. The expenses themselves are not deleted.",
+  "delete_category_message": "Expenses in this category move to the main category. The expenses themselves are not deleted.",
   "cleanup_confirm_title": "Clean up before saving?",
   "cleanup_confirm_message": "The following field(s) contain only symbols or the text \"null\":",
   "auto_clean": "Auto-clean",

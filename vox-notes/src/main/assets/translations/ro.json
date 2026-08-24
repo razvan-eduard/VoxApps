@@ -49,7 +49,7 @@
   "cleanup_confirm_message": "Următoarele câmpuri conțin doar simboluri sau textul \"null\":",
   "auto_clean": "Curățare automată",
   "delete_category_title": "Ștergi categoria?",
-  "delete_category_message": "Notițele din această categorie vor rămâne necategorisite. Notițele în sine nu sunt șterse.",
+  "delete_category_message": "Notițele din această categorie trec în categoria principală. Notițele în sine nu sunt șterse.",
   "collapse_note": "Restrânge notița",
   "apply": "Aplică",
   "clear": "Șterge filtrul",
@@ -211,5 +211,7 @@
   "flow_send_everything": "Tot",
   "flow_send_everything_desc_notes": "Textul e pus la punct, cu titlu și categorie alese.",
   "notes_fill_head": "Completează automat titlul și categoria",
-  "flow_cannot_suggest": "Aplicația n-are unde ține o sugestie, deci răspunsul se scrie."
+  "flow_cannot_suggest": "Aplicația n-are unde ține o sugestie, deci răspunsul se scrie.",
+  "default_category_suffix": "principală",
+  "set_default_category": "Fă-o categoria principală"
 }

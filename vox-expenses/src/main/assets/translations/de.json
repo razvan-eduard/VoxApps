@@ -322,7 +322,7 @@
   "delete_all_confirm_title": "ALLE Ausgaben löschen?",
   "delete_all_expenses": "Alle Ausgaben löschen",
   "delete_all_expenses_desc": "Entfernt dauerhaft alle Ausgabendatensätze von diesem Gerät",
-  "delete_category_message": "Ausgaben in dieser Kategorie werden unkategorisiert. Die Ausgaben selbst werden nicht gelöscht.",
+  "delete_category_message": "Ausgaben in dieser Kategorie wechseln in die Hauptkategorie. Die Ausgaben selbst werden nicht gelöscht.",
   "delete_category_title": "Kategorie löschen?",
   "delete_expense_message": "Diese Ausgabe und ihre Posten werden dauerhaft gelöscht.",
   "delete_expense_title": "Ausgabe löschen?",

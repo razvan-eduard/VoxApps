@@ -49,7 +49,7 @@
   "cleanup_confirm_message": "The following field(s) contain only symbols or the text \"null\":",
   "auto_clean": "Auto-clean",
   "delete_category_title": "Delete category?",
-  "delete_category_message": "Notes in this category will become uncategorized. The notes themselves are not deleted.",
+  "delete_category_message": "Notes in this category move to the main category. The notes themselves are not deleted.",
   "collapse_note": "Collapse note",
   "apply": "Apply",
   "clear": "Clear",
@@ -211,5 +211,7 @@
   "flow_send_everything": "Everything",
   "flow_send_everything_desc_notes": "The text is tidied up, and a title and category are chosen for it.",
   "notes_fill_head": "Fill in the title and category automatically",
-  "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written."
+  "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written.",
+  "default_category_suffix": "main",
+  "set_default_category": "Make this the main category"
 }

@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
-import com.voxapps.design.category.VoxCategoryFields
+import com.voxapps.design.category.VoxCategoryEditCard
 import com.voxapps.design.icon.VoxIconPickerDialog
 import com.voxapps.expenses.ui.rememberCategoryFieldStrings
 import androidx.compose.material3.Button
@@ -89,8 +91,11 @@ fun CategoriesSettingsTab(
     var addingNew by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var newIcon by remember { mutableStateOf<String?>(null) }
-    /** The category whose icon is being chosen, or null while none is. */
-    var iconEditing by remember { mutableStateOf<Category?>(null) }
+    /** The category open for editing, or null while the list is just a list. */
+    var editing by remember { mutableStateOf<Category?>(null) }
+    var editName by remember { mutableStateOf("") }
+    var editIcon by remember { mutableStateOf<String?>(null) }
+    var editColor by remember { mutableStateOf(0L) }
     var pendingDeleteCategory by remember { mutableStateOf<Category?>(null) }
     val commanderInstalled = remember { VoxAppsDiscovery.isCommanderInstalled(context) }
     val autoMergeGate = rememberRequirementGate(
@@ -112,7 +117,13 @@ fun CategoriesSettingsTab(
     }
     var checkedEntries by remember(resolvedEntries) { mutableStateOf(resolvedEntries.indices.toSet()) }
 
-    Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    // The page scrolls, not the list inside it: a list that scrolls on its own takes the whole
+    // height it is given and clips everything below it — which is where the button that adds a
+    // category, and every section under it, happened to be.
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         SettingsSectionCard(languageManager.getString("categories_settings_title")) {
 
             // The fallback first, then a rule, then the rest — a list where the starred one sits
@@ -120,93 +131,113 @@ fun CategoriesSettingsTab(
             // a divider it says the row is what the others fall back to, which is what it is.
             val mainCategory = categories.firstOrNull { it.isDefault }
             val otherCategories = categories.filterNot { it.isDefault }
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(listOfNotNull(mainCategory) + otherCategories, key = { it.id }) { cat ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // The fallback wears a star instead of a dot and reads "(main)", the same way
-                        // the calendar marks the layer entries fall back to.
-                        Box(
-                            modifier = Modifier
-                                .size(if (cat.isDefault) 17.dp else 14.dp)
-                                .clip(if (cat.isDefault) VoxSwatchShapes.Star else CircleShape)
-                                .background(CategoryColors.fromStored(cat.colorArgb))
-                        )
-                        // The icon is edited where it is shown. A category with none still offers
-                        // the slot, since a row that only lets you change what is already set is a
-                        // row where nothing can be set in the first place.
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 8.dp)
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .clickable { iconEditing = cat },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                cat.icon ?: "＋",
-                                fontSize = if (cat.icon != null) 17.sp else 13.sp,
-                                color = if (cat.icon != null) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                        }
-                        Text(
-                            if (cat.isDefault) {
-                                "${cat.name} (${languageManager.getString("default_category_suffix")})"
-                            } else {
-                                cat.name
+            (listOfNotNull(mainCategory) + otherCategories).forEach { cat ->
+                    if (editing?.id == cat.id) {
+                        // Edited where it is read, so the row you were looking at is the row that
+                        // changes — a dialog over the list makes you find it again afterwards.
+                        VoxCategoryEditCard(
+                            name = editName,
+                            onNameChange = { editName = it },
+                            icon = editIcon,
+                            onIconChange = { editIcon = it },
+                            color = editColor,
+                            onColorChange = { editColor = it },
+                            strings = rememberCategoryFieldStrings(),
+                            onSave = {
+                                stateManager.updateCategory(
+                                    cat.copy(name = editName.trim(), colorArgb = editColor, icon = editIcon)
+                                )
+                                editing = null
                             },
-                            modifier = Modifier.weight(1f).padding(start = 4.dp)
+                            onCancel = { editing = null },
+                            modifier = Modifier.padding(vertical = 6.dp)
                         )
-                        if (!cat.isDefault) {
-                            IconButton(onClick = { stateManager.setDefaultCategory(cat.id) }) {
-                                Icon(
-                                    Icons.Filled.StarBorder,
-                                    contentDescription = languageManager.getString("set_default_category")
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    editing = cat
+                                    editName = cat.name
+                                    editIcon = cat.icon
+                                    editColor = cat.colorArgb
+                                }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // The fallback wears a star instead of a dot and reads "(main)", the same way
+                            // the calendar marks the layer entries fall back to.
+                            Box(
+                                modifier = Modifier
+                                    .size(if (cat.isDefault) 17.dp else 14.dp)
+                                    .clip(if (cat.isDefault) VoxSwatchShapes.Star else CircleShape)
+                                    .background(CategoryColors.fromStored(cat.colorArgb))
+                            )
+                            // Shown, not edited here: the whole row opens the editor, where the icon
+                            // sits beside the name and the colour it belongs with.
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .size(28.dp)
+                                    .clip(CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    cat.icon ?: "＋",
+                                    fontSize = if (cat.icon != null) 17.sp else 13.sp,
+                                    color = if (cat.icon != null) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
                                 )
                             }
-                            IconButton(onClick = { pendingDeleteCategory = cat }) {
-                                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
+                            Text(
+                                if (cat.isDefault) {
+                                    "${cat.name} (${languageManager.getString("default_category_suffix")})"
+                                } else {
+                                    cat.name
+                                },
+                                modifier = Modifier.weight(1f).padding(start = 4.dp)
+                            )
+                            if (!cat.isDefault) {
+                                IconButton(onClick = { stateManager.setDefaultCategory(cat.id) }) {
+                                    Icon(
+                                        Icons.Filled.StarBorder,
+                                        contentDescription = languageManager.getString("set_default_category")
+                                    )
+                                }
+                                IconButton(onClick = { pendingDeleteCategory = cat }) {
+                                    Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("remove_category"))
+                                }
                             }
                         }
-                    }
-                    // Below the fallback, not between two ordinary rows: the line says everything
-                    // under it falls back to what is above it, which a star on its own cannot.
-                    if (cat.isDefault) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    }
+                        // Below the fallback, not between two ordinary rows: the line says everything
+                        // under it falls back to what is above it, which a star on its own cannot.
+                        if (cat.isDefault) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        }
                 }
             }
 
             if (addingNew) {
                 var newColor by remember { mutableStateOf(VoxColorPalette.unusedOrRandomColor(categories.map { it.colorArgb })) }
-                VoxCategoryFields(
+                VoxCategoryEditCard(
                     name = newName,
                     onNameChange = { newName = it },
                     icon = newIcon,
                     onIconChange = { newIcon = it },
                     color = newColor,
                     onColorChange = { newColor = it },
-                    strings = rememberCategoryFieldStrings()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        if (newName.isNotBlank()) {
-                            stateManager.addCategory(newName.trim(), newColor, newIcon)
-                        }
+                    strings = rememberCategoryFieldStrings(),
+                    onSave = {
+                        stateManager.addCategory(newName.trim(), newColor, newIcon)
                         newName = ""
                         newIcon = null
                         addingNew = false
-                    }) { Text(languageManager.getString("save")) }
-                    TextButton(onClick = { addingNew = false; newName = ""; newIcon = null }) {
-                        Text(languageManager.getString("cancel"))
-                    }
-                }
+                    },
+                    onCancel = { addingNew = false; newName = ""; newIcon = null }
+                )
             } else {
                 TextButton(onClick = { addingNew = true }) {
                     Icon(Icons.Filled.Add, contentDescription = null)
@@ -333,22 +364,6 @@ fun CategoriesSettingsTab(
             dismissButton = {
                 TextButton(onClick = { pendingDeleteCategory = null }) { Text(languageManager.getString("cancel")) }
             }
-        )
-    }
-
-    iconEditing?.let { category ->
-        VoxIconPickerDialog(
-            title = languageManager.getString("category_icon_title"),
-            selected = category.icon,
-            onPick = { picked ->
-                stateManager.updateCategory(category.copy(icon = picked))
-                iconEditing = null
-            },
-            onDismiss = { iconEditing = null },
-            noneLabel = languageManager.getString("category_icon_none"),
-            customLabel = languageManager.getString("category_icon_custom"),
-            confirmLabel = languageManager.getString("save"),
-            cancelLabel = languageManager.getString("cancel")
         )
     }
 

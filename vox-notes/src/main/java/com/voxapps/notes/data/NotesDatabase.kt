@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.voxapps.attachments.AttachmentDao
+import com.voxapps.datahygiene.CategoryFallback
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.ipc.PendingLlmRequestDao
 import com.voxapps.ipc.PendingLlmRequestEntity
@@ -14,7 +15,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Note::class, Category::class, NoteTombstone::class, PendingLlmRequestEntity::class, AttachmentEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class NotesDatabase : RoomDatabase() {
@@ -105,6 +106,20 @@ abstract class NotesDatabase : RoomDatabase() {
         // Lets several photos captured/picked in one burst/selection be tied together as a single
         // multi-page attachment group (see AttachmentEntity's doc comment) — null groupId (every
         // pre-existing row) means "a group of one", unchanged behavior.
+        /**
+         * The category notes fall back to when the one they were filed under is deleted.
+         *
+         * Seeded rather than assumed: there was no fallback here at all, so a deleted category left
+         * its notes with none — filed nowhere, and reachable only by scrolling everything.
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE categories ADD COLUMN isDefault INTEGER NOT NULL DEFAULT 0")
+                CategoryFallback.seedStatements(createdAt = System.currentTimeMillis())
+                    .forEach { db.execSQL(it) }
+            }
+        }
+
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE attachments ADD COLUMN groupId TEXT")
@@ -124,7 +139,17 @@ abstract class NotesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, NotesDatabase::class.java, "vox-notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                // A brand-new install never runs a Migration — Room creates the current schema
+                // straight from the entities — so the fallback is seeded for that path too. A first
+                // note with nothing to file it under should land somewhere that says so.
+                .addCallback(object : RoomDatabase.Callback() {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        super.onCreate(db)
+                        CategoryFallback.seedStatements(createdAt = System.currentTimeMillis())
+                            .forEach { db.execSQL(it) }
+                    }
+                })
                 .build()
         }
     }

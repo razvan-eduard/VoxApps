@@ -128,7 +128,7 @@
   "debug_section": "Débogage",
   "add_test_data": "Ajouter des données de test",
   "continue_button": "Continuer",
-  "delete_category_message": "Les notes de cette catégorie ne seront plus catégorisées. Les notes elles-mêmes ne sont pas supprimées.",
+  "delete_category_message": "Les notes de cette catégorie passent dans la catégorie principale. Les notes elles-mêmes ne sont pas supprimées.",
   "delete_category_title": "Supprimer la catégorie ?",
   "delete_note_message": "Cette note sera définitivement supprimée.",
   "delete_note_title": "Supprimer la note ?",
@@ -211,5 +211,7 @@
   "flow_send_everything": "Tout",
   "flow_send_everything_desc_notes": "Le texte est nettoyé, avec un titre et une catégorie.",
   "notes_fill_head": "Remplir automatiquement le titre et la catégorie",
-  "flow_cannot_suggest": "Cette app n'a pas où garder une suggestion ; la réponse est donc écrite."
+  "flow_cannot_suggest": "Cette app n'a pas où garder une suggestion ; la réponse est donc écrite.",
+  "default_category_suffix": "principale",
+  "set_default_category": "En faire la catégorie principale"
 }
