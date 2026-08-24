@@ -662,5 +662,7 @@
   "remap_rule_alert_label": "M'alerter",
   "remap_rule_alert_desc": "Envoie une notification quand la règle reconnaît un paiement. En plus de définir des champs, ou à la place",
   "rule_alert_channel_name": "Alertes de règles",
-  "rule_alert_title": "Alerte de règle"
+  "rule_alert_title": "Alerte de règle",
+  "vocabulary_stop_title": "Ne jamais capturer",
+  "vocabulary_stop_desc": "Un message contenant l'un de ces mots n'est pas lu du tout — aucune dépense, aucune entrée à relire, rien d'envoyé nulle part. Pour les refus, les annulations et tout ce qui n'est pas un paiement. La notification elle-même reste affichée."
 }

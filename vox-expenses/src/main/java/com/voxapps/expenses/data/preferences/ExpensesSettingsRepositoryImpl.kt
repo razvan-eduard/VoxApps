@@ -48,6 +48,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val CUSTOM_BANKS = stringSetPreferencesKey("custom_banks")
         val DISABLED_LEGAL_FORMS = stringSetPreferencesKey("disabled_legal_forms")
         val DISABLED_BANKS = stringSetPreferencesKey("disabled_banks")
+        val CUSTOM_STOP_WORDS = stringSetPreferencesKey("custom_stop_words")
+        val DISABLED_STOP_WORDS = stringSetPreferencesKey("disabled_stop_words")
         val DISMISS_NOTIFICATION_ON_CAPTURE = booleanPreferencesKey("dismiss_notification_on_capture")
         val RECURRING_PROPOSAL_THRESHOLD = intPreferencesKey("recurring_proposal_threshold")
         val RECURRING_REMINDERS_ENABLED = booleanPreferencesKey("recurring_reminders_enabled")
@@ -143,6 +145,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             customBanks = prefs[Keys.CUSTOM_BANKS] ?: emptySet(),
             disabledLegalForms = prefs[Keys.DISABLED_LEGAL_FORMS] ?: emptySet(),
             disabledBanks = prefs[Keys.DISABLED_BANKS] ?: emptySet(),
+            customStopWords = prefs[Keys.CUSTOM_STOP_WORDS] ?: emptySet(),
+            disabledStopWords = prefs[Keys.DISABLED_STOP_WORDS] ?: emptySet(),
             dismissNotificationOnCapture = prefs[Keys.DISMISS_NOTIFICATION_ON_CAPTURE] ?: false,
             recurringProposalThreshold = prefs[Keys.RECURRING_PROPOSAL_THRESHOLD]
                 ?.takeIf { it in ExpensesSettings.RECURRING_THRESHOLD_CHOICES } ?: 2,
@@ -285,6 +289,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setCustomVocabulary(vocabulary: String, terms: Set<String>) {
         val key = when (vocabulary) {
             FieldVocabularies.VOCAB_BANK -> Keys.CUSTOM_BANKS
+            FieldVocabularies.VOCAB_STOP -> Keys.CUSTOM_STOP_WORDS
             FieldVocabularies.VOCAB_VENDOR -> Keys.CUSTOM_VENDORS
             else -> Keys.CUSTOM_LEGAL_FORMS
         }
@@ -294,6 +299,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setDisabledVocabulary(vocabulary: String, keys: Set<String>) {
         val key = when (vocabulary) {
             FieldVocabularies.VOCAB_BANK -> Keys.DISABLED_BANKS
+            FieldVocabularies.VOCAB_STOP -> Keys.DISABLED_STOP_WORDS
             FieldVocabularies.VOCAB_VENDOR -> Keys.DISABLED_VENDORS
             else -> Keys.DISABLED_LEGAL_FORMS
         }

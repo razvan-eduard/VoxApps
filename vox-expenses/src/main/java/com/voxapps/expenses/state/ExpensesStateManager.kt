@@ -692,12 +692,14 @@ class ExpensesStateManager(
 
     private fun customOf(settings: ExpensesSettings, vocabulary: String) = when (vocabulary) {
         FieldVocabularies.VOCAB_BANK -> settings.customBanks
+        FieldVocabularies.VOCAB_STOP -> settings.customStopWords
         FieldVocabularies.VOCAB_VENDOR -> settings.customVendors
         else -> settings.customLegalForms
     }
 
     private fun disabledOf(settings: ExpensesSettings, vocabulary: String) = when (vocabulary) {
         FieldVocabularies.VOCAB_BANK -> settings.disabledBanks
+        FieldVocabularies.VOCAB_STOP -> settings.disabledStopWords
         FieldVocabularies.VOCAB_VENDOR -> settings.disabledVendors
         else -> settings.disabledLegalForms
     }

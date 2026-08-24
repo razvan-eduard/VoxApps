@@ -534,6 +534,17 @@ fun NotificationCaptureSettingsTab(
             }
         )
 
+        // First of the three, because it is the one that decides whether the others ever run.
+        VocabularySettingsCard(
+            provided = provided.stopWords,
+            custom = settings.customStopWords,
+            disabledKeys = settings.disabledStopWords,
+            vocabulary = FieldVocabularies.VOCAB_STOP,
+            title = languageManager.getString("vocabulary_stop_title"),
+            description = languageManager.getString("vocabulary_stop_desc"),
+            stateManager = stateManager,
+            languageManager = languageManager
+        )
         VocabularySettingsCard(
             provided = provided.banks,
             custom = settings.customBanks,

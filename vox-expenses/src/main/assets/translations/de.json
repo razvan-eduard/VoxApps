@@ -662,5 +662,7 @@
   "remap_rule_alert_label": "Benachrichtige mich",
   "remap_rule_alert_desc": "Sendet eine Benachrichtigung, wenn die Regel eine Zahlung erkennt. Zusätzlich zum Setzen von Feldern oder anstelle davon",
   "rule_alert_channel_name": "Regel-Meldungen",
-  "rule_alert_title": "Regel-Meldung"
+  "rule_alert_title": "Regel-Meldung",
+  "vocabulary_stop_title": "Nie erfassen",
+  "vocabulary_stop_desc": "Eine Nachricht mit einem dieser Wörter wird gar nicht gelesen — keine Ausgabe, kein Prüfeintrag, nichts wird irgendwohin gesendet. Für Ablehnungen, Stornierungen und alles andere, was keine Zahlung ist. Die Benachrichtigung selbst bleibt stehen."
 }

@@ -662,5 +662,7 @@
   "remap_rule_alert_label": "Alertează-mă",
   "remap_rule_alert_desc": "Trimite o notificare când regula recunoaște o plată. Poate face asta pe lângă setarea câmpurilor, sau în locul ei",
   "rule_alert_channel_name": "Alerte de la reguli",
-  "rule_alert_title": "Alertă de la o regulă"
+  "rule_alert_title": "Alertă de la o regulă",
+  "vocabulary_stop_title": "Nu captura niciodată",
+  "vocabulary_stop_desc": "Un mesaj care conține unul dintre aceste cuvinte nu e citit deloc — nicio cheltuială, nicio intrare de revizuit, nimic trimis nicăieri. Pentru refuzuri, stornări și orice altceva nu e o plată. Notificarea rămâne pe ecran."
 }
