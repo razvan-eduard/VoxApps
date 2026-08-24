@@ -4,6 +4,8 @@ import android.content.Context
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.recordflow.AskScope
+import com.voxapps.expenses.data.ExpenseOrigins
+import com.voxapps.recordflow.FieldOrigin
 import com.voxapps.recordflow.DeterministicReading
 import com.voxapps.recordflow.FieldWeight
 import com.voxapps.recordflow.FlowSupport
@@ -74,7 +76,22 @@ class ExpenseVoiceFlow(
             container = container,
             parsed = answer,
             imageName = null,
-            preParse = null
+            preParse = null,
+            // Nothing here was proved by anything: a sentence spoken aloud carries no arithmetic to
+            // check it against, so every field the record has is the model's reading of it.
+            origins = mapOf(
+                FieldOrigin.ANSWERED to buildSet {
+                    if (answer.title != null) add(ExpenseOrigins.FIELD_TITLE)
+                    add(ExpenseOrigins.FIELD_AMOUNT)
+                    if (answer.currency != null) add(ExpenseOrigins.FIELD_CURRENCY)
+                    if (answer.vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+                    if (answer.bank != null) add(ExpenseOrigins.FIELD_BANK)
+                    if (answer.location != null) add(ExpenseOrigins.FIELD_LOCATION)
+                    if (answer.category != null) add(ExpenseOrigins.FIELD_CATEGORY)
+                    if (answer.date != null) add(ExpenseOrigins.FIELD_DATE)
+                    if (answer.items.isNotEmpty()) add(ExpenseOrigins.FIELD_ITEMS)
+                }
+            )
         ).takeIf { it > 0 }
     }
 

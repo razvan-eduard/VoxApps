@@ -6,6 +6,8 @@ import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.ExpenseOrigins
+import com.voxapps.recordflow.FieldOrigin
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.logging.Logger
@@ -266,7 +268,27 @@ class NotificationExpenseFlow(
             preParse = null,
             // Both halves of the message: a wallet puts the shop in the title and the card in the
             // body, and which half carries the tail is not something to assume.
-            sourceText = listOfNotNull(f?.title, f?.text).joinToString(" ")
+            sourceText = listOfNotNull(f?.title, f?.text).joinToString(" "),
+            // The message's own characters proved the figures; a curated list recognised the names;
+            // whatever neither settled is what the model was asked for.
+            origins = mapOf(
+                FieldOrigin.PROVED to buildSet {
+                    if (f?.amount != null) add(ExpenseOrigins.FIELD_AMOUNT)
+                    if (f?.currency != null) add(ExpenseOrigins.FIELD_CURRENCY)
+                },
+                FieldOrigin.MATCHED to buildSet {
+                    if (f?.vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+                    if (f?.bank != null || knownBank != null) add(ExpenseOrigins.FIELD_BANK)
+                },
+                FieldOrigin.ANSWERED to buildSet {
+                    if (parsed?.title != null && f?.vendor == null) add(ExpenseOrigins.FIELD_TITLE)
+                    if (f?.amount == null && parsed?.totalAmount != null) add(ExpenseOrigins.FIELD_AMOUNT)
+                    if (f?.currency == null && parsed?.currency != null) add(ExpenseOrigins.FIELD_CURRENCY)
+                    if (f?.vendor == null && parsed?.vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+                    if (f?.bank == null && knownBank == null && parsed?.bank != null) add(ExpenseOrigins.FIELD_BANK)
+                    if (parsed?.category != null) add(ExpenseOrigins.FIELD_CATEGORY)
+                }
+            )
         )
         kept = Kept.RECORD
         // The same link the model path writes, so editing the record still teaches its template.

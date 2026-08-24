@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PendingLlmRequestDao {
@@ -25,6 +26,16 @@ interface PendingLlmRequestDao {
 
     @Query("SELECT * FROM pending_llm_requests")
     suspend fun getAll(): List<PendingLlmRequestEntity>
+
+    /**
+     * How many captures are waiting for an answer, as a stream.
+     *
+     * A queue nothing reads for display is a queue that lets a person speak into the air and wonder
+     * whether they were heard. This is what an app puts on screen so the answer is "yes, and it is
+     * still working on it" rather than silence.
+     */
+    @Query("SELECT COUNT(*) FROM pending_llm_requests")
+    fun observeCount(): Flow<Int>
 
     @Delete
     suspend fun delete(entity: PendingLlmRequestEntity)

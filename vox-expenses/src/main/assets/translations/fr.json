@@ -690,5 +690,10 @@
   "account_belongs_to_new": "Nouveau compte…",
   "expense_vendor_new": "Nouveau commerçant…",
   "account_archived": "N'est plus utilisée",
-  "account_archived_desc": "Conservée pour les enregistrements qui la nomment et toujours comptée par le budget de son compte, mais plus proposée au choix d'une carte."
+  "account_archived_desc": "Conservée pour les enregistrements qui la nomment et toujours comptée par le budget de son compte, mais plus proposée au choix d'une carte.",
+  "pending_captures": "%d capture en attente de réponse",
+  "origin_proved": "lu dans le document",
+  "origin_matched": "reconnu dans vos listes",
+  "origin_answered": "répondu par l'IA",
+  "origin_legend": "👁 lu · ☑ reconnu · ✨ répondu par l'IA"
 }

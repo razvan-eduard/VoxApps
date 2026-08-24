@@ -75,10 +75,11 @@ rules: a repeated edit drafts a rule that is **disabled** until a person enables
 > **Verdict.** Nothing is silently learned from a single correction, and nothing is silently applied
 > — but nothing is silently *explained* either.
 >
-> **The gap.** This is the real one. A per-field origin marker — read from the document, matched from
-> a list, answered by a model — is cheap to store (the flow already knows) and would turn "why is this
-> wrong" into "of course, it guessed that one". Today the answer lives only in the rung the user
-> chose weeks ago.
+> **What was done about it.** Every record now carries where each of its fields came from
+> (`Expense.originsJson`, `:core:recordflow`'s `FieldOrigin`), written by whichever path made it, and
+> the editor draws a small mark beside the field: 👁 read from the document, ☑ matched from your
+> lists, ✨ answered by the AI. A field somebody edits stops claiming anything but them. Nothing is
+> marked for a value with no story, since marking everything makes the marks noise.
 
 ## 4. Wear — two hundred rules and ten thousand rows
 
@@ -120,19 +121,20 @@ becomes "when the OS feels like it", which for a phone in a pocket abroad can be
 > **Verdict.** Two of the three paths degrade gracefully, and the offline rungs (`LlmLevel.NONE`
 > upward) mean a person who chose them never depended on a model in the first place.
 >
-> **The gap.** Voice is the one that fails silently, and it is the path where the user cannot see
-> what they produced — they spoke into the air. A pending-requests indicator is missing everywhere:
-> the queue is a table nothing reads for display, in the app or in the widget.
+> **What was done about it.** The queue is read for display now: a strip above the list, and a line
+> in the widget, saying how many captures are waiting for an answer. It is absent when nothing is
+> waiting rather than present and empty. Voice still produces no record until the answer arrives —
+> that is correct, since nothing about a sentence is certain before it is read — but the person can
+> now see that it is being worked on rather than wonder whether they were heard.
 
 ## What I would fix first, in order
 
-1. **Per-field origin** on a record — proved, matched, or answered. The flow already knows it; only
-   the storing and the showing are missing. It is the difference between a machine that edits your
-   data and one that shows its work.
-2. **A pending indicator** for voice, and for anything queued: one line in the app and one in the
-   widget saying "one capture waiting for an answer". Cheap, and it removes the "did I imagine that?"
-   moment entirely.
+1. ~~**Per-field origin** on a record~~ — done: stored at capture, shown beside the field, replaced
+   by "you did" the moment somebody edits it.
+2. ~~**A pending indicator**~~ — done: a strip in the app and a line in the widget, absent while
+   there is nothing waiting.
 3. **The list into SQL** — date and category in the query, paging under it — before a year's rows
-   arrive rather than after.
+   arrive rather than after. Still open, and now the largest of these.
 4. **An in-flight mark** between the shutter and the reply, so an interrupted capture can be found
-   without scanning the list.
+   without scanning the list. Partly answered by the pending strip, which says *that* something is
+   in flight but not *which* record it will become.

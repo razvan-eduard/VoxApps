@@ -113,6 +113,8 @@ import com.voxapps.expenses.data.ExpenseSanitizer
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.NEAR_DUPLICATE_MERGED_RESULT
 import com.voxapps.expenses.data.FieldVocabularies
+import com.voxapps.expenses.data.ExpenseOrigins
+import com.voxapps.recordflow.FieldOrigin
 import com.voxapps.design.settings.VoxSuggestionChip
 import com.voxapps.expenses.data.ExpenseSuggestionTarget
 import com.voxapps.suggestions.OfferedSuggestion
@@ -227,6 +229,11 @@ fun ExpenseEditScreen(
     var vendor by remember { mutableStateOf(existing?.expense?.vendor ?: "") }
     var bank by remember { mutableStateOf(existing?.expense?.bank ?: "") }
     var namingBank by remember { mutableStateOf(false) }
+    // What the record says about where its own fields came from. A field the user edits below stops
+    // claiming anything, since from that moment the answer is "you did".
+    val origins = remember(existing?.expense?.originsJson) {
+        ExpenseOrigins.decode(existing?.expense?.originsJson)
+    }
     var namingVendor by remember { mutableStateOf(false) }
     val bankScope = rememberCoroutineScope()
     // The issuer vocabulary, merged the way every reader of it merges: supplied, less what this
@@ -497,7 +504,20 @@ fun ExpenseEditScreen(
             comments = comments,
             categoryId = categoryId,
             direction = direction,
-            isStub = false
+            isStub = false,
+            // Whatever was edited is the editor's from now on: a value a person changed carries no
+            // claim about a document or a model, and a later pass must not re-explain it.
+            originsJson = ExpenseOrigins.withTyped(
+                existing?.expense?.originsJson,
+                buildSet {
+                    if (title != existing?.expense?.title.orEmpty()) add(ExpenseOrigins.FIELD_TITLE)
+                    if (vendor != existing?.expense?.vendor.orEmpty()) add(ExpenseOrigins.FIELD_VENDOR)
+                    if (bank != existing?.expense?.bank.orEmpty()) add(ExpenseOrigins.FIELD_BANK)
+                    if (location != existing?.expense?.location.orEmpty()) add(ExpenseOrigins.FIELD_LOCATION)
+                    if (currency != existing?.expense?.currencyCode.orEmpty()) add(ExpenseOrigins.FIELD_CURRENCY)
+                    if (categoryId != existing?.expense?.categoryId) add(ExpenseOrigins.FIELD_CATEGORY)
+                }
+            )
         )
         when (val decision = ExpenseSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
             is SaveDecision.Proceed -> {
@@ -574,6 +594,7 @@ fun ExpenseEditScreen(
                     SectionTitle(languageManager.getString("expense_details"))
 
                     PaperField(
+                        origin = origins[ExpenseOrigins.FIELD_TITLE],
                         label = languageManager.getString("expense_title_optional"),
                         value = title,
                         onValueChange = { title = it },
@@ -588,11 +609,17 @@ fun ExpenseEditScreen(
                     suggested[ExpenseSuggestionTarget.KEY_VENDOR]?.takeIf { it != vendor && "vendor" !in dismissedSuggestionFields }?.let { proposed ->
                         FieldSuggestionChip(proposed, onDismiss = { dismissedSuggestionFields += "vendor" }) { vendor = proposed }
                     }
-                    Text(
-                        languageManager.getString("expense_vendor"),
-                        style = MaterialTheme.typography.labelLarge,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.padding(top = 4.dp)
-                    )
+                    ) {
+                        Text(languageManager.getString("expense_vendor"), style = MaterialTheme.typography.labelLarge)
+                        FieldOriginMark(
+                            origin = origins[ExpenseOrigins.FIELD_VENDOR],
+                            description = { languageManager.getString(originStringKey(it)) }
+                        )
+                    }
                     Picklist(
                         items = remember(vendorNames, vendor) {
                             if (vendor.isNotBlank() && vendorNames.none { it.equals(vendor, ignoreCase = true) }) {
@@ -616,11 +643,17 @@ fun ExpenseEditScreen(
                     suggested[ExpenseSuggestionTarget.KEY_BANK]?.takeIf { it != bank && "bank" !in dismissedSuggestionFields }?.let { proposed ->
                         FieldSuggestionChip(proposed, onDismiss = { dismissedSuggestionFields += "bank" }) { bank = proposed }
                     }
-                    Text(
-                        languageManager.getString("expense_bank"),
-                        style = MaterialTheme.typography.labelLarge,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.padding(top = 4.dp)
-                    )
+                    ) {
+                        Text(languageManager.getString("expense_bank"), style = MaterialTheme.typography.labelLarge)
+                        FieldOriginMark(
+                            origin = origins[ExpenseOrigins.FIELD_BANK],
+                            description = { languageManager.getString(originStringKey(it)) }
+                        )
+                    }
                     Picklist(
                         items = remember(bankNames, bank) {
                             if (bank.isNotBlank() && bankNames.none { it.equals(bank, ignoreCase = true) }) {
@@ -1565,10 +1598,19 @@ private fun PaperField(
     // A rescanned photo's suggested replacement for this field — see FieldSuggestionChip's doc
     // comment. Null (the default) renders nothing, so every other caller of this shared field is
     // unaffected.
-    suggestion: (@Composable () -> Unit)? = null
+    suggestion: (@Composable () -> Unit)? = null,
+    /** Where this field's value came from, when the record says — see [FieldOriginMark]. */
+    origin: FieldOrigin? = null
 ) {
+    val languageManager = LocalLanguageManager.current
     Column(modifier = modifier) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FieldOriginMark(
+                origin = origin,
+                description = { languageManager.getString(originStringKey(it)) }
+            )
+        }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
                 if (value.isEmpty()) {
@@ -1815,4 +1857,12 @@ private fun InlineEditField(
         Spacer(Modifier.height(2.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), thickness = 1.dp)
     }
+}
+
+/** What each origin is called on screen. */
+private fun originStringKey(origin: FieldOrigin): String = when (origin) {
+    FieldOrigin.PROVED -> "origin_proved"
+    FieldOrigin.MATCHED -> "origin_matched"
+    FieldOrigin.ANSWERED -> "origin_answered"
+    FieldOrigin.TYPED -> "origin_typed"
 }
