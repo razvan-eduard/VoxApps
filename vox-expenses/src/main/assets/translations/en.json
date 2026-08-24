@@ -690,5 +690,10 @@
   "account_belongs_to_new": "New account…",
   "expense_vendor_new": "New shop…",
   "account_archived": "No longer in use",
-  "account_archived_desc": "Kept for the records that name it and still counted by its account's budget, but no longer offered when choosing a card."
+  "account_archived_desc": "Kept for the records that name it and still counted by its account's budget, but no longer offered when choosing a card.",
+  "pending_captures": "%d capture waiting for an answer",
+  "origin_proved": "read from the document",
+  "origin_matched": "matched from your lists",
+  "origin_answered": "answered by the AI",
+  "origin_legend": "👁 read · ☑ matched · ✨ answered by the AI"
 }

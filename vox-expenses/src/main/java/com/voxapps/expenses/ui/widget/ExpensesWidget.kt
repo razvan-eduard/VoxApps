@@ -118,6 +118,7 @@ class ExpensesWidget : GlanceAppWidget() {
             val settingsSnapshot by container.settingsRepository.settingsFlow
                 .collectAsState(initial = container.settingsRepository.getSnapshot())
             val locale = Locale.forLanguageTag(settingsSnapshot.language)
+            val pendingCaptures by container.pendingLlmRequestCount.collectAsState(initial = 0)
             val budgets by container.expensesRepository.accountBudgets.collectAsState(initial = emptyList())
             // The tree, because a payment is filed against the card it was made with and comes out
             // of the account that card reaches.
@@ -140,6 +141,7 @@ class ExpensesWidget : GlanceAppWidget() {
 
             GlanceTheme {
                 ExpensesWidgetContent(
+                    pendingCaptures = if (uiState is ExpensesUiState.Locked) 0 else pendingCaptures,
                     budgetLine = budgetLine.takeIf { uiState !is ExpensesUiState.Locked },
                     locked = uiState is ExpensesUiState.Locked,
                     expenses = recentExpenses,
@@ -206,6 +208,7 @@ private fun ExpensesWidgetContent(
     expenses: List<ExpenseWithDetails>,
     attachedExpenseIds: Set<Long>,
     budgetLine: BudgetHeadline.Line?,
+    pendingCaptures: Int,
     languageManager: LanguageManager,
     addIntent: Intent,
     openAppIntent: Intent,
@@ -235,6 +238,15 @@ private fun ExpensesWidgetContent(
             batchDescription = languageManager.getString("capture_mode_batch")
         )
     ) {
+        // Work in progress before anything else: a capture waiting for an answer is the reason a
+        // record you expected is not in the list yet.
+        if (pendingCaptures > 0) {
+            Text(
+                text = languageManager.getString("pending_captures").format(pendingCaptures),
+                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp),
+                modifier = GlanceModifier.padding(bottom = 4.dp)
+            )
+        }
         // Above the list, because it is the summary the list is of. Absent entirely when the
         // setting says off — see BudgetHeadline.
         budgetLine?.let { line ->

@@ -68,6 +68,7 @@ class ExpensesStateManager(
     private val recurringPaymentRepo: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository,
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
+    private val pendingCaptureCount: kotlinx.coroutines.flow.Flow<Int> = kotlinx.coroutines.flow.flowOf(0),
     private val templateDirectionMemory: com.voxapps.expenses.domain.llm.TemplateDirectionMemory,
     private val attachmentDao: AttachmentDao,
     private val duplicateRuleDao: DuplicateRuleDao,
@@ -792,6 +793,15 @@ class ExpensesStateManager(
     fun setWidgetBudgetMode(mode: String) { scope.launch { settingsRepo.setWidgetBudgetMode(mode) } }
 
     fun setWidgetBudgetAccountIds(ids: Set<Long>) { scope.launch { settingsRepo.setWidgetBudgetAccountIds(ids) } }
+
+    /**
+     * Captures waiting for an answer.
+     *
+     * A person who dictated an expense and sees nothing assumes they were not heard, and says it
+     * again — which is how one utterance becomes three queued requests. One line saying the app is
+     * still working on it is the whole fix.
+     */
+    val pendingCaptures = pendingCaptureCount
 
     /** Names this device has actually used — see [ExpensesRepository.banksInUse]. */
     val banksInUse = expensesRepo.banksInUse

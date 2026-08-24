@@ -470,6 +470,8 @@ class LlmResultReceiver : BroadcastReceiver() {
          * it, which is every spoken one.
          */
         sourceText: String? = null,
+        /** Where each field came from, from whoever assembled [parsed] — see [ExpenseOrigins]. */
+        origins: Map<com.voxapps.recordflow.FieldOrigin, Set<String>> = emptyMap(),
         /** An account already resolved by the caller — see [ScanPreParse.bankAccountId]. Takes
          *  precedence over [sourceText], which is only read when nothing was settled earlier. */
         knownAccountId: Long? = null
@@ -503,7 +505,11 @@ class LlmResultReceiver : BroadcastReceiver() {
         // only guard for fields not sourced from raw JSON.
         val localModeActive = settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL ||
             settings.duplicateCheckModeAutomatic == ExpensesSettings.MODE_LOCAL_AND_AI
+        // Flipped into field -> origin here rather than at every call site: the callers know which
+        // fields one source answered, which is the shape their own code already has.
+        val originByField = origins.flatMap { (origin, fields) -> fields.map { it to origin } }.toMap()
         val newExpenseId = container.expensesRepository.addParsedExpense(
+            origins = originByField,
             title = FieldCleaner.clean(parsed.title, "title", "Expense"),
             totalAmount = parsed.totalAmount,
             currencyCode = parsed.currency ?: settings.defaultCurrency,

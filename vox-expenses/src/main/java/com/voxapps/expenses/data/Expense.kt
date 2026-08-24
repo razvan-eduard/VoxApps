@@ -77,6 +77,15 @@ data class Expense(
      * account's format.
      */
     val bankAccountId: Long? = null,
+    /**
+     * Where each field's value came from, as `field:origin` pairs — see
+     * [com.voxapps.recordflow.FieldOrigin] and [ExpenseOrigins].
+     *
+     * Written by whatever made the record, because that is the only moment it is known. A field
+     * missing from here has no claim attached to it, which is the ordinary case for a record typed
+     * by hand: nothing about it needs explaining.
+     */
+    val originsJson: String? = null,
     val location: String? = null,
     val dateTime: Long,
     val comments: String? = null,

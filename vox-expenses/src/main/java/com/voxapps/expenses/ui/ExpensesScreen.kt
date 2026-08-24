@@ -52,6 +52,7 @@ import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.design.settings.VoxPendingStrip
 import com.voxapps.expenses.data.RecurringPayment
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.recurring.PaymentPredictor
@@ -193,6 +194,12 @@ fun ExpensesScreen(
             }
         }
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Above the list, because it is about something that will land in it.
+            val pending by stateManager.pendingCaptures.collectAsStateWithLifecycle(initialValue = 0)
+            VoxPendingStrip(
+                count = pending,
+                text = { n -> languageManager.getString("pending_captures").format(n) }
+            )
             ExpenseFilterBar(state = state, stateManager = stateManager)
 
             if (state.expenses.isEmpty()) {

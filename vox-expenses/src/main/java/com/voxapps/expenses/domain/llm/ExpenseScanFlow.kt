@@ -11,6 +11,8 @@ import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.logging.Logger
 import com.voxapps.recordflow.AskScope
 import com.voxapps.expenses.data.preferences.knownCurrencies
+import com.voxapps.expenses.data.ExpenseOrigins
+import com.voxapps.recordflow.FieldOrigin
 import com.voxapps.recordflow.DeterministicReading
 import com.voxapps.recordflow.FieldWeight
 import com.voxapps.recordflow.FlowSupport
@@ -204,13 +206,37 @@ class ExpenseScanFlow(
                 "answered head=${head != null} items=${items != null}; " +
                 "net ${breakdown.net ?: "—"}, tax ${breakdown.vat ?: "—"} (${breakdown.verdict})"
         )
+        // Which half of the record each field came from — the page's own characters and arithmetic,
+        // or a sentence a model wrote. The choice was made field by field above; this only records
+        // the choices that were already taken.
+        val answered = buildSet {
+            if (head?.title != null) add(ExpenseOrigins.FIELD_TITLE)
+            if (head?.vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+            if (head?.bank != null) add(ExpenseOrigins.FIELD_BANK)
+            if (head?.location != null) add(ExpenseOrigins.FIELD_LOCATION)
+            if (head?.category != null) add(ExpenseOrigins.FIELD_CATEGORY)
+            if (head?.currency != null && record.currency == head.currency) add(ExpenseOrigins.FIELD_CURRENCY)
+            if (head?.date != null) add(ExpenseOrigins.FIELD_DATE)
+            if (items != null) add(ExpenseOrigins.FIELD_ITEMS)
+        }
+        val provedFields = buildSet {
+            add(ExpenseOrigins.FIELD_AMOUNT)
+            if (ExpenseOrigins.FIELD_CURRENCY !in answered) add(ExpenseOrigins.FIELD_CURRENCY)
+            if (ExpenseOrigins.FIELD_VENDOR !in answered && vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+            if (ExpenseOrigins.FIELD_DATE !in answered && record.date != null) add(ExpenseOrigins.FIELD_DATE)
+            if (ExpenseOrigins.FIELD_ITEMS !in answered && record.items.isNotEmpty()) add(ExpenseOrigins.FIELD_ITEMS)
+        }
         val newId = com.voxapps.expenses.receiver.LlmResultReceiver().createExpenseFromParsed(
             appContext = context.applicationContext,
             container = container,
             parsed = record,
             imageName = imageName,
             preParse = null,
-            sourceText = proved?.plainText
+            sourceText = proved?.plainText,
+            origins = mapOf(
+                FieldOrigin.ANSWERED to answered,
+                FieldOrigin.PROVED to provedFields
+            )
         )
 
         // The two figures the creation path has no field for. Written only where the reading
@@ -286,7 +312,24 @@ class ExpenseScanFlow(
             preParse = suppressed,
             // Settled on the way out and carried through the round trip, like the vendor and the
             // direction — the reply itself never carried the page's characters.
-            knownAccountId = suppressed?.bankAccountId
+            knownAccountId = suppressed?.bankAccountId,
+            origins = mapOf(
+                FieldOrigin.ANSWERED to buildSet {
+                    if (headApplied) {
+                        if (parsed.title != null) add(ExpenseOrigins.FIELD_TITLE)
+                        if (parsed.vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+                        if (parsed.bank != null) add(ExpenseOrigins.FIELD_BANK)
+                        if (parsed.location != null) add(ExpenseOrigins.FIELD_LOCATION)
+                        if (parsed.category != null) add(ExpenseOrigins.FIELD_CATEGORY)
+                    }
+                    if (applies(FieldWeight.BODY) && parsed.items.isNotEmpty()) add(ExpenseOrigins.FIELD_ITEMS)
+                },
+                FieldOrigin.PROVED to buildSet {
+                    add(ExpenseOrigins.FIELD_AMOUNT)
+                    if (!headApplied && provedVendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+                    if (!applies(FieldWeight.BODY) && provedItems.isNotEmpty()) add(ExpenseOrigins.FIELD_ITEMS)
+                }
+            )
         )
         Logger.d(TAG, "Wrote a reply-backed record $newId (head applied=$headApplied)")
         offerWhatWasNotWritten(newId, parsed, applies)

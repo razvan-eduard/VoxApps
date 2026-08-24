@@ -78,6 +78,9 @@ class ExpensesContainer(context: Context) {
 
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 
+    /** How many captures are waiting for an answer — see [PendingLlmRequestDao.observeCount]. */
+    val pendingLlmRequestCount = database.pendingLlmRequestDao().observeCount()
+
     val pendingCategoryMergeRepository = PendingCategoryMergeRepository(appContext)
     val expenseDeduplicationRepository = ExpenseDeduplicationRepository(appContext)
     val pendingNotificationExpenseRepository = PendingNotificationExpenseRepository(appContext)
@@ -98,6 +101,7 @@ class ExpensesContainer(context: Context) {
         recurringPaymentRepository,
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,
+        pendingLlmRequestCount,
         templateDirectionMemory,
         attachmentDao,
         duplicateRuleDao,

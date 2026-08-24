@@ -690,5 +690,10 @@
   "account_belongs_to_new": "Cont nou…",
   "expense_vendor_new": "Magazin nou…",
   "account_archived": "Nu mai e în uz",
-  "account_archived_desc": "Rămâne pentru înregistrările care îl numesc și e numărat în continuare de bugetul contului, dar nu mai e oferit când alegi un card."
+  "account_archived_desc": "Rămâne pentru înregistrările care îl numesc și e numărat în continuare de bugetul contului, dar nu mai e oferit când alegi un card.",
+  "pending_captures": "%d captură așteaptă un răspuns",
+  "origin_proved": "citit din document",
+  "origin_matched": "potrivit din listele tale",
+  "origin_answered": "răspuns de AI",
+  "origin_legend": "👁 citit · ☑ potrivit · ✨ răspuns de AI"
 }

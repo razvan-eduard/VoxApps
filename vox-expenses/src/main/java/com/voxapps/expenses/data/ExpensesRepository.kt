@@ -623,7 +623,10 @@ class ExpensesRepository(
         previousBalanceAmount: Double? = null,
         invoiceOwnAmount: Double? = null,
         /** The card or account the source text named — see [com.voxapps.expenses.domain.accounts.BankAccounts]. */
-        bankAccountId: Long? = null
+        bankAccountId: Long? = null,
+        /** Where each field came from, for the record to be able to say so later — see
+         *  [ExpenseOrigins]. Empty for a record somebody typed: nothing about it needs explaining. */
+        origins: Map<String, com.voxapps.recordflow.FieldOrigin> = emptyMap()
     ): Long {
         return try {
             val candidate = Expense(
@@ -644,7 +647,8 @@ class ExpensesRepository(
                 isStub = isStub,
                 createdAt = createdAt,
                 source = source,
-                manuallyEdited = manuallyEdited
+                manuallyEdited = manuallyEdited,
+                originsJson = ExpenseOrigins.encode(origins)
             )
 
             if (checkForDuplicate && nearDuplicateCheckEnabled) {
@@ -831,6 +835,8 @@ class ExpensesRepository(
     }
 
     suspend fun addParsedExpense(
+        /** Where each field came from, for the record to be able to say so — see [ExpenseOrigins]. */
+        origins: Map<String, com.voxapps.recordflow.FieldOrigin> = emptyMap(),
         title: String?,
         totalAmount: Double,
         currencyCode: String,
@@ -935,6 +941,7 @@ class ExpensesRepository(
 
         val newId = addExpense(
             effTitle, totalAmount, currencyCode, effVendor, effBank, effLocation, dateTime, effComments, resolved.id, effItems, imageName,
+            origins = origins,
             direction = direction,
             nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,
             nearDuplicateConfig = nearDuplicateConfig,
