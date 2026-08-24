@@ -715,5 +715,11 @@
   "attention_staged": "Captures à relire",
   "attention_rules": "Règles en attente d'approbation",
   "attention_queued": "Captures en attente de réponse",
-  "attention_filter": "Vous attend"
+  "attention_filter": "Vous attend",
+  "gap_unread": "jamais lue",
+  "gap_totals": "les lignes ne totalisent pas",
+  "gap_amount": "aucun montant",
+  "gap_name": "aucun nom",
+  "gap_category": "aucune catégorie",
+  "gap_account": "aucune carte"
 }

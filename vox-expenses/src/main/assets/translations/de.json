@@ -715,5 +715,11 @@
   "attention_staged": "Erfassungen zum Prüfen",
   "attention_rules": "Regeln, die auf Zustimmung warten",
   "attention_queued": "Erfassungen, die auf eine Antwort warten",
-  "attention_filter": "Braucht dich"
+  "attention_filter": "Braucht dich",
+  "gap_unread": "nie gelesen",
+  "gap_totals": "Zeilen ergeben nicht die Summe",
+  "gap_amount": "kein Betrag",
+  "gap_name": "kein Name",
+  "gap_category": "keine Kategorie",
+  "gap_account": "keine Karte"
 }

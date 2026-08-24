@@ -56,7 +56,10 @@ private val ExpenseRed = Color(0xFFD32F2F)
 fun ExpenseCard(
     expenseWithDetails: ExpenseWithDetails,
     onClick: () -> Unit,
-    recurring: Boolean = false
+    recurring: Boolean = false,
+    /** What this record is missing, when the list is narrowed to the ones that need somebody. A
+     *  card in a "needs you" list that does not say why makes the person open it to find out. */
+    missing: String? = null
 ) {
     val expense = expenseWithDetails.expense
     val category = expenseWithDetails.category
@@ -124,6 +127,13 @@ fun ExpenseCard(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                        )
+                    }
+                    missing?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
                         )
                     }
                     Text(

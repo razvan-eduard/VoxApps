@@ -111,10 +111,15 @@ class ExpensesStateManager(
     private fun withAttentionFilter(
         rt: Runtime,
         categories: List<Category>,
+        accounts: List<BankAccount>,
         records: List<ExpenseWithDetails>
     ): List<ExpenseWithDetails> =
         if (!rt.onlyNeedsAttention) records
-        else ExpenseGaps.needingAttention(records, categories.firstOrNull { it.isDefault }?.id)
+        else ExpenseGaps.needingAttention(
+            records,
+            categories.firstOrNull { it.isDefault }?.id,
+            accountsInUse = accounts.isNotEmpty()
+        )
 
     private val _uiState = MutableStateFlow<ExpensesUiState>(ExpensesUiState.Loading)
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
@@ -144,7 +149,7 @@ class ExpensesStateManager(
                 ExpensesUiState.Locked
             } else {
                 ExpensesUiState.Unlocked(
-                    expenses = withAttentionFilter(rt, categories, ExpenseFilter.apply(
+                    expenses = withAttentionFilter(rt, categories, accounts, ExpenseFilter.apply(
                         expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank,
                         rt.selectedVendor, rt.selectedLocation, rt.selectedAmount,
                         // A card answers for itself; an account answers for its cards too. The

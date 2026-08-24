@@ -715,5 +715,11 @@
   "attention_staged": "Capturi de revizuit",
   "attention_rules": "Reguli care așteaptă aprobarea",
   "attention_queued": "Capturi care așteaptă un răspuns",
-  "attention_filter": "Te așteaptă"
+  "attention_filter": "Te așteaptă",
+  "gap_unread": "necitită",
+  "gap_totals": "rândurile nu se adună",
+  "gap_amount": "fără sumă",
+  "gap_name": "fără nume",
+  "gap_category": "fără categorie",
+  "gap_account": "fără card"
 }
