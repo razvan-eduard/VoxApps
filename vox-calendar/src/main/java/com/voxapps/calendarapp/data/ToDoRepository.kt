@@ -1,5 +1,9 @@
 package com.voxapps.calendarapp.data
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.textmatch.FuzzyNameMatcher
 import kotlinx.coroutines.flow.Flow
@@ -179,6 +183,24 @@ class ToDoRepository(
      *  the delete — otherwise a gap is left where [item] used to sit, which throws off any later
      *  [addItem] append (its "end" is the highest position in use, not the item count) and any code
      *  that assumes positions and list size stay in lockstep. */
+    /**
+     * Drops a row that was created for an editor and never named.
+     *
+     * A row exists from the moment "+" is tapped, because the inline editor edits a stored item
+     * rather than a draft. Leaving without naming it therefore has to remove it, or the list keeps a
+     * line nobody can identify and nobody chose to make.
+     *
+     * Runs on the repository's own scope rather than a screen's: the cleanup is triggered by the
+     * screen going away, and a coroutine launched on something already leaving takes the delete with
+     * it — the row survives exactly when the user most expects it not to.
+     */
+    fun discardIfUnnamed(item: ToDoItem) {
+        if (item.text.isNotEmpty()) return
+        ownScope.launch { deleteItem(item) }
+    }
+
+    private val ownScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     suspend fun deleteItem(item: ToDoItem) {
         val entry = entryDao.getById(item.id) ?: return
         calendarRepository.deleteEntry(entry)
