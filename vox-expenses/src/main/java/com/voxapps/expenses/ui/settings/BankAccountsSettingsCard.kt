@@ -55,11 +55,9 @@ fun BankAccountsSettingsCard(
     accounts: List<BankAccount>,
     autoCreateFromScans: Boolean,
     autoCreateFromNotifications: Boolean,
-    defaultCurrency: String,
     knownCurrencies: List<String>,
     onAutoCreateFromScansChange: (Boolean) -> Unit,
     onAutoCreateFromNotificationsChange: (Boolean) -> Unit,
-    onDefaultCurrencyChange: (String) -> Unit,
     onUpdate: (BankAccount) -> Unit,
     onDelete: (BankAccount) -> Unit,
     onAdd: (String) -> Unit,
@@ -86,23 +84,6 @@ fun BankAccountsSettingsCard(
             label = languageManager.getString("auto_create_accounts_scans"),
             checked = autoCreateFromScans,
             onCheckedChange = onAutoCreateFromScansChange
-        )
-
-        Text(
-            languageManager.getString("default_account_currency"),
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(top = 12.dp)
-        )
-        // Offered from what is already in use, plus whatever is typed: a list of every currency in
-        // the world is a list nobody scrolls, and the one a person needs is nearly always one their
-        // own records already name.
-        Picklist(
-            items = knownCurrencies,
-            selected = defaultCurrency.takeIf { it.isNotBlank() },
-            itemLabel = { it },
-            onSelect = onDefaultCurrencyChange,
-            noneLabel = languageManager.getString("default_currency_follows_app"),
-            onNoneSelected = { onDefaultCurrencyChange("") }
         )
 
         if (accounts.isEmpty()) {

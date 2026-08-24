@@ -575,7 +575,7 @@
   "vocabulary_legal_desc": "Un rând care poartă unul dintre acești indicatori este comerciantul, orice altceva ar mai conține. Nu este o listă de magazine — un nume de magazin adăugat aici nu face nimic.",
   "vocabulary_add_term": "Adaugă un cuvânt",
   "vocabulary_yours": "Ale tale",
-  "vocabulary_provided": "Livrate cu aplicația (%d)",
+  "vocabulary_provided": "Livrate cu aplicația",
   "vocabulary_disable_term": "Oprește cuvântul",
   "vocabulary_enable_term": "Pornește cuvântul la loc",
   "vocabulary_rejected_empty": "Scrie întâi un cuvânt.",
@@ -612,7 +612,7 @@
   "bank_accounts_none": "Niciunul încă. Apare unul când o captură numește un card sau un cont, iar comutatorul de mai sus permite.",
   "auto_create_accounts_notifications": "Adaugă din notificări",
   "auto_create_accounts_scans": "Adaugă din scanări",
-  "default_account_currency": "Moneda pentru cele noi",
+  "default_account_currency": "Moneda pentru carduri și conturi noi",
   "default_currency_follows_app": "Urmează moneda aplicației",
   "delete_account_message": "Înregistrările care au trecut prin el rămân — doar nu îl mai numesc.",
   "account_name": "Nume",
@@ -664,5 +664,7 @@
   "rule_alert_channel_name": "Alerte de la reguli",
   "rule_alert_title": "Alertă de la o regulă",
   "vocabulary_stop_title": "Nu captura niciodată",
-  "vocabulary_stop_desc": "Un mesaj care conține unul dintre aceste cuvinte nu e citit deloc — nicio cheltuială, nicio intrare de revizuit, nimic trimis nicăieri. Pentru refuzuri, stornări și orice altceva nu e o plată. Notificarea rămâne pe ecran."
+  "vocabulary_stop_desc": "Un mesaj care conține unul dintre aceste cuvinte nu e citit deloc — nicio cheltuială, nicio intrare de revizuit, nimic trimis nicăieri. Pentru refuzuri, stornări și orice altceva nu e o plată. Notificarea rămâne pe ecran.",
+  "default_account_currency_desc": "Un card sau cont creat dintr-o captură pornește în moneda asta. Lăsat gol, urmează moneda aplicației.",
+  "account_currency_from_capture": "Din captură"
 }

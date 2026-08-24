@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.settings.SettingsSectionCard
+import com.voxapps.design.settings.VoxCountedSection
 import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
@@ -110,40 +111,41 @@ fun VocabularySettingsCard(
         }
 
         if (custom.isNotEmpty()) {
-            SectionHeader(
+            TermSection(
                 label = languageManager.getString("vocabulary_yours"),
                 terms = custom,
                 disabledKeys = disabledKeys,
                 vocabulary = vocabulary,
                 stateManager = stateManager,
                 languageManager = languageManager
-            )
-            custom.sorted().forEach { term ->
-                val off = VocabularyClassifier.termKey(term) in disabledKeys
-                TermRow(
-                    term = term,
-                    disabled = off,
-                    trailing = {
-                        // Switching off and deleting are different acts, so a word of one's own
-                        // carries both: kept-but-unused is a state worth being able to reach.
-                        IconButton(onClick = {
-                            stateManager.setVocabularyTermEnabled(vocabulary, term, enabled = off)
-                        }) {
-                            Icon(
-                                if (off) Icons.Filled.Undo else Icons.Filled.Remove,
-                                contentDescription = languageManager.getString(
-                                    if (off) "vocabulary_enable_term" else "vocabulary_disable_term"
+            ) {
+                custom.sorted().forEach { term ->
+                    val off = VocabularyClassifier.termKey(term) in disabledKeys
+                    TermRow(
+                        term = term,
+                        disabled = off,
+                        trailing = {
+                            // Switching off and deleting are different acts, so a word of one's own
+                            // carries both: kept-but-unused is a state worth being able to reach.
+                            IconButton(onClick = {
+                                stateManager.setVocabularyTermEnabled(vocabulary, term, enabled = off)
+                            }) {
+                                Icon(
+                                    if (off) Icons.Filled.Undo else Icons.Filled.Remove,
+                                    contentDescription = languageManager.getString(
+                                        if (off) "vocabulary_enable_term" else "vocabulary_disable_term"
+                                    )
                                 )
-                            )
+                            }
+                            IconButton(onClick = { stateManager.removeVocabularyTerm(vocabulary, term) }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = languageManager.getString("delete")
+                                )
+                            }
                         }
-                        IconButton(onClick = { stateManager.removeVocabularyTerm(vocabulary, term) }) {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = languageManager.getString("delete")
-                            )
-                        }
-                    }
-                )
+                    )
+                }
             }
         }
 
@@ -151,32 +153,33 @@ fun VocabularySettingsCard(
         // from anything above it and is not editable in the same way.
         if (provided.isNotEmpty()) {
             HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
-            SectionHeader(
-                label = languageManager.getString("vocabulary_provided").format(provided.size),
+            TermSection(
+                label = languageManager.getString("vocabulary_provided"),
                 terms = provided,
                 disabledKeys = disabledKeys,
                 vocabulary = vocabulary,
                 stateManager = stateManager,
                 languageManager = languageManager
-            )
-            provided.forEach { term ->
-                val off = VocabularyClassifier.termKey(term) in disabledKeys
-                TermRow(
-                    term = term,
-                    disabled = off,
-                    trailing = {
-                        IconButton(onClick = {
-                            stateManager.setVocabularyTermEnabled(vocabulary, term, enabled = off)
-                        }) {
-                            Icon(
-                                if (off) Icons.Filled.Undo else Icons.Filled.Remove,
-                                contentDescription = languageManager.getString(
-                                    if (off) "vocabulary_enable_term" else "vocabulary_disable_term"
+            ) {
+                provided.forEach { term ->
+                    val off = VocabularyClassifier.termKey(term) in disabledKeys
+                    TermRow(
+                        term = term,
+                        disabled = off,
+                        trailing = {
+                            IconButton(onClick = {
+                                stateManager.setVocabularyTermEnabled(vocabulary, term, enabled = off)
+                            }) {
+                                Icon(
+                                    if (off) Icons.Filled.Undo else Icons.Filled.Remove,
+                                    contentDescription = languageManager.getString(
+                                        if (off) "vocabulary_enable_term" else "vocabulary_disable_term"
+                                    )
                                 )
-                            )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -199,34 +202,42 @@ private fun TermRow(term: String, disabled: Boolean, trailing: @Composable () ->
     }
 }
 
-/** A section's name and the one action that applies to all of it. Shown only where there is
- *  something to act on, so an empty section is a label and nothing more. */
+/**
+ * A section of terms, folded behind how many of them are in force.
+ *
+ * The count is what the label used to leave unsaid: a supplied list of 48 says nothing about how
+ * much of it a person has switched off, and that was the only thing worth reading without opening
+ * it. The "turn all of these off" action rides in the header, where it always was.
+ */
 @Composable
-private fun SectionHeader(
+private fun TermSection(
     label: String,
     terms: Collection<String>,
     disabledKeys: Set<String>,
     vocabulary: String,
     stateManager: ExpensesStateManager,
-    languageManager: LanguageManager
+    languageManager: LanguageManager,
+    content: @Composable () -> Unit
 ) {
     val allOff = terms.isNotEmpty() && terms.all { VocabularyClassifier.termKey(it) in disabledKeys }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-        if (terms.isNotEmpty()) {
-            TextButton(onClick = {
-                stateManager.setVocabularySectionEnabled(vocabulary, terms, enabled = allOff)
-            }) {
-                Text(
-                    languageManager.getString(
-                        if (allOff) "vocabulary_enable_all" else "vocabulary_disable_all"
-                    ),
-                    style = MaterialTheme.typography.labelMedium
-                )
+    VoxCountedSection(
+        label = label,
+        activeCount = terms.count { VocabularyClassifier.termKey(it) !in disabledKeys },
+        totalCount = terms.size,
+        trailing = {
+            if (terms.isNotEmpty()) {
+                TextButton(onClick = {
+                    stateManager.setVocabularySectionEnabled(vocabulary, terms, enabled = allOff)
+                }) {
+                    Text(
+                        languageManager.getString(
+                            if (allOff) "vocabulary_enable_all" else "vocabulary_disable_all"
+                        ),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
-        }
-    }
+        },
+        content = content
+    )
 }

@@ -10,6 +10,7 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.logging.Logger
 import com.voxapps.recordflow.AskScope
+import com.voxapps.expenses.data.preferences.knownCurrencies
 import com.voxapps.recordflow.DeterministicReading
 import com.voxapps.recordflow.FieldWeight
 import com.voxapps.recordflow.FlowSupport
@@ -158,13 +159,22 @@ class ExpenseScanFlow(
         )
 
         val category = container.expensesRepository.defaultCategory()
+        // What settles a currency spelling that names several — see CurrencyCodes.
+        val accountCurrencies = container.expensesRepository.bankAccounts.first().map { it.currencyCode }
         val vendor = head?.vendor ?: reading.header.vendor
         val dateTime = DateTimeRegexParser.parse(proved.plainText)
 
         val record = ExpenseParseResultParser.Parsed(
             title = head?.title ?: composeTitle(vendor, category?.name),
             totalAmount = total,
-            currency = head?.currency ?: settings.defaultCurrency,
+            // The page says what its figures are figures of, as plainly as it says the figures —
+            // so it is read rather than asked for or defaulted. Exactly one currency or none: a
+            // receipt printing a second one is converting, and choosing between them is not a
+            // reading.
+            currency = com.voxapps.textmatch.extract.CurrencyCodes.find(
+                proved.plainText,
+                settings.knownCurrencies(accountCurrencies)
+            ) ?: head?.currency ?: settings.defaultCurrency,
             vendor = vendor,
             bank = head?.bank,
             // A printed address is a reading of the page; with no model there is none, and the

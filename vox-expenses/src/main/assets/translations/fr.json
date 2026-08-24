@@ -575,7 +575,7 @@
   "vocabulary_legal_desc": "Une ligne portant l'un de ces sigles est le commerçant, quoi qu'elle contienne d'autre. Ce n'est pas une liste de magasins — y ajouter un nom d'enseigne ne fait rien.",
   "vocabulary_add_term": "Ajouter un mot",
   "vocabulary_yours": "Les vôtres",
-  "vocabulary_provided": "Fournis avec l'application (%d)",
+  "vocabulary_provided": "Fournis avec l'application",
   "vocabulary_disable_term": "Désactiver ce mot",
   "vocabulary_enable_term": "Réactiver ce mot",
   "vocabulary_rejected_empty": "Saisissez d'abord un mot.",
@@ -612,7 +612,7 @@
   "bank_accounts_none": "Aucun pour l'instant. Il en apparaît un quand une capture nomme une carte ou un compte et que l'interrupteur ci-dessus l'autorise.",
   "auto_create_accounts_notifications": "Ajouter depuis les notifications",
   "auto_create_accounts_scans": "Ajouter depuis les scans",
-  "default_account_currency": "Devise des nouveaux",
+  "default_account_currency": "Devise des nouvelles cartes et comptes",
   "default_currency_follows_app": "Suivre la devise de l'application",
   "delete_account_message": "Les enregistrements qui sont passés par là sont conservés — ils cessent simplement de le nommer.",
   "account_name": "Nom",
@@ -664,5 +664,7 @@
   "rule_alert_channel_name": "Alertes de règles",
   "rule_alert_title": "Alerte de règle",
   "vocabulary_stop_title": "Ne jamais capturer",
-  "vocabulary_stop_desc": "Un message contenant l'un de ces mots n'est pas lu du tout — aucune dépense, aucune entrée à relire, rien d'envoyé nulle part. Pour les refus, les annulations et tout ce qui n'est pas un paiement. La notification elle-même reste affichée."
+  "vocabulary_stop_desc": "Un message contenant l'un de ces mots n'est pas lu du tout — aucune dépense, aucune entrée à relire, rien d'envoyé nulle part. Pour les refus, les annulations et tout ce qui n'est pas un paiement. La notification elle-même reste affichée.",
+  "default_account_currency_desc": "Une carte ou un compte créé depuis une capture démarre dans cette devise. Laissé vide, il suit la devise de l'application.",
+  "account_currency_from_capture": "Depuis la capture"
 }

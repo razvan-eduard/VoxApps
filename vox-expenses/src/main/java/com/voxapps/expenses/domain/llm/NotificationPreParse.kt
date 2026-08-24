@@ -30,8 +30,10 @@ object NotificationPreParse {
     fun parse(
         title: String?,
         text: String?,
-        vocabularies: List<VocabularyClassifier.Vocabulary>
-    ): TwoFieldPreParse.Result = TwoFieldPreParse.parse(title, text, vocabularies, ROLES)
+        vocabularies: List<VocabularyClassifier.Vocabulary>,
+        knownCurrencies: Set<String> = emptySet()
+    ): TwoFieldPreParse.Result =
+        TwoFieldPreParse.parse(title, text, vocabularies, ROLES, knownCurrencies)
 
     /**
      * `Vendor Category`, or whichever half is known. Composed rather than modelled: with the
