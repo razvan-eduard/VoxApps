@@ -123,7 +123,9 @@ becomes "when the OS feels like it", which for a phone in a pocket abroad can be
 >
 > **What was done about it.** The queue is read for display now: a strip above the list, and a line
 > in the widget, saying how many captures are waiting for an answer. It is absent when nothing is
-> waiting rather than present and empty. Voice still produces no record until the answer arrives —
+> waiting rather than present and empty, and it opens onto the captures themselves — what each one
+> is, when it was sent, how many times it has been re-sent — with a way to ask for them to be tried
+> again now instead of at the worker's next turn. Voice still produces no record until the answer arrives —
 > that is correct, since nothing about a sentence is certain before it is read — but the person can
 > now see that it is being worked on rather than wonder whether they were heard.
 

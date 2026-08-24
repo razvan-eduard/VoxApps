@@ -37,6 +37,11 @@ interface PendingLlmRequestDao {
     @Query("SELECT COUNT(*) FROM pending_llm_requests")
     fun observeCount(): Flow<Int>
 
+    /** The waiting captures themselves, newest first — for a screen that shows what they are rather
+     *  than only how many. */
+    @Query("SELECT * FROM pending_llm_requests ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<PendingLlmRequestEntity>>
+
     @Delete
     suspend fun delete(entity: PendingLlmRequestEntity)
 }

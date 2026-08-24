@@ -2,6 +2,7 @@ package com.voxapps.design.settings
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,13 +31,17 @@ import androidx.compose.ui.unit.dp
 fun VoxPendingStrip(
     count: Int,
     text: (Int) -> String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Opens whatever shows them. A line that names something and cannot be followed is a line that
+     *  gets read once and then ignored. */
+    onClick: (() -> Unit)? = null
 ) {
     AnimatedVisibility(visible = count > 0) {
         Row(
             modifier = modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)

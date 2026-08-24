@@ -691,9 +691,19 @@
   "expense_vendor_new": "Neues Geschäft…",
   "account_archived": "Nicht mehr in Gebrauch",
   "account_archived_desc": "Bleibt für die Einträge erhalten, die ihn nennen, und zählt weiter zum Budget seines Kontos, wird aber bei der Kartenauswahl nicht mehr angeboten.",
-  "pending_captures": "%d Erfassung wartet auf eine Antwort",
+  "pending_captures": "%d Erfassung wartet auf eine Antwort…",
   "origin_proved": "aus dem Dokument gelesen",
   "origin_matched": "aus deinen Listen erkannt",
   "origin_answered": "von der KI beantwortet",
-  "origin_legend": "👁 gelesen · ☑ erkannt · ✨ von der KI"
+  "origin_legend": "👁 gelesen · ☑ erkannt · ✨ von der KI",
+  "pending_captures_title": "Warten auf eine Antwort",
+  "pending_captures_empty": "Es wartet nichts.",
+  "pending_captures_retry": "Jetzt erneut versuchen",
+  "pending_capture_attempts": "Versuch %d",
+  "pending_task_expense_parse": "Gesprochene Ausgabe",
+  "pending_task_scan": "Gescannter Beleg",
+  "pending_task_notification": "Zahlungsbenachrichtigung",
+  "pending_task_dedup": "Dublettenprüfung",
+  "pending_task_categories": "Kategorien zusammenführen",
+  "pending_task_other": "Erfassung"
 }

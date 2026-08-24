@@ -691,9 +691,19 @@
   "expense_vendor_new": "New shop…",
   "account_archived": "No longer in use",
   "account_archived_desc": "Kept for the records that name it and still counted by its account's budget, but no longer offered when choosing a card.",
-  "pending_captures": "%d capture waiting for an answer",
+  "pending_captures": "%d capture waiting for an answer…",
   "origin_proved": "read from the document",
   "origin_matched": "matched from your lists",
   "origin_answered": "answered by the AI",
-  "origin_legend": "👁 read · ☑ matched · ✨ answered by the AI"
+  "origin_legend": "👁 read · ☑ matched · ✨ answered by the AI",
+  "pending_captures_title": "Waiting for an answer",
+  "pending_captures_empty": "Nothing is waiting.",
+  "pending_captures_retry": "Try again now",
+  "pending_capture_attempts": "attempt %d",
+  "pending_task_expense_parse": "Spoken expense",
+  "pending_task_scan": "Scanned receipt",
+  "pending_task_notification": "Payment notification",
+  "pending_task_dedup": "Duplicate check",
+  "pending_task_categories": "Category merge",
+  "pending_task_other": "Capture"
 }

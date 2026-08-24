@@ -691,9 +691,19 @@
   "expense_vendor_new": "Magazin nou…",
   "account_archived": "Nu mai e în uz",
   "account_archived_desc": "Rămâne pentru înregistrările care îl numesc și e numărat în continuare de bugetul contului, dar nu mai e oferit când alegi un card.",
-  "pending_captures": "%d captură așteaptă un răspuns",
+  "pending_captures": "%d captură așteaptă un răspuns…",
   "origin_proved": "citit din document",
   "origin_matched": "potrivit din listele tale",
   "origin_answered": "răspuns de AI",
-  "origin_legend": "👁 citit · ☑ potrivit · ✨ răspuns de AI"
+  "origin_legend": "👁 citit · ☑ potrivit · ✨ răspuns de AI",
+  "pending_captures_title": "Așteaptă un răspuns",
+  "pending_captures_empty": "Nu așteaptă nimic.",
+  "pending_captures_retry": "Încearcă din nou acum",
+  "pending_capture_attempts": "încercarea %d",
+  "pending_task_expense_parse": "Cheltuială rostită",
+  "pending_task_scan": "Bon scanat",
+  "pending_task_notification": "Notificare de plată",
+  "pending_task_dedup": "Verificare de duplicate",
+  "pending_task_categories": "Unificare de categorii",
+  "pending_task_other": "Captură"
 }
