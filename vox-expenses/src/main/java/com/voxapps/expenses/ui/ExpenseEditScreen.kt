@@ -233,10 +233,19 @@ fun ExpenseEditScreen(
     // device switched off, plus its own.
     val settingsSnapshot by settingsRepository.settingsFlow
         .collectAsStateWithLifecycle(initialValue = ExpensesSettings())
-    val vendorNames = remember(settingsSnapshot.customVendors, settingsSnapshot.disabledVendors) {
-        FieldVocabularies.merge(emptyList(), settingsSnapshot.customVendors, settingsSnapshot.disabledVendors)
+    // What this device deals with, not everything the recogniser can read: the banks its records
+    // and accounts name, the shops it has paid. The rest of the vocabulary stays one search away —
+    // a bank you are about to meet for the first time is three letters, not seventy-six rows.
+    val banksUsed by stateManager.banksInUse.collectAsStateWithLifecycle(initialValue = emptyList())
+    val vendorsUsed by stateManager.vendorsInUse.collectAsStateWithLifecycle(initialValue = emptyList())
+    val vendorNames = remember(vendorsUsed, settingsSnapshot.customVendors, settingsSnapshot.disabledVendors) {
+        (FieldVocabularies.merge(emptyList(), settingsSnapshot.customVendors, settingsSnapshot.disabledVendors) + vendorsUsed)
+            .distinctBy { it.lowercase() }.sorted()
     }
-    val bankNames = remember(settingsSnapshot.customBanks, settingsSnapshot.disabledBanks) {
+    val bankNames = remember(banksUsed, settingsSnapshot.customBanks) {
+        (banksUsed + settingsSnapshot.customBanks).distinctBy { it.lowercase() }.sorted()
+    }
+    val banksKnown = remember(settingsSnapshot.customBanks, settingsSnapshot.disabledBanks) {
         FieldVocabularies.merge(
             FieldVocabularies.provided(context).banks,
             settingsSnapshot.customBanks,
@@ -624,6 +633,7 @@ fun ExpenseEditScreen(
                         noneLabel = languageManager.getString("none"),
                         onNoneSelected = { bank = "" },
                         searchPlaceholder = languageManager.getString("filter_search_hint"),
+                        extraWhileSearching = banksKnown,
                         actionLabel = languageManager.getString("account_bank_new"),
                         onAction = { namingBank = true }
                     )

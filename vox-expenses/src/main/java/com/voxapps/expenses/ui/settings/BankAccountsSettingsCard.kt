@@ -64,6 +64,8 @@ fun BankAccountsSettingsCard(
     /** The banks this device recognises — the vocabulary that names an issuer in a message, so what
      *  an account says it belongs to and what a capture can read are the same list. */
     bankNames: List<String>,
+    /** Every bank the recogniser knows — reachable by searching, never listed outright. */
+    knownBanks: List<String>,
     onAddBank: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -133,6 +135,7 @@ fun BankAccountsSettingsCard(
             all = accounts,
             knownCurrencies = knownCurrencies,
             bankNames = bankNames,
+            knownBanks = knownBanks,
             onAddBank = onAddBank,
             onAddAccount = onAdd,
             onConfirm = { onUpdate(it); editing = null },
@@ -265,6 +268,7 @@ private fun AccountEditDialog(
     all: List<BankAccount>,
     knownCurrencies: List<String>,
     bankNames: List<String>,
+    knownBanks: List<String>,
     onAddBank: (String) -> Unit,
     onAddAccount: (String) -> Unit,
     onConfirm: (BankAccount) -> Unit,
@@ -325,6 +329,7 @@ private fun AccountEditDialog(
                     noneLabel = languageManager.getString("none"),
                     onNoneSelected = { bankName = "" },
                     searchPlaceholder = languageManager.getString("filter_search_hint"),
+                    extraWhileSearching = knownBanks,
                     actionLabel = languageManager.getString("account_bank_new"),
                     onAction = { namingBank = true }
                 )

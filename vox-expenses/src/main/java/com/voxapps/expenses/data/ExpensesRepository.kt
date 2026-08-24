@@ -27,7 +27,9 @@ import com.voxapps.textmatch.extract.FieldCorrections
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import com.voxapps.design.color.VoxColorPalette
@@ -204,6 +206,31 @@ class ExpensesRepository(
         expenseDao.observeExpensesWithDetails().distinctUntilChanged()
     val categories: Flow<List<Category>> = categoryDao.observeAll().distinctUntilChanged()
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll().distinctUntilChanged()
+
+    /**
+     * The banks this device actually deals with: what its records name, and what its accounts are
+     * held at. Not the recogniser's vocabulary, which lists every bank it can read a message by —
+     * that is a much larger thing and answers a different question.
+     */
+    val banksInUse: Flow<List<String>> =
+        combine(
+            expenseDao.observeBanksInUse(),
+            bankAccounts
+        ) { fromRecords, accounts ->
+            (fromRecords + accounts.mapNotNull { it.bankName })
+                .map { it.trim() }.filter { it.isNotEmpty() }
+                .distinctBy { it.lowercase() }
+                .sorted()
+        }.distinctUntilChanged()
+
+    /** The shops this device's records name. */
+    val vendorsInUse: Flow<List<String>> =
+        expenseDao.observeVendorsInUse().mapNames().distinctUntilChanged()
+
+    /** Trimmed, non-empty, one spelling each — what any list of names wants. */
+    private fun Flow<List<String>>.mapNames(): Flow<List<String>> = map { names ->
+        names.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+    }
 
     // --- what there is left to spend, per account and currency (see AccountBudget) ---
 
