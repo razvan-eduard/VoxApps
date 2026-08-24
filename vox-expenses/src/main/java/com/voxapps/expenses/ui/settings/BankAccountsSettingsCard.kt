@@ -61,6 +61,10 @@ fun BankAccountsSettingsCard(
     onUpdate: (BankAccount) -> Unit,
     onDelete: (BankAccount) -> Unit,
     onAdd: (String) -> Unit,
+    /** The banks this device recognises — the vocabulary that names an issuer in a message, so what
+     *  an account says it belongs to and what a capture can read are the same list. */
+    bankNames: List<String>,
+    onAddBank: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
@@ -128,6 +132,9 @@ fun BankAccountsSettingsCard(
             account = account,
             all = accounts,
             knownCurrencies = knownCurrencies,
+            bankNames = bankNames,
+            onAddBank = onAddBank,
+            onAddAccount = onAdd,
             onConfirm = { onUpdate(it); editing = null },
             onDismiss = { editing = null }
         )
@@ -257,6 +264,9 @@ private fun AccountEditDialog(
     account: BankAccount,
     all: List<BankAccount>,
     knownCurrencies: List<String>,
+    bankNames: List<String>,
+    onAddBank: (String) -> Unit,
+    onAddAccount: (String) -> Unit,
     onConfirm: (BankAccount) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -267,6 +277,8 @@ private fun AccountEditDialog(
     var icon by remember(account.id) { mutableStateOf(account.icon) }
     var parentId by remember(account.id) { mutableStateOf(account.parentId) }
     var pickingIcon by remember(account.id) { mutableStateOf(false) }
+    var namingBank by remember(account.id) { mutableStateOf(false) }
+    var addingParent by remember(account.id) { mutableStateOf(false) }
 
     val possibleParents = remember(account.id, all) {
         all.filter { BankAccountTree.canParent(account, it, all) }
@@ -296,15 +308,20 @@ private fun AccountEditDialog(
                         modifier = Modifier.weight(1f).padding(start = 8.dp)
                     )
                 }
-                // A capture fills this when a message names the issuer, but a card added by hand
-                // never had a message — and an account whose bank nobody can state is one you have
-                // to recognise by its number.
-                OutlinedTextField(
-                    value = bankName,
-                    onValueChange = { bankName = it },
-                    label = { Text(languageManager.getString("account_bank_name")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                // Chosen from the vocabulary that recognises an issuer in a message, not typed:
+                // one list means an account's bank and a capture's bank are the same word, so a name
+                // written here is one a later notification can also be read by. Adding one adds it
+                // there — two things worth having are one action.
+                Text(languageManager.getString("account_bank_name"), style = MaterialTheme.typography.labelLarge)
+                Picklist(
+                    items = bankNames,
+                    selected = bankNames.firstOrNull { it.equals(bankName, ignoreCase = true) },
+                    itemLabel = { it },
+                    onSelect = { bankName = it },
+                    noneLabel = languageManager.getString("none"),
+                    onNoneSelected = { bankName = "" },
+                    actionLabel = languageManager.getString("account_bank_new"),
+                    onAction = { namingBank = true }
                 )
                 Text(languageManager.getString("account_currency"), style = MaterialTheme.typography.labelLarge)
                 Picklist(
@@ -315,9 +332,11 @@ private fun AccountEditDialog(
                     noneLabel = languageManager.getString("none"),
                     onNoneSelected = { currency = "" }
                 )
-                // Only where there is somewhere to put it — a lone account has no parent to choose,
-                // and offering an empty picker would be offering a decision nobody can make.
-                if (possibleParents.isNotEmpty()) {
+                // Shown wherever this row could belong to something, even with no candidate yet:
+                // an empty list still offers making one, and the case with nothing to choose from is
+                // exactly the case where that is the answer. A row already holding cards is the one
+                // that cannot — the one-level rule, see BankAccountTree.canParent.
+                if (BankAccountTree.childrenOf(account.id, all).isEmpty()) {
                     Text(languageManager.getString("account_belongs_to"), style = MaterialTheme.typography.labelLarge)
                     Picklist(
                         items = possibleParents,
@@ -325,7 +344,12 @@ private fun AccountEditDialog(
                         itemLabel = { it.displayName() },
                         onSelect = { parentId = it.id },
                         noneLabel = languageManager.getString("account_belongs_to_none"),
-                        onNoneSelected = { parentId = null }
+                        onNoneSelected = { parentId = null },
+                        // The account a card belongs to may not exist yet, and sending somebody back
+                        // to the list to make one, then in again to point at it, is three steps for
+                        // one intention.
+                        actionLabel = languageManager.getString("account_belongs_to_new"),
+                        onAction = { addingParent = true }
                     )
                 }
             }
@@ -360,4 +384,65 @@ private fun AccountEditDialog(
             cancelLabel = languageManager.getString("cancel")
         )
     }
+
+    if (namingBank) {
+        // Added to the vocabulary, not only to this row: a bank named here is one a later
+        // notification can be read by.
+        TypedNameDialog(
+            title = languageManager.getString("account_bank_new"),
+            label = languageManager.getString("account_bank_name"),
+            onConfirm = { typed ->
+                bankName = typed
+                onAddBank(typed)
+                namingBank = false
+            },
+            onDismiss = { namingBank = false }
+        )
+    }
+
+    if (addingParent) {
+        AddAccountDialog(
+            onConfirm = { typed ->
+                // The row is created here and pointed at from the list once it exists; the card's
+                // own parent is set on the next pass rather than guessed at now.
+                onAddAccount(typed)
+                addingParent = false
+            },
+            onDismiss = { addingParent = false }
+        )
+    }
+}
+
+/** One line of text, asked for and returned — a bank's name, and nothing else. */
+@Composable
+private fun TypedNameDialog(
+    title: String,
+    label: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val languageManager = LocalLanguageManager.current
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(label) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text.trim()) },
+                enabled = text.isNotBlank()
+            ) { Text(languageManager.getString("save")) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+        }
+    )
 }

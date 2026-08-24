@@ -685,5 +685,7 @@
   "widget_budget_selected": "Comptes choisis",
   "widget_budget_none_yet": "Aucun compte n'a encore de budget.",
   "widget_budget_left": "%s restants",
-  "account_bank_name": "Banque"
+  "account_bank_name": "Banque",
+  "account_bank_new": "Nouvelle banque…",
+  "account_belongs_to_new": "Nouveau compte…"
 }
