@@ -25,9 +25,12 @@ class ExpenseFilterSummaryTest {
         currency: String? = null,
         from: Long? = null,
         to: Long? = null,
-        sort: SortMode = SortMode.NEWEST
-    ) = ExpenseFilterSummary.parts(category, bank, vendor, location, amount, account, currency, from, to, sort, date, money, sortName)
-        .filterNotNull()
+        sort: SortMode = SortMode.NEWEST,
+        needsAttention: String? = null
+    ) = ExpenseFilterSummary.parts(
+        category, bank, vendor, location, amount, account, currency, from, to, sort,
+        needsAttention, date, money, sortName
+    ).filterNotNull()
 
     @Test
     fun `an unnarrowed list reports nothing`() {
@@ -162,5 +165,16 @@ class ExpenseFilterSummaryTest {
     fun `every sort has its own name`() {
         for (mode in SortMode.entries) assertTrue(sortKeyOf(mode).startsWith("sort_"))
         assertEquals(SortMode.entries.size, SortMode.entries.map { sortKeyOf(it) }.distinct().size)
+    }
+
+    /** The narrowing to incomplete records is named like every other filter, so it can be seen and
+     *  undone rather than silently hiding rows. */
+    @Test
+    fun `needing attention is named first`() {
+        assertEquals(listOf("Needs you"), parts(needsAttention = "Needs you"))
+        assertEquals(
+            listOf("Needs you", "Groceries"),
+            parts(category = "Groceries", needsAttention = "Needs you")
+        )
     }
 }

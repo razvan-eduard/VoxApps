@@ -54,6 +54,8 @@ import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.design.settings.VoxPendingStrip
+import com.voxapps.expenses.domain.health.ExpenseGaps
+import com.voxapps.expenses.ui.settings.SettingsPage
 import com.voxapps.expenses.data.RecurringPayment
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.recurring.PaymentPredictor
@@ -75,6 +77,8 @@ fun ExpensesScreen(
     onAddExpense: () -> Unit,
     onEditExpense: (ExpenseWithDetails) -> Unit,
     onOpenSettings: () -> Unit,
+    /** Straight to one settings page — a count of waiting rules wants the rules, not a menu. */
+    onOpenSettingsAt: (SettingsPage) -> Unit = { onOpenSettings() },
     onOpenReports: () -> Unit,
     todayEffect: TodayEffect = TodayEffect.NONE,
     todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
@@ -196,19 +200,51 @@ fun ExpensesScreen(
         }
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             // Above the list, because it is about something that will land in it.
+            // Everything waiting for the person, counted in one line. Each of these already
+            // existed somewhere; what was missing was one place that says so.
             val pending by stateManager.pendingCaptures.collectAsStateWithLifecycle(initialValue = 0)
+            val stagedCaptures by stateManager.pendingNotificationExpenses
+                .collectAsStateWithLifecycle(initialValue = emptyList())
+            val proposedRules by stateManager.proposedRuleCount.collectAsStateWithLifecycle(initialValue = 0)
+            val incomplete = remember(state.expenses, state.categories) {
+                ExpenseGaps.needingAttention(
+                    state.expenses,
+                    state.categories.firstOrNull { it.isDefault }?.id
+                ).size
+            }
+            var showAttention by rememberSaveable { mutableStateOf(false) }
             var showPending by rememberSaveable { mutableStateOf(false) }
+
             VoxPendingStrip(
-                count = pending,
-                text = { n -> languageManager.getString("pending_captures").format(n) },
-                onClick = { showPending = true }
+                count = incomplete + stagedCaptures.size + proposedRules + pending,
+                text = { n -> languageManager.getString("attention_strip").format(n) },
+                onClick = { showAttention = true }
             )
+            if (showAttention) {
+                AttentionSheet(
+                    items = listOf(
+                        AttentionItem("attention_incomplete", incomplete) {
+                            stateManager.setNeedsAttentionFilter(true)
+                        },
+                        AttentionItem("attention_staged", stagedCaptures.size) {
+                            onOpenSettingsAt(SettingsPage.NOTIFICATION_CAPTURE)
+                        },
+                        AttentionItem("attention_rules", proposedRules) {
+                            onOpenSettingsAt(SettingsPage.CLEANUP_REMAP)
+                        },
+                        AttentionItem("attention_queued", pending) { showPending = true }
+                    ),
+                    onDismiss = { showAttention = false }
+                )
+            }
             if (showPending) {
                 val pendingRows by stateManager.pendingCaptureList
                     .collectAsStateWithLifecycle(initialValue = emptyList())
                 PendingCapturesSheet(
                     entries = pendingRows,
                     onRetryNow = { stateManager.retryPendingCapturesNow(context) },
+                    onForgetGivenUp = { stateManager.forgetGivenUpCaptures() },
+                    onForget = { requestId -> stateManager.forgetPendingCapture(requestId) },
                     onDismiss = { showPending = false }
                 )
             }

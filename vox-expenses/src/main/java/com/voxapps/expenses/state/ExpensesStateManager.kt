@@ -23,6 +23,8 @@ import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
 import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.expenses.domain.health.ExpenseGaps
+import com.voxapps.expenses.data.RemapRuleEntity
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.NearDuplicateConfig
@@ -92,10 +94,27 @@ class ExpensesStateManager(
         val selectedAccountId: Long? = null,
         val selectedCardId: Long? = null,
         val selectedCurrency: String? = null,
+        /** Narrowed to the records something is missing from — see [ExpenseGaps]. */
+        val onlyNeedsAttention: Boolean = false,
         val sessionTick: Int = 0
     )
 
     private val _runtime = MutableStateFlow(Runtime())
+
+    /**
+     * The records with something missing, when that is what was asked for.
+     *
+     * Applied after the ordinary filters rather than inside them: "needs me" is a question about the
+     * record's completeness, not about which shop or month it belongs to, and the two compose —
+     * "August, and the ones that need me" is a reasonable thing to ask.
+     */
+    private fun withAttentionFilter(
+        rt: Runtime,
+        categories: List<Category>,
+        records: List<ExpenseWithDetails>
+    ): List<ExpenseWithDetails> =
+        if (!rt.onlyNeedsAttention) records
+        else ExpenseGaps.needingAttention(records, categories.firstOrNull { it.isDefault }?.id)
 
     private val _uiState = MutableStateFlow<ExpensesUiState>(ExpensesUiState.Loading)
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
@@ -125,7 +144,7 @@ class ExpensesStateManager(
                 ExpensesUiState.Locked
             } else {
                 ExpensesUiState.Unlocked(
-                    expenses = ExpenseFilter.apply(
+                    expenses = withAttentionFilter(rt, categories, ExpenseFilter.apply(
                         expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank,
                         rt.selectedVendor, rt.selectedLocation, rt.selectedAmount,
                         // A card answers for itself; an account answers for its cards too. The
@@ -133,7 +152,7 @@ class ExpensesStateManager(
                         (rt.selectedCardId ?: rt.selectedAccountId)
                             ?.let { BankAccountTree.familyOf(it, accounts) },
                         rt.selectedCurrency, rt.sort
-                    ),
+                    )),
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,
@@ -148,6 +167,7 @@ class ExpensesStateManager(
                     selectedAccountId = rt.selectedAccountId,
                     selectedCardId = rt.selectedCardId,
                     selectedCurrency = rt.selectedCurrency,
+                    onlyNeedsAttention = rt.onlyNeedsAttention,
                     bankAccounts = accounts,
                     availableCurrencies = expenses.map { it.expense.currencyCode }
                         .filter { it.isNotBlank() }.distinct().sorted(),
@@ -179,6 +199,9 @@ class ExpensesStateManager(
         // frames, together with a plan for those synchronous readers.
             .onEach { _uiState.value = it }.launchIn(scope)
     }
+
+    /** Narrows the list to records with something missing — see [ExpenseGaps]. */
+    fun setNeedsAttentionFilter(only: Boolean) = _runtime.update { it.copy(onlyNeedsAttention = only) }
 
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
@@ -219,6 +242,7 @@ class ExpensesStateManager(
             selectedBank = null, selectedVendor = null, selectedLocation = null,
             selectedAmount = null, selectedAccountId = null, selectedCardId = null,
             selectedCurrency = null,
+            onlyNeedsAttention = false,
             sort = SortMode.NEWEST
         )
     }
@@ -816,8 +840,21 @@ class ExpensesStateManager(
      * — is no longer wrong.
      */
     fun retryPendingCapturesNow(context: Context) {
-        scope.launch { pendingLlmRequestQueue.retryStale(context, staleAfterMillis = 0L) }
+        scope.launch { pendingLlmRequestQueue.retryEverythingNow(context) }
     }
+
+    /** Drops the captures the app gave up on — see [VoxLlmRequestQueue.forgetGivenUp]. */
+    fun forgetGivenUpCaptures() {
+        scope.launch { pendingLlmRequestQueue.forgetGivenUp() }
+    }
+
+    fun forgetPendingCapture(requestId: String) {
+        scope.launch { pendingLlmRequestQueue.forget(requestId) }
+    }
+
+    /** Drafted rules nobody has approved yet — see [RemapRuleEntity.ORIGIN_PROPOSED]. */
+    val proposedRuleCount: kotlinx.coroutines.flow.Flow<Int> = expensesRepo.observeRemapRules()
+        .map { rules -> rules.count { it.origin == RemapRuleEntity.ORIGIN_PROPOSED && !it.enabled } }
 
     /** Names this device has actually used — see [ExpensesRepository.banksInUse]. */
     val banksInUse = expensesRepo.banksInUse

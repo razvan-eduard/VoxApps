@@ -79,7 +79,8 @@ class ExpensesContainer(context: Context) {
     val pendingLlmRequestQueue = VoxLlmRequestQueue(database.pendingLlmRequestDao())
 
     /** How many captures are waiting for an answer — see [PendingLlmRequestDao.observeCount]. */
-    val pendingLlmRequestCount = database.pendingLlmRequestDao().observeCount()
+    val pendingLlmRequestCount = database.pendingLlmRequestDao()
+        .observeLiveCount(VoxLlmRequestQueue.DEFAULT_MAX_ATTEMPTS)
 
     /** The waiting captures themselves — what the strip above the list opens onto. */
     val pendingLlmRequests = database.pendingLlmRequestDao().observeAll()

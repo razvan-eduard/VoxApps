@@ -705,5 +705,15 @@
   "pending_task_notification": "Zahlungsbenachrichtigung",
   "pending_task_dedup": "Dublettenprüfung",
   "pending_task_categories": "Kategorien zusammenführen",
-  "pending_task_other": "Erfassung"
+  "pending_task_other": "Erfassung",
+  "pending_captures_given_up": "%d, die die App aufgegeben hat",
+  "pending_captures_given_up_desc": "Erneut gesendet, bis das Wiederholungsbudget aufgebraucht war, und nie beantwortet. Von allein werden sie nicht wieder versucht.",
+  "pending_captures_forget": "Verwerfen",
+  "attention_strip": "%d Dinge warten auf dich…",
+  "attention_title": "Wartet auf dich",
+  "attention_incomplete": "Einträge, denen etwas fehlt",
+  "attention_staged": "Erfassungen zum Prüfen",
+  "attention_rules": "Regeln, die auf Zustimmung warten",
+  "attention_queued": "Erfassungen, die auf eine Antwort warten",
+  "attention_filter": "Braucht dich"
 }

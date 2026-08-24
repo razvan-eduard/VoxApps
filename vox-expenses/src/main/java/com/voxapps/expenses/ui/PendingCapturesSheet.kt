@@ -17,6 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.voxapps.expenses.domain.llm.LlmTasks
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.draw.alpha
+import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.PendingLlmRequestEntity
 import com.voxapps.ipc.VoxLlmRequest
 import java.text.DateFormat
@@ -38,6 +45,8 @@ import java.util.Date
 fun PendingCapturesSheet(
     entries: List<PendingLlmRequestEntity>,
     onRetryNow: () -> Unit,
+    onForgetGivenUp: () -> Unit,
+    onForget: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
@@ -61,39 +70,39 @@ fun PendingCapturesSheet(
                 )
             }
 
-            entries.forEach { entry ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            languageManager.getString(taskLabelKey(entry)),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                                .format(Date(entry.createdAt)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    // Only past the first: "attempt 1" is not news, and a row that says it on every
-                    // capture teaches people to stop reading the column.
-                    if (entry.attemptCount > 1) {
-                        Text(
-                            languageManager.getString("pending_capture_attempts").format(entry.attemptCount),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+            // Two different things, and calling both "waiting" was the mistake: one is still being
+            // re-sent, the other spent its whole budget and will never be tried again on its own.
+            val (givenUp, waiting) = entries.partition { it.attemptCount >= VoxLlmRequestQueue.DEFAULT_MAX_ATTEMPTS }
+
+            waiting.forEach { entry -> CaptureRow(entry, givenUp = false, onForget = { onForget(entry.requestId) }) }
+
+            if (givenUp.isNotEmpty()) {
+                Text(
+                    languageManager.getString("pending_captures_given_up").format(givenUp.size),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Text(
+                    languageManager.getString("pending_captures_given_up_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                givenUp.forEach { entry -> CaptureRow(entry, givenUp = true, onForget = { onForget(entry.requestId) }) }
             }
 
             if (entries.isNotEmpty()) {
-                TextButton(onClick = onRetryNow, modifier = Modifier.padding(top = 4.dp)) {
-                    Text(languageManager.getString("pending_captures_retry"))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    // Works on the given-up ones too: somebody pressing this is saying the reason
+                    // they failed is gone, which the budget knows nothing about.
+                    TextButton(onClick = onRetryNow) {
+                        Text(languageManager.getString("pending_captures_retry"))
+                    }
+                    if (givenUp.isNotEmpty()) {
+                        TextButton(onClick = onForgetGivenUp) {
+                            Text(languageManager.getString("pending_captures_forget"))
+                        }
+                    }
                 }
             }
         }
@@ -111,5 +120,41 @@ private fun taskLabelKey(entry: PendingLlmRequestEntity): String {
         task.startsWith(LlmTasks.EXPENSE_DEDUPLICATION) -> "pending_task_dedup"
         task.startsWith(LlmTasks.CATEGORY_DEDUPLICATION) -> "pending_task_categories"
         else -> "pending_task_other"
+    }
+}
+
+/** One queued capture: what it is, when it was made, and a way to be rid of it. */
+@Composable
+private fun CaptureRow(entry: PendingLlmRequestEntity, givenUp: Boolean, onForget: () -> Unit) {
+    val languageManager = LocalLanguageManager.current
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f).alpha(if (givenUp) 0.6f else 1f)) {
+            Text(
+                languageManager.getString(taskLabelKey(entry)),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.createdAt)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        // Only past the first: "attempt 1" is not news, and a row that says it on every capture
+        // teaches people to stop reading the column.
+        if (entry.attemptCount > 1 && !givenUp) {
+            Text(
+                languageManager.getString("pending_capture_attempts").format(entry.attemptCount),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(onClick = onForget) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = languageManager.getString("pending_captures_forget"),
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
