@@ -1,5 +1,7 @@
 package com.voxapps.calendarapp.ui.todo
 
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -636,10 +638,7 @@ private fun PulsingGlow(color: Color, size: Dp) {
 
 /** Vertical "UP NEXT" text + a small triangle pointer, shown in the [UP_NEXT_LABEL_COLUMN_WIDTH]-wide
  *  marker column reserved on every timeline row — only the "next up" row actually populates it (see
- *  [DefaultTimelineRow]), so the node axis stays aligned whether or not a given row is "next". The
- *  text is rotated -90° with `wrapContentWidth(unbounded = true)` so its natural (unrotated) width
- *  isn't squeezed to the column's fixed width before the rotation is applied, which would otherwise
- *  wrap/clip it. */
+ *  [DefaultTimelineRow]), so the node axis stays aligned whether or not a given row is "next". */
 @Composable
 private fun UpNextMarker(colorArgb: Long) {
     val languageManager = LocalLanguageManager.current
@@ -650,8 +649,22 @@ private fun UpNextMarker(colorArgb: Long) {
             color = color,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
+            // Rotation is a draw-time transform: on its own the node still occupies the *unrotated*
+            // box, so a horizontal run of text keeps reserving horizontal space inside a column
+            // narrower than the word — and the parent clips whatever hangs outside, taking the first
+            // letter with it. Measuring unbounded and reporting the swapped dimensions makes the
+            // layout describe the shape actually drawn, so the column reserves the height a vertical
+            // word needs and nothing is cut.
             modifier = Modifier
-                .wrapContentWidth(unbounded = true)
+                .layout { measurable, _ ->
+                    val placeable = measurable.measure(Constraints())
+                    layout(placeable.height, placeable.width) {
+                        placeable.place(
+                            x = -(placeable.width - placeable.height) / 2,
+                            y = (placeable.width - placeable.height) / 2
+                        )
+                    }
+                }
                 .rotate(-90f)
         )
         Spacer(Modifier.width(2.dp))

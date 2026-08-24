@@ -542,7 +542,13 @@ fun TaskEditInlineCard(
     // (spec: the open one saves, the other opens), flipping the card face, scrolling it out of the
     // lazy edit timeline — and typed edits must survive all of them.
     DisposableEffect(item.id) {
-        onDispose { if (!closedExplicitly) commit() }
+        onDispose {
+            if (closedExplicitly) return@onDispose
+            // Committing needs the screen's scope, which is going away with the screen; discarding
+            // does not, so the never-named case is handled by the repository and the rest here.
+            if (item.text.isEmpty() && text.isBlank()) toDoRepository.discardIfUnnamed(item)
+            else commit()
+        }
     }
 
     // The card sits IN the node's row, in place of the pill — its contour is the node's own color,
@@ -603,7 +609,14 @@ fun TaskEditInlineCard(
                     // here: the title needs no save affordance of its own, it commits with every
                     // other field (done shows on the node beside the card).
                     IconButton(
-                        onClick = { closedExplicitly = true; onClose() },
+                        onClick = {
+                            // Cancel, and for a row created by "+" and never named that means the
+                            // row goes too — skipping the commit alone left it behind as a nameless
+                            // line the list had no way to describe.
+                            closedExplicitly = true
+                            toDoRepository.discardIfUnnamed(item)
+                            onClose()
+                        },
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
