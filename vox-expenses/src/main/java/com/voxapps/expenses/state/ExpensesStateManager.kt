@@ -789,6 +789,10 @@ class ExpensesStateManager(
 
     val spendingLimits: Flow<List<SpendingLimit>> = expensesRepo.spendingLimits
 
+    fun setWidgetBudgetMode(mode: String) { scope.launch { settingsRepo.setWidgetBudgetMode(mode) } }
+
+    fun setWidgetBudgetAccountIds(ids: Set<Long>) { scope.launch { settingsRepo.setWidgetBudgetAccountIds(ids) } }
+
     // --- budgets: what there is left to spend, per account and currency ---
 
     val accountBudgets = expensesRepo.accountBudgets

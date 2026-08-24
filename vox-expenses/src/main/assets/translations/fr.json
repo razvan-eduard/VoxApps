@@ -677,5 +677,13 @@
   "budget_mode_monthly": "Mensuel",
   "budget_mode_weekly": "Hebdomadaire",
   "budget_mode_pot": "Jusqu'à recharge",
-  "budget_topped_up": "Rechargé"
+  "budget_topped_up": "Rechargé",
+  "widget_budget_title": "Budget sur l'écran d'accueil",
+  "widget_budget_desc": "Le widget peut indiquer ce qu'il reste à dépenser. Désactivé, il n'affiche rien du tout — un écran d'accueil se lit sur l'écran verrouillé et par-dessus l'épaule.",
+  "widget_budget_off": "Désactivé",
+  "widget_budget_total": "Total",
+  "widget_budget_selected": "Comptes choisis",
+  "widget_budget_none_yet": "Aucun compte n'a encore de budget.",
+  "widget_budget_left": "%s restants",
+  "account_bank_name": "Banque"
 }

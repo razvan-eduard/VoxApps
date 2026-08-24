@@ -87,8 +87,16 @@ data class BankAccount(
             digits = digits
         )
 
-    /** What to show where it has to name itself: what it was called, or what it is. */
-    fun displayName(): String = label?.takeIf { it.isNotBlank() } ?: defaultLabel(kind, digits)
+    /**
+     * What to show where it has to name itself.
+     *
+     * What you called it, else the bank and the last four — "ING ••4535" is what a person recognises,
+     * and 24 characters of IBAN is what they scroll past. The number in full remains for a row
+     * nothing else identifies: it is then the only thing there is to know it by.
+     */
+    fun displayName(): String = label?.takeIf { it.isNotBlank() }
+        ?: bankName?.takeIf { it.isNotBlank() }?.let { "$it ••${digits.takeLast(4)}" }
+        ?: defaultLabel(kind, digits)
 
     companion object {
         /**

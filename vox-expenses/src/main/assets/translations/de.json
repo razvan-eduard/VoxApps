@@ -677,5 +677,13 @@
   "budget_mode_monthly": "Monatlich",
   "budget_mode_weekly": "Wöchentlich",
   "budget_mode_pot": "Bis zur Aufladung",
-  "budget_topped_up": "Aufgeladen"
+  "budget_topped_up": "Aufgeladen",
+  "widget_budget_title": "Budget auf dem Startbildschirm",
+  "widget_budget_desc": "Das Widget kann nennen, was zum Ausgeben bleibt. Aus zeigt gar nichts — ein Startbildschirm wird auf dem Sperrbildschirm und über die Schulter gelesen.",
+  "widget_budget_off": "Aus",
+  "widget_budget_total": "Gesamt",
+  "widget_budget_selected": "Gewählte Konten",
+  "widget_budget_none_yet": "Noch hat kein Konto ein Budget.",
+  "widget_budget_left": "%s übrig",
+  "account_bank_name": "Bank"
 }

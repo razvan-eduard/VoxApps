@@ -147,4 +147,19 @@ class BankAccountsTest {
         assertEquals("Salary", account("4535").copy(label = "Salary").displayName())
         assertEquals("••4535", account("4535").copy(label = "  ").displayName())
     }
+
+    /** "ING ••4535" is what a person recognises; 24 characters of IBAN is what they scroll past. */
+    @Test
+    fun `with a bank but no name of its own, it wears the bank and the last four`() {
+        assertEquals("ING ••4535", account("4535").copy(bankName = "ING").displayName())
+        assertEquals(
+            "ING ••EST1",
+            account("GB82WEST1", kind = AccountIdentifiers.Kind.IBAN).copy(bankName = "ING").displayName()
+        )
+    }
+
+    @Test
+    fun `a name of its own still outranks the bank`() {
+        assertEquals("Salary", account("4535").copy(bankName = "ING", label = "Salary").displayName())
+    }
 }

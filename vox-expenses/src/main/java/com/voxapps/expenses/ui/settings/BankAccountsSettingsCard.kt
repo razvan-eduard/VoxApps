@@ -262,6 +262,7 @@ private fun AccountEditDialog(
 ) {
     val languageManager = LocalLanguageManager.current
     var label by remember(account.id) { mutableStateOf(account.label.orEmpty()) }
+    var bankName by remember(account.id) { mutableStateOf(account.bankName.orEmpty()) }
     var currency by remember(account.id) { mutableStateOf(account.currencyCode) }
     var icon by remember(account.id) { mutableStateOf(account.icon) }
     var parentId by remember(account.id) { mutableStateOf(account.parentId) }
@@ -295,6 +296,16 @@ private fun AccountEditDialog(
                         modifier = Modifier.weight(1f).padding(start = 8.dp)
                     )
                 }
+                // A capture fills this when a message names the issuer, but a card added by hand
+                // never had a message — and an account whose bank nobody can state is one you have
+                // to recognise by its number.
+                OutlinedTextField(
+                    value = bankName,
+                    onValueChange = { bankName = it },
+                    label = { Text(languageManager.getString("account_bank_name")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text(languageManager.getString("account_currency"), style = MaterialTheme.typography.labelLarge)
                 Picklist(
                     items = knownCurrencies,
@@ -324,6 +335,7 @@ private fun AccountEditDialog(
                 onConfirm(
                     account.copy(
                         label = label.trim().takeIf { it.isNotEmpty() },
+                        bankName = bankName.trim().takeIf { it.isNotEmpty() },
                         currencyCode = currency,
                         icon = icon,
                         parentId = parentId

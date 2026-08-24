@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.expenses.data.AccountBudget
+import androidx.compose.material3.Checkbox
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.BankAccount
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.SpendingLimit
@@ -93,6 +95,7 @@ fun AccountBudgetsSection(
                 BudgetRow(
                     budget = budget,
                     expenses = expenses,
+                    accounts = accounts,
                     languageManager = languageManager,
                     onDelete = { onDelete(budget) },
                     onTopUp = {
@@ -143,17 +146,95 @@ fun AccountBudgetsSection(
     }
 }
 
+/**
+ * Whether the home-screen widget names what is left, and of what.
+ *
+ * Off is its own answer rather than an empty selection: a widget is read on a lock screen and over
+ * shoulders, so somebody who does not want a figure there wants it gone, not small.
+ */
+@Composable
+fun WidgetBudgetHeaderCard(
+    mode: String,
+    selectedAccountIds: Set<Long>,
+    accounts: List<BankAccount>,
+    budgets: List<AccountBudget>,
+    onModeChange: (String) -> Unit,
+    onSelectionChange: (Set<Long>) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val languageManager = LocalLanguageManager.current
+    val withBudgets = remember(accounts, budgets) {
+        BankAccountTree.rootsOf(accounts).filter { account -> budgets.any { it.accountId == account.id } }
+    }
+
+    SettingsSectionCard(languageManager.getString("widget_budget_title"), modifier = modifier) {
+        Text(
+            languageManager.getString("widget_budget_desc"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 6.dp)
+        ) {
+            listOf(
+                ExpensesSettings.WIDGET_BUDGET_OFF to "widget_budget_off",
+                ExpensesSettings.WIDGET_BUDGET_TOTAL to "widget_budget_total",
+                ExpensesSettings.WIDGET_BUDGET_SELECTED to "widget_budget_selected"
+            ).forEach { (value, key) ->
+                FilterChip(
+                    selected = mode == value,
+                    onClick = { onModeChange(value) },
+                    label = { Text(languageManager.getString(key)) }
+                )
+            }
+        }
+        if (mode == ExpensesSettings.WIDGET_BUDGET_SELECTED) {
+            withBudgets.forEach { account ->
+                val ticked = account.id in selectedAccountIds
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onSelectionChange(
+                                if (ticked) selectedAccountIds - account.id
+                                else selectedAccountIds + account.id
+                            )
+                        }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(checked = ticked, onCheckedChange = null)
+                    Text(
+                        account.displayName(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
+            if (withBudgets.isEmpty()) {
+                Text(
+                    languageManager.getString("widget_budget_none_yet"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
 /** One budget: what is left, out of what, and how it renews. */
 @Composable
 private fun BudgetRow(
     budget: AccountBudget,
     expenses: List<Expense>,
+    accounts: List<BankAccount>,
     languageManager: LanguageManager,
     onDelete: () -> Unit,
     onTopUp: () -> Unit
 ) {
     val opening = BudgetMath.openingBalance(budget)
-    val remaining = BudgetMath.remaining(budget, expenses)
+    val remaining = BudgetMath.remaining(budget, expenses, accounts)
     val fraction = if (opening > 0) (remaining / opening).coerceIn(0.0, 1.0).toFloat() else 0f
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {

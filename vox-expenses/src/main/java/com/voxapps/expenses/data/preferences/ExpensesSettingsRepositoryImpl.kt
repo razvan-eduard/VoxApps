@@ -48,6 +48,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val CUSTOM_BANKS = stringSetPreferencesKey("custom_banks")
         val DISABLED_LEGAL_FORMS = stringSetPreferencesKey("disabled_legal_forms")
         val DISABLED_BANKS = stringSetPreferencesKey("disabled_banks")
+        val WIDGET_BUDGET_MODE = stringPreferencesKey("widget_budget_mode")
+        val WIDGET_BUDGET_ACCOUNTS = stringSetPreferencesKey("widget_budget_accounts")
         val CUSTOM_STOP_WORDS = stringSetPreferencesKey("custom_stop_words")
         val DISABLED_STOP_WORDS = stringSetPreferencesKey("disabled_stop_words")
         val DISMISS_NOTIFICATION_ON_CAPTURE = booleanPreferencesKey("dismiss_notification_on_capture")
@@ -145,6 +147,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             customBanks = prefs[Keys.CUSTOM_BANKS] ?: emptySet(),
             disabledLegalForms = prefs[Keys.DISABLED_LEGAL_FORMS] ?: emptySet(),
             disabledBanks = prefs[Keys.DISABLED_BANKS] ?: emptySet(),
+            widgetBudgetMode = prefs[Keys.WIDGET_BUDGET_MODE] ?: ExpensesSettings.WIDGET_BUDGET_OFF,
+            widgetBudgetAccountIds = prefs[Keys.WIDGET_BUDGET_ACCOUNTS].orEmpty()
+                .mapNotNull { it.toLongOrNull() }.toSet(),
             customStopWords = prefs[Keys.CUSTOM_STOP_WORDS] ?: emptySet(),
             disabledStopWords = prefs[Keys.DISABLED_STOP_WORDS] ?: emptySet(),
             dismissNotificationOnCapture = prefs[Keys.DISMISS_NOTIFICATION_ON_CAPTURE] ?: false,
@@ -284,6 +289,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setNotificationModelUse(mode: String) {
         if (mode !in ExpensesSettings.NOTIFICATION_MODEL_CHOICES) return
         dataStore.edit { it[Keys.NOTIFICATION_MODEL_USE] = mode }
+    }
+
+    override suspend fun setWidgetBudgetMode(mode: String) {
+        dataStore.edit { it[Keys.WIDGET_BUDGET_MODE] = mode }
+    }
+
+    override suspend fun setWidgetBudgetAccountIds(ids: Set<Long>) {
+        dataStore.edit { it[Keys.WIDGET_BUDGET_ACCOUNTS] = ids.map { id -> id.toString() }.toSet() }
     }
 
     override suspend fun setCustomVocabulary(vocabulary: String, terms: Set<String>) {

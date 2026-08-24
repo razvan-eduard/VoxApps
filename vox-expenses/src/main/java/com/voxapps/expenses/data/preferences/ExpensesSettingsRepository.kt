@@ -53,6 +53,10 @@ interface ExpensesSettingsRepository {
     suspend fun setAutoCreateAccountsFromNotifications(enabled: Boolean)
     suspend fun setDefaultAccountCurrency(code: String)
     /** Adds or removes a term of this device's own; see [ExpensesSettings.customBanks]. */
+    suspend fun setWidgetBudgetMode(mode: String)
+
+    suspend fun setWidgetBudgetAccountIds(ids: Set<Long>)
+
     suspend fun setCustomVocabulary(vocabulary: String, terms: Set<String>)
     /** Switches shipped terms off or back on; see [ExpensesSettings.disabledBanks]. */
     suspend fun setDisabledVocabulary(vocabulary: String, keys: Set<String>)
