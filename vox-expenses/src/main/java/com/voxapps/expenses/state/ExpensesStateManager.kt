@@ -793,6 +793,10 @@ class ExpensesStateManager(
 
     fun setWidgetBudgetAccountIds(ids: Set<Long>) { scope.launch { settingsRepo.setWidgetBudgetAccountIds(ids) } }
 
+    /** Names this device has actually used — see [ExpensesRepository.banksInUse]. */
+    val banksInUse = expensesRepo.banksInUse
+    val vendorsInUse = expensesRepo.vendorsInUse
+
     // --- budgets: what there is left to spend, per account and currency ---
 
     val accountBudgets = expensesRepo.accountBudgets

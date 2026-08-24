@@ -31,6 +31,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -286,6 +289,7 @@ private fun VoxCustomColorEntry(onClick: () -> Unit, size: Dp = SWATCH_OUTER_SIZ
  * `LocalLanguageManager`-resolved strings (matches [com.voxapps.design.rememberRequirementGate]'s
  * `requiredMessage` param convention) once translation keys exist for it.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoxCustomColorDialog(
     initialColor: Long,
@@ -305,9 +309,13 @@ fun VoxCustomColorDialog(
     var value by remember { mutableFloatStateOf(initValue) }
     val currentColor = remember(hue, saturation, value) { VoxColorPalette.hsvToArgb(hue, saturation, value) }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    // A sheet rather than a dialog, so it goes away the way everything else that covers the screen
+    // does: dragged down. A full-screen dialog can only be dismissed by finding its own close
+    // button, which is a different gesture for the same intention.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Filled.Close, contentDescription = cancelLabel)

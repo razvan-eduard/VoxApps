@@ -512,6 +512,7 @@ fun NotificationCaptureSettingsTab(
         // Beside the vocabularies but deliberately unlike them: an account is read from a format,
         // never learned, so this card has no supplied list and nothing to switch off term by term.
         val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+        val banksUsed by stateManager.banksInUse.collectAsStateWithLifecycle(initialValue = emptyList())
         BankAccountsSettingsCard(
             accounts = accounts,
             autoCreateFromScans = settings.autoCreateAccountsFromScans,
@@ -526,7 +527,11 @@ fun NotificationCaptureSettingsTab(
             onDelete = { stateManager.deleteBankAccount(it) },
             // The same list the classifier reads a message's issuer with, so an account's bank and
             // a capture's bank cannot drift into being two different vocabularies.
-            bankNames = remember(provided.banks, settings.customBanks, settings.disabledBanks) {
+            // The banks in play, and the whole vocabulary only a search away.
+            bankNames = remember(banksUsed, settings.customBanks) {
+                (banksUsed + settings.customBanks).distinctBy { it.lowercase() }.sorted()
+            },
+            knownBanks = remember(provided.banks, settings.customBanks, settings.disabledBanks) {
                 FieldVocabularies.merge(provided.banks, settings.customBanks, settings.disabledBanks)
             },
             onAddBank = { name -> scope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, name) } },

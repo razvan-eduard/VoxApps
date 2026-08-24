@@ -13,6 +13,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -74,6 +78,7 @@ object VoxIcons {
  * being made — a person who set one must be able to take it back without deleting the thing it
  * belongs to.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoxIconPickerDialog(
     title: String,
@@ -87,14 +92,19 @@ fun VoxIconPickerDialog(
     icons: List<String> = VoxIcons.COMMON
 ) {
     var typed by remember { mutableStateOf(selected.orEmpty()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+    // A sheet, like every other list that covers what is behind it: dragged down to leave, rather
+    // than dismissed only by the one button that says so.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleLarge)
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -124,14 +134,16 @@ fun VoxIconPickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                TextButton(onClick = { onPick(null) }, modifier = Modifier.padding(top = 4.dp)) {
-                    Text(noneLabel)
-                }
+            TextButton(onClick = { onPick(null) }, modifier = Modifier.padding(top = 4.dp)) {
+                Text(noneLabel)
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onPick(VoxIcons.sanitised(typed)) }) { Text(confirmLabel) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(cancelLabel) } }
-    )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) { Text(cancelLabel) }
+                TextButton(onClick = { onPick(VoxIcons.sanitised(typed)) }) { Text(confirmLabel) }
+            }
+        }
+    }
 }

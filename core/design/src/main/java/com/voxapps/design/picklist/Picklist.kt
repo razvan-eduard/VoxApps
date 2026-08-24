@@ -15,6 +15,15 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -47,6 +56,7 @@ import androidx.compose.ui.unit.dp
  * app with its own field styling passes its own — that is how the note and expense editors keep
  * their paper-like fields without any of that styling reaching this module.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> Picklist(
     items: List<T>,
@@ -97,6 +107,23 @@ fun <T> Picklist(
      */
     searchAllLabel: ((Int) -> String)? = null,
     onSearchAll: (String) -> Unit = {},
+    /**
+     * Whether the rows arrive as a sheet rather than as a menu hanging off the anchor.
+     *
+     * Defaults to whether a search box was asked for, which is already this component's own signal
+     * that the list is as long as the data makes it — and a list that long covers the screen either
+     * way, so it should be dismissed the way everything else covering the screen is.
+     */
+    /**
+     * Rows a search can reach that the list does not show.
+     *
+     * A field naming a bank should offer the banks you deal with, not every bank there is — but the
+     * one you are about to deal with for the first time has to be reachable too, and typing three
+     * letters is a smaller thing than scrolling seventy-six rows. Shown only while the query is
+     * non-blank, after whatever the list itself matched, and never twice.
+     */
+    extraWhileSearching: List<T> = emptyList(),
+    asSheet: Boolean = searchPlaceholder != null,
     below: @Composable () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -104,89 +131,84 @@ fun <T> Picklist(
     // The width belongs to the anchor, not to this box: a full-width button fills it, an inline one
     // does not, and a box that always filled would stretch the second kind across its row.
     var query by remember { mutableStateOf("") }
-    val shown = remember(items, query) {
+    val shown = remember(items, extraWhileSearching, query) {
         if (query.isBlank()) items
-        else items.filter { itemLabel(it).contains(query.trim(), ignoreCase = true) }
+        else {
+            val q = query.trim()
+            val matched = items.filter { itemLabel(it).contains(q, ignoreCase = true) }
+            val known = matched.map { itemLabel(it).lowercase() }.toSet()
+            matched + extraWhileSearching.filter {
+                itemLabel(it).contains(q, ignoreCase = true) && itemLabel(it).lowercase() !in known
+            }
+        }
+    }
+
+    // The rows, wherever they are drawn — a menu hanging off the anchor, or a sheet covering the
+    // screen. Written once, because the difference between the two is where they appear and nothing
+    // about what they say.
+    val close = { expanded = false; query = "" }
+    val rows: @Composable () -> Unit = {
+        if (query.isNotBlank() && searchAllLabel != null) {
+            PicklistRow(text = searchAllLabel(shown.size)) { onSearchAll(query.trim()); close() }
+        }
+        noneLabel?.let { label -> PicklistRow(text = label) { onNoneSelected(); close() } }
+        actionLabel?.let { label -> PicklistRow(text = label) { onAction(); close() } }
+        shown.forEach { item ->
+            val enabled = itemEnabled(item)
+            PicklistRow(
+                text = itemLabel(item) + if (enabled) itemNote(item) else disabledSuffix(item),
+                enabled = enabled,
+                leading = itemLeading?.let { leading -> { leading(item) } }
+            ) { if (enabled) { onSelect(item); close() } }
+        }
+    }
+
+    val searchField: @Composable () -> Unit = {
+        searchPlaceholder?.let { placeholder ->
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                singleLine = true,
+                placeholder = { Text(placeholder, style = MaterialTheme.typography.bodySmall) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = if (query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = null)
+                        }
+                    }
+                } else null,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
     }
 
     Box(modifier = modifier) {
         anchor(selected?.let(itemLabel) ?: noneLabel.orEmpty()) { expanded = true }
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false; query = "" },
-            modifier = if (menuFillsWidth) Modifier.fillMaxWidth() else Modifier
-        ) {
-            searchPlaceholder?.let { placeholder ->
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    singleLine = true,
-                    placeholder = { Text(placeholder, style = MaterialTheme.typography.bodySmall) },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    trailingIcon = if (query.isNotEmpty()) {
-                        {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Filled.Clear, contentDescription = null)
-                            }
+        if (asSheet) {
+            // A list this long covers the screen whichever way it is drawn, and something covering
+            // the screen should leave the way everything else does — dragged down. A menu can only
+            // be dismissed by tapping the one place it is not.
+            if (expanded) {
+                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                ModalBottomSheet(onDismissRequest = { close() }, sheetState = sheetState) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        searchField()
+                        Column(modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                            rows()
                         }
-                    } else null,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-                if (query.isNotBlank() && searchAllLabel != null) {
-                    DropdownMenuItem(
-                        text = { Text(searchAllLabel(shown.size)) },
-                        onClick = {
-                            onSearchAll(query.trim())
-                            expanded = false
-                            query = ""
-                        }
-                    )
+                    }
                 }
             }
-
-            noneLabel?.let { label ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onNoneSelected()
-                        expanded = false
-                        query = ""
-                    }
-                )
-            }
-
-            actionLabel?.let { label ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onAction()
-                        expanded = false
-                        query = ""
-                    }
-                )
-            }
-
-            shown.forEach { item ->
-                val enabled = itemEnabled(item)
-                DropdownMenuItem(
-                    leadingIcon = itemLeading?.let { leading -> { leading(item) } },
-                    text = {
-                        Text(
-                            text = itemLabel(item) + if (enabled) itemNote(item) else disabledSuffix(item),
-                            color = if (enabled) LocalContentColor.current
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        )
-                    },
-                    onClick = {
-                        if (enabled) {
-                            onSelect(item)
-                            expanded = false
-                            query = ""
-                        }
-                    },
-                    enabled = enabled
-                )
+        } else {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { close() },
+                modifier = if (menuFillsWidth) Modifier.fillMaxWidth() else Modifier
+            ) {
+                searchField()
+                rows()
             }
         }
     }
@@ -262,5 +284,30 @@ fun PicklistCompactAnchor(
     ) {
         Text(label)
         Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+    }
+}
+
+/** One row of a picklist, the same whether it is drawn in a menu or in a sheet. */
+@Composable
+private fun PicklistRow(
+    text: String,
+    enabled: Boolean = true,
+    leading: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        leading?.invoke()
+        Text(
+            text = text,
+            color = if (enabled) LocalContentColor.current
+            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        )
     }
 }
