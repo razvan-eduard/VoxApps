@@ -55,8 +55,11 @@ object BankAccountTree {
      * which is what keeps a settings row and a picklist row the same shape.
      */
     fun display(all: List<BankAccount>): List<Entry> =
-        rootsOf(all).flatMap { root ->
-            listOf(Entry(root, depth = 0)) + childrenOf(root.id, all).map { Entry(it, depth = 1) }
+        // What is still in use first, at both levels: a replaced card belongs under the account it
+        // was on, but under the card that replaced it.
+        rootsOf(all).sortedBy { it.archived }.flatMap { root ->
+            listOf(Entry(root, depth = 0)) +
+                childrenOf(root.id, all).sortedBy { it.archived }.map { Entry(it, depth = 1) }
         }
 
     data class Entry(val account: BankAccount, val depth: Int)
@@ -70,6 +73,8 @@ object BankAccountTree {
      */
     fun canParent(child: BankAccount, candidateParent: BankAccount, all: List<BankAccount>): Boolean = when {
         child.id == candidateParent.id -> false
+        // Filing a card under an account nobody uses any more is filing it nowhere.
+        candidateParent.archived -> false
         candidateParent.parentId != null -> false
         childrenOf(child.id, all).isNotEmpty() -> false
         else -> true

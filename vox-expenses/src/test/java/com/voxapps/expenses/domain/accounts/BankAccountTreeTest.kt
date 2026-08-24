@@ -111,4 +111,23 @@ class BankAccountTreeTest {
     fun `an account holding cards may not become one`() {
         assertFalse(BankAccountTree.canParent(iban, account(9, "OTHER"), all))
     }
+
+    /** Nothing new is filed under an account nobody uses any more. */
+    @Test
+    fun `an archived account may not be a parent`() {
+        val retired = BankAccount(id = 1L, digits = "RO49", kind = "IBAN", currencyCode = "RON", createdAt = 0L, archived = true)
+        val card = BankAccount(id = 2L, digits = "4535", kind = "CARD_TAIL", currencyCode = "RON", createdAt = 0L)
+        assertFalse(BankAccountTree.canParent(card, retired, listOf(retired, card)))
+        assertTrue(BankAccountTree.canParent(card, retired.copy(archived = false), listOf(retired, card)))
+    }
+
+    /** What is still in use is read first, at both levels. */
+    @Test
+    fun `retired rows sink to the bottom of the list`() {
+        val account = BankAccount(id = 1L, digits = "RO49", kind = "IBAN", currencyCode = "RON", createdAt = 0L)
+        val oldCard = BankAccount(id = 2L, digits = "4535", kind = "CARD_TAIL", currencyCode = "RON", createdAt = 0L, parentId = 1L, archived = true)
+        val newCard = oldCard.copy(id = 3L, digits = "9999", archived = false)
+        val shown = BankAccountTree.display(listOf(account, oldCard, newCard)).map { it.account.id }
+        assertEquals(listOf(1L, 3L, 2L), shown)
+    }
 }

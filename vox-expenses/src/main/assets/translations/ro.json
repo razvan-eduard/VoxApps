@@ -688,5 +688,7 @@
   "account_bank_name": "Banca",
   "account_bank_new": "Bancă nouă…",
   "account_belongs_to_new": "Cont nou…",
-  "expense_vendor_new": "Magazin nou…"
+  "expense_vendor_new": "Magazin nou…",
+  "account_archived": "Nu mai e în uz",
+  "account_archived_desc": "Rămâne pentru înregistrările care îl numesc și e numărat în continuare de bugetul contului, dar nu mai e oferit când alegi un card."
 }

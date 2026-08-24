@@ -547,6 +547,7 @@ private fun BankAccount.toJson(): JSONObject = JSONObject().apply {
     icon?.let { put("icon", it) }
     put("createdAt", createdAt)
     put("autoCreated", autoCreated)
+    put("archived", archived)
 }
 
 /** [parentId] is supplied by the caller after the id map exists — a card may be listed before the
@@ -560,7 +561,8 @@ private fun JSONObject.toBankAccount(parentId: Long?): BankAccount = BankAccount
     bankName = optStringOrNull("bankName"),
     icon = optStringOrNull("icon"),
     createdAt = optLong("createdAt", System.currentTimeMillis()),
-    autoCreated = optBoolean("autoCreated", false)
+    autoCreated = optBoolean("autoCreated", false),
+    archived = optBoolean("archived", false)
 )
 
 private fun Category.toJson(): JSONObject = JSONObject().apply {

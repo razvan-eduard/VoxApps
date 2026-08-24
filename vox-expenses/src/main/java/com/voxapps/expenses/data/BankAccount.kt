@@ -77,7 +77,21 @@ data class BankAccount(
      * Kept because the two are undone differently: deleting one somebody created is deleting their
      * work, while deleting one the app created is switching the toggle off after the fact.
      */
-    val autoCreated: Boolean = false
+    val autoCreated: Boolean = false,
+    /**
+     * Whether this card or account is still in use.
+     *
+     * A card expires and comes back with four different digits, under the same account: two rows,
+     * both real, only one of them yours to spend from. Deleting the old one would take its records'
+     * only account with it, so it is archived instead — kept, still matched by a message that names
+     * it, still counted by its account's budget, and simply no longer offered anywhere the question
+     * is "which card is this going to be".
+     *
+     * A fact about presentation, deliberately not about resolution: identity is identity, and a
+     * notification carrying an archived card's digits belongs to that card rather than to a new row
+     * with the same number.
+     */
+    val archived: Boolean = false
 ) {
     /** This account as a reading, so stored accounts and freshly-read ones compare the same way. */
     fun asRef(): AccountIdentifiers.AccountRef =
