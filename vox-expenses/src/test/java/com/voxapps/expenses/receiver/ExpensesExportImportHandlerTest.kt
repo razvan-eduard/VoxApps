@@ -62,8 +62,8 @@ class ExpensesExportImportHandlerTest {
         every { settingsRepo.getSnapshot() } returns ExpensesSettings(isBiometricRequired = false)
         every { expensesRepo.categories } returns flowOf(emptyList())
         every { expensesRepo.spendingLimits } returns flowOf(emptyList())
-        every { expensesRepo.expensesWithDetails } returns flowOf(emptyList())
-        coEvery { expensesRepo.expensesSnapshot() } returns emptyList()
+        every { expensesRepo.allWithDetails } returns flowOf(emptyList())
+        coEvery { expensesRepo.allExpensesSnapshot() } returns emptyList()
         coEvery { expensesRepo.deleteExpenseById(any()) } just Runs
         coEvery { expensesRepo.deleteSpendingLimit(any()) } just Runs
         coEvery { expensesRepo.remapRulesSnapshot() } returns emptyList()
@@ -88,7 +88,7 @@ class ExpensesExportImportHandlerTest {
 
     @Test
     fun `export without includePhotos never touches zip building, attachmentUri stays null`() = runTest {
-        every { expensesRepo.expensesWithDetails } returns flowOf(
+        every { expensesRepo.allWithDetails } returns flowOf(
             listOf(ExpenseWithDetails(expense(1, createdAt = 100L, receiptImageName = "rec_1.jpg"), items = emptyList()))
         )
 
@@ -100,7 +100,7 @@ class ExpensesExportImportHandlerTest {
 
     @Test
     fun `export serializes receiptImageName and createdAt on each expense`() = runTest {
-        every { expensesRepo.expensesWithDetails } returns flowOf(
+        every { expensesRepo.allWithDetails } returns flowOf(
             listOf(ExpenseWithDetails(expense(1, createdAt = 12345L, receiptImageName = "rec_abc.jpg"), items = emptyList()))
         )
 
@@ -115,7 +115,7 @@ class ExpensesExportImportHandlerTest {
     fun `import only deletes pre-existing expenses created at or before exported_at`() = runTest {
         // 100 existed at export time (createdAt <= exportedAt=1000) -> replaceable.
         // 2000 was created after the export -> an "in-limbo" record that must survive.
-        coEvery { expensesRepo.expensesSnapshot() } returns listOf(
+        coEvery { expensesRepo.allExpensesSnapshot() } returns listOf(
             expense(id = 100, createdAt = 500L),
             expense(id = 200, createdAt = 2000L)
         )
@@ -130,7 +130,7 @@ class ExpensesExportImportHandlerTest {
 
     @Test
     fun `import deletes nothing when exported_at is absent (fails safe)`() = runTest {
-        coEvery { expensesRepo.expensesSnapshot() } returns listOf(expense(id = 100, createdAt = 500L))
+        coEvery { expensesRepo.allExpensesSnapshot() } returns listOf(expense(id = 100, createdAt = 500L))
 
         val payload = """{"expenses":[]}"""
         handler.import(payload)
@@ -192,12 +192,12 @@ class ExpensesExportImportHandlerTest {
         val result = handler.import("{ not json")
 
         assertFalse(result.ok)
-        coVerify(exactly = 0) { expensesRepo.expensesSnapshot() }
+        coVerify(exactly = 0) { expensesRepo.allExpensesSnapshot() }
     }
 
     @Test
     fun `export nests each expense's attachments under its own entry`() = runTest {
-        every { expensesRepo.expensesWithDetails } returns flowOf(
+        every { expensesRepo.allWithDetails } returns flowOf(
             listOf(ExpenseWithDetails(expense(1, createdAt = 100L), items = emptyList()))
         )
         coEvery { attachmentDao.getFor(ExpensesAttachments.RECORD_TYPE, 1L) } returns listOf(
@@ -384,7 +384,7 @@ class ExpensesExportImportHandlerTest {
     @Test
     fun `export carries the accounts and what each record went through`() = runTest {
         coEvery { expensesRepo.bankAccountsSnapshot() } returns listOf(account(7, "4535"))
-        every { expensesRepo.expensesWithDetails } returns flowOf(
+        every { expensesRepo.allWithDetails } returns flowOf(
             listOf(
                 ExpenseWithDetails(
                     expense = Expense(id = 1, totalAmount = 10.0, currencyCode = "RON", dateTime = 0L, bankAccountId = 7),

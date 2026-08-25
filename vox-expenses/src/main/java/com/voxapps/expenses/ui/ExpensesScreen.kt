@@ -18,13 +18,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,17 +54,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.calendar.CalendarView
 import com.voxapps.design.DoubleBackToExitHandler
+import com.voxapps.design.VoxConfirmDialog
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.SpeedDialFab
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpenseWithDetails
+import com.voxapps.design.selection.VoxSelectionBackHandler
+import com.voxapps.design.selection.VoxSelectionBar
+import com.voxapps.design.selection.rememberVoxSelection
 import com.voxapps.design.settings.VoxPendingStrip
 import com.voxapps.expenses.domain.health.ExpenseGap
 import com.voxapps.expenses.domain.health.ExpenseGaps
 import com.voxapps.expenses.ui.settings.SettingsPage
 import com.voxapps.expenses.data.preferences.AttentionKind
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.Dismissals
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.expenses.data.RecurringPayment
@@ -84,6 +96,7 @@ fun ExpensesScreen(
     /** Straight to one settings page — a count of waiting rules wants the rules, not a menu. */
     onOpenSettingsAt: (SettingsPage) -> Unit = { onOpenSettings() },
     onOpenReports: () -> Unit,
+    onOpenArchive: () -> Unit = {},
     todayEffect: TodayEffect = TodayEffect.NONE,
     todayEffectStyle: TodayEffectStyle = TodayEffectStyle.RING,
     todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
@@ -94,6 +107,14 @@ fun ExpensesScreen(
     val context = LocalContext.current
     val container = (context.applicationContext as ExpensesApplication).container
     var showFilterSheet by remember { mutableStateOf(false) }
+    // Picking records out of the list to do one thing to all of them. Nothing is persisted: a
+    // selection is about what you are doing right now, and one that survived leaving the screen
+    // would be a set of records quietly staged for an edit nobody remembers starting.
+    val selection = rememberVoxSelection<Long>()
+    var showBulkEdit by remember { mutableStateOf(false) }
+    var confirmingArchive by remember { mutableStateOf(false) }
+    var confirmingDelete by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     // Scan needs Vision installed to even launch, and Commander installed for the OCR-cleanup step
     // that runs after — stays visible but dimmed, with an explanatory toast on tap naming whichever
     // one is actually missing, rather than silently failing (or crashing, for the Vision case) if
@@ -165,24 +186,82 @@ fun ExpensesScreen(
     // restores the calendar view if the underlying setting is on.
     val effectiveViewIsCalendar = calendarViewEnabled && !state.isAmountSort
 
-    DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
+    val onCardClick: (ExpenseWithDetails) -> Unit = { ewd ->
+        selection.tap(ewd.expense.id) { onEditExpense(ewd) }
+    }
+    val onCardLongClick: (ExpenseWithDetails) -> Unit = { ewd -> selection.start(ewd.expense.id) }
+
+    // Leaving the app is what back means only when there is nothing smaller to leave first.
+    DoubleBackToExitHandler(
+        message = languageManager.getString("press_back_again_to_exit"),
+        enabled = !selection.active
+    )
+    VoxSelectionBackHandler(selection)
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(languageManager.getString("expenses_title")) },
-                actions = {
-                    IconButton(onClick = onOpenReports) {
-                        Icon(Icons.Filled.Assessment, contentDescription = languageManager.getString("reports_title"))
+            if (selection.active) {
+                VoxSelectionBar(
+                    count = selection.size,
+                    title = { languageManager.counted("selection_mode_count", it) },
+                    onClose = { selection.clear() },
+                    closeContentDescription = languageManager.getString("cancel")
+                ) {
+                    IconButton(onClick = { selection.selectAll(state.expenses.map { it.expense.id }) }) {
+                        Icon(
+                            Icons.Filled.SelectAll,
+                            contentDescription = languageManager.getString("selection_select_all")
+                        )
                     }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
+                    IconButton(onClick = { showBulkEdit = true }) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = languageManager.getString("selection_edit")
+                        )
+                    }
+                    IconButton(onClick = { confirmingArchive = true }) {
+                        Icon(
+                            Icons.Filled.Archive,
+                            contentDescription = languageManager.getString("selection_archive")
+                        )
+                    }
+                    // Red, and last: the one action here that cannot be taken back.
+                    IconButton(onClick = { confirmingDelete = true }) {
+                        Icon(
+                            Icons.Filled.DeleteForever,
+                            contentDescription = languageManager.getString("selection_delete_forever"),
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
-            )
+            } else {
+                TopAppBar(
+                    title = { Text(languageManager.getString("expenses_title")) },
+                    actions = {
+                        IconButton(onClick = onOpenReports) {
+                            Icon(Icons.Filled.Assessment, contentDescription = languageManager.getString("reports_title"))
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
+                        }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = languageManager.getString("more"))
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("archive_title")) },
+                                leadingIcon = { Icon(Icons.Filled.Archive, contentDescription = null) },
+                                onClick = { menuOpen = false; onOpenArchive() }
+                            )
+                        }
+                    }
+                )
+            }
         },
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End) {
+            // Nothing to add while choosing what to change: the buttons would sit over the list
+            // being chosen from, offering the one action the mode is not about.
+            if (!selection.active) Column(horizontalAlignment = Alignment.End) {
                 SpeedDialFab(
                     actions = scanActions,
                     mainIcon = Icons.Filled.DocumentScanner,
@@ -304,7 +383,12 @@ fun ExpensesScreen(
                     todayEffectSecondaryColor = todayEffectSecondaryColor,
                     todayEffectSpeed = todayEffectSpeed,
                     itemContent = { calItem ->
-                        ExpenseCard(expenseWithDetails = calItem.ewd, onClick = { onEditExpense(calItem.ewd) })
+                        ExpenseCard(
+                            expenseWithDetails = calItem.ewd,
+                            onClick = { onCardClick(calItem.ewd) },
+                            selected = calItem.ewd.expense.id in selection,
+                            onLongClick = { onCardLongClick(calItem.ewd) }
+                        )
                     }
                 )
             } else {
@@ -324,7 +408,9 @@ fun ExpensesScreen(
                     items(state.expenses, key = { it.expense.id }) { ewd ->
                         ExpenseCard(
                             expenseWithDetails = ewd,
-                            onClick = { onEditExpense(ewd) },
+                            onClick = { onCardClick(ewd) },
+                            selected = ewd.expense.id in selection,
+                            onLongClick = { onCardLongClick(ewd) },
                             recurring = RecurringPayment.vendorKeyOf(ewd.expense.vendor) in confirmedVendorKeys,
                             // Only while the list is narrowed to them: on the ordinary list this
                             // would be a red line on half the rows, which is not information.
@@ -343,6 +429,66 @@ fun ExpensesScreen(
         }
     }
 
+    if (confirmingArchive) {
+        VoxConfirmDialog(
+            title = languageManager.counted("archive_confirm_title", selection.size),
+            message = languageManager.getString("archive_confirm_message"),
+            confirmLabel = languageManager.getString("selection_archive"),
+            cancelLabel = languageManager.getString("cancel"),
+            onConfirm = {
+                stateManager.archiveExpenses(selection.ids) { n ->
+                    Toast.makeText(
+                        context,
+                        languageManager.counted("archive_done", n),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                confirmingArchive = false
+                selection.clear()
+            },
+            onDismiss = { confirmingArchive = false }
+        )
+    }
+    if (confirmingDelete) {
+        VoxConfirmDialog(
+            title = languageManager.counted("delete_forever_confirm_title", selection.size),
+            message = languageManager.getString("delete_forever_confirm_message"),
+            confirmLabel = languageManager.getString("selection_delete_forever"),
+            cancelLabel = languageManager.getString("cancel"),
+            destructive = true,
+            countdownSeconds = DELETE_COUNTDOWN_SECONDS,
+            onConfirm = {
+                stateManager.deleteExpenses(selection.ids)
+                confirmingDelete = false
+                selection.clear()
+            },
+            onDismiss = { confirmingDelete = false }
+        )
+    }
+    if (showBulkEdit) {
+        val settings by container.settingsRepository.settingsFlow
+            .collectAsStateWithLifecycle(initialValue = ExpensesSettings())
+        BulkEditSheet(
+            records = state.expenses.filter { it.expense.id in selection },
+            categories = state.categories,
+            accounts = state.bankAccounts,
+            locations = state.availableLocations,
+            stateManager = stateManager,
+            settings = settings,
+            onApply = { edit ->
+                stateManager.applyBulkEdit(selection.ids, edit) { changed ->
+                    Toast.makeText(
+                        context,
+                        languageManager.counted("bulk_edit_done", changed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                showBulkEdit = false
+                selection.clear()
+            },
+            onDismiss = { showBulkEdit = false }
+        )
+    }
 }
 
 /** What each missing thing is called on screen. */

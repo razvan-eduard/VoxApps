@@ -16,18 +16,48 @@ interface ExpenseDao {
      * All expenses joined with category + line items, newest first. Category/date-range filtering and
      * sort direction are applied in the state layer (mirrors vox-notes' NoteFilter) so the query stays
      * simple and the logic stays pure/testable.
+     *
+     * The archive is the one thing the query itself decides, rather than the layer above. An
+     * archived record has to be absent from every list, every total, every budget and every
+     * duplicate check, and a rule that has to be remembered at forty call sites is a rule that will
+     * be missed at one of them. What genuinely needs all of it — a backup, a sync — says so by name.
      */
     @Transaction
-    @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
+    @Query("SELECT * FROM expenses WHERE archivedAt IS NULL ORDER BY dateTime DESC")
     fun observeExpensesWithDetails(): Flow<List<ExpenseWithDetails>>
 
+    /** The archive itself, most recently put away first — the order somebody looking for what they
+     *  just archived expects, which is not the order they were spent in. */
+    @Transaction
+    @Query("SELECT * FROM expenses WHERE archivedAt IS NOT NULL ORDER BY archivedAt DESC")
+    fun observeArchivedWithDetails(): Flow<List<ExpenseWithDetails>>
+
+    /** Ledger and archive together. For the paths that move the data itself — a backup that skipped
+     *  the archive would quietly destroy it, and a sync that skipped it would send it back. */
+    @Transaction
     @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
+    fun observeAllWithDetails(): Flow<List<ExpenseWithDetails>>
+
+    @Query("SELECT * FROM expenses WHERE archivedAt IS NULL ORDER BY dateTime DESC")
     fun observeAll(): Flow<List<Expense>>
 
     /** One-shot read for the write/export paths — `observeAll().first()` would spin up an
      *  InvalidationTracker observer, run the query, then tear it all down again. */
-    @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
+    @Query("SELECT * FROM expenses WHERE archivedAt IS NULL ORDER BY dateTime DESC")
     suspend fun getAll(): List<Expense>
+
+    /** Ledger and archive together — see [observeAllWithDetails]. */
+    @Query("SELECT * FROM expenses ORDER BY dateTime DESC")
+    suspend fun getAllIncludingArchived(): List<Expense>
+
+    @Query("UPDATE expenses SET archivedAt = :at, updatedAt = :now WHERE id IN (:ids)")
+    suspend fun setArchivedAt(ids: List<Long>, at: Long?, now: Long)
+
+    /** What has been in the archive longer than it was meant to keep things. Ids rather than rows:
+     *  the deletion itself still goes the ordinary way, one tombstone and one attachment cleanup
+     *  apiece. */
+    @Query("SELECT id FROM expenses WHERE archivedAt IS NOT NULL AND archivedAt < :cutoff")
+    suspend fun archivedBefore(cutoff: Long): List<Long>
 
     @Transaction
     @Query("SELECT * FROM expenses WHERE id = :id")
@@ -36,7 +66,7 @@ interface ExpenseDao {
     /** One-shot day-scoped read (e.g. Vox Calendar's day-tap summary via VoxCommand.dateFrom/dateTo) —
      *  a plain SQL range query rather than fetching everything and filtering in memory, since the
      *  caller only wants one day's worth of records. */
-    @Query("SELECT * FROM expenses WHERE dateTime BETWEEN :from AND :to ORDER BY dateTime ASC")
+    @Query("SELECT * FROM expenses WHERE archivedAt IS NULL AND dateTime BETWEEN :from AND :to ORDER BY dateTime ASC")
     suspend fun getForDateRange(from: Long, to: Long): List<Expense>
 
     /** Cheap "what color is the top-of-list expense's category" lookup for
@@ -46,7 +76,7 @@ interface ExpenseDao {
         """
         SELECT c.colorArgb FROM expenses e
         INNER JOIN categories c ON c.id = e.categoryId
-        WHERE e.categoryId IS NOT NULL
+        WHERE e.categoryId IS NOT NULL AND e.archivedAt IS NULL
         ORDER BY e.dateTime DESC
         LIMIT 1
         """
@@ -59,11 +89,11 @@ interface ExpenseDao {
     /** Detach all expenses from a category being deleted (code-level ON DELETE SET NULL). */
     /** The banks this device's own records name — what a field asking for one should offer, rather
      *  than every bank the recogniser knows. */
-    @Query("SELECT DISTINCT bank FROM expenses WHERE bank IS NOT NULL AND TRIM(bank) != '' ORDER BY bank")
+    @Query("SELECT DISTINCT bank FROM expenses WHERE archivedAt IS NULL AND bank IS NOT NULL AND TRIM(bank) != '' ORDER BY bank")
     fun observeBanksInUse(): Flow<List<String>>
 
     /** The same for shops. */
-    @Query("SELECT DISTINCT vendor FROM expenses WHERE vendor IS NOT NULL AND TRIM(vendor) != '' ORDER BY vendor")
+    @Query("SELECT DISTINCT vendor FROM expenses WHERE archivedAt IS NULL AND vendor IS NOT NULL AND TRIM(vendor) != '' ORDER BY vendor")
     fun observeVendorsInUse(): Flow<List<String>>
 
     @Query("UPDATE expenses SET categoryId = NULL WHERE categoryId = :categoryId")

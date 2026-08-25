@@ -399,6 +399,12 @@ class ExpensesStateManager(
         scope.launch { expensesRepo.recordRemapPatternSightings(old, new, settings.remapLearningSpeed) }
     }
 
+    /** One edit across every selected record. [onDone] takes how many actually changed, for the
+     *  screen to say so. */
+    fun applyBulkEdit(ids: Collection<Long>, edit: com.voxapps.expenses.domain.bulk.BulkEdit, onDone: (Int) -> Unit = {}) {
+        scope.launch { onDone(expensesRepo.applyBulkEdit(ids, edit)) }
+    }
+
     val remapRules: Flow<List<com.voxapps.expenses.data.RemapRuleEntity>> get() = expensesRepo.observeRemapRules()
     fun upsertRemapRule(rule: com.voxapps.expenses.data.RemapRuleEntity) = scope.launch { expensesRepo.upsertRemapRule(rule) }
     fun deleteRemapRule(rule: com.voxapps.expenses.data.RemapRuleEntity) = scope.launch { expensesRepo.deleteRemapRule(rule) }
@@ -551,6 +557,37 @@ class ExpensesStateManager(
 
     fun deleteExpense(expense: Expense) { scope.launch { expensesRepo.deleteExpense(expense) } }
     fun deleteExpenseById(id: Long) { scope.launch { expensesRepo.deleteExpenseById(id) } }
+    /** Every record in a selection, gone. [onDone] takes how many, for the screen to say so. */
+    fun deleteExpenses(ids: Collection<Long>, onDone: (Int) -> Unit = {}) {
+        scope.launch { onDone(expensesRepo.deleteExpenses(ids)) }
+    }
+
+    /** What has been put out of the way, newest first — see [Expense.archivedAt]. */
+    val archivedRecords: Flow<List<ExpenseWithDetails>> = expensesRepo.archivedWithDetails
+
+    fun archiveExpenses(ids: Collection<Long>, onDone: (Int) -> Unit = {}) {
+        scope.launch { onDone(expensesRepo.archiveExpenses(ids)) }
+    }
+
+    fun restoreExpenses(ids: Collection<Long>, onDone: (Int) -> Unit = {}) {
+        scope.launch { onDone(expensesRepo.restoreExpenses(ids)) }
+    }
+
+    /**
+     * How long the archive keeps things, and the sweep that follows from changing it.
+     *
+     * The sweep runs here rather than waiting for tomorrow's worker: somebody who has just said
+     * "keep these thirty days" means the ones already older than thirty days, and an archive that
+     * still lists them until the next daily pass looks like the setting did nothing.
+     */
+    fun setArchiveRetentionDays(days: Int) {
+        scope.launch {
+            settingsRepo.setArchiveRetentionDays(days)
+            com.voxapps.expenses.domain.archive.ArchiveRetention
+                .cutoff(days, System.currentTimeMillis())
+                ?.let { expensesRepo.purgeArchivedBefore(it) }
+        }
+    }
 
     fun deleteAllExpenses() {
         scope.launch { expensesRepo.deleteAllExpenses() }

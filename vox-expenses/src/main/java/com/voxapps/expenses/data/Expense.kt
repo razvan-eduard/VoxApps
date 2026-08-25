@@ -96,5 +96,15 @@ data class Expense(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val source: ExpenseSource = ExpenseSource.MANUAL,
-    val manuallyEdited: Boolean = false
+    val manuallyEdited: Boolean = false,
+
+    /**
+     * When this record was put out of the way, or null while it is part of the ledger.
+     *
+     * Archiving is the answer to a record that should stop counting without being destroyed: it
+     * leaves every list, every total and every budget, and it keeps everything it said. The moment
+     * rather than a flag, because the archive can be set to empty itself after a while and "a while"
+     * has to be measured from something.
+     */
+    val archivedAt: Long? = null
 )

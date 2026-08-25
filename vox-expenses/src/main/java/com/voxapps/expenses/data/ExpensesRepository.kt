@@ -11,6 +11,7 @@ import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.datahygiene.DuplicateChecker
 import com.voxapps.datahygiene.CategoryFallback
+import com.voxapps.expenses.domain.bulk.BulkEdit
 import com.voxapps.datahygiene.RemapValueKey
 import com.voxapps.expenses.domain.rules.RuleAlert
 import com.voxapps.datahygiene.RuleBasedDuplicateChecker
@@ -204,6 +205,14 @@ class ExpensesRepository(
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
         expenseDao.observeExpensesWithDetails().distinctUntilChanged()
+
+    /** What has been put out of the way — see [Expense.archivedAt]. */
+    val archivedWithDetails: Flow<List<ExpenseWithDetails>> =
+        expenseDao.observeArchivedWithDetails().distinctUntilChanged()
+
+    /** Ledger and archive together, for the paths that carry the data rather than read it. */
+    val allWithDetails: Flow<List<ExpenseWithDetails>> =
+        expenseDao.observeAllWithDetails().distinctUntilChanged()
     val categories: Flow<List<Category>> = categoryDao.observeAll().distinctUntilChanged()
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll().distinctUntilChanged()
 
@@ -328,6 +337,9 @@ class ExpensesRepository(
     }
 
     suspend fun expensesSnapshot(): List<Expense> = expenseDao.getAll()
+
+    /** Ledger and archive together — see [allWithDetails]. */
+    suspend fun allExpensesSnapshot(): List<Expense> = expenseDao.getAllIncludingArchived()
 
     suspend fun getExpenseById(id: Long): ExpenseWithDetails? = expenseDao.getWithDetailsById(id)
 
@@ -626,7 +638,10 @@ class ExpensesRepository(
         bankAccountId: Long? = null,
         /** Where each field came from, for the record to be able to say so later — see
          *  [ExpenseOrigins]. Empty for a record somebody typed: nothing about it needs explaining. */
-        origins: Map<String, com.voxapps.recordflow.FieldOrigin> = emptyMap()
+        origins: Map<String, com.voxapps.recordflow.FieldOrigin> = emptyMap(),
+        /** Only Hub import passes this: a record that was archived on the device the backup came
+         *  from is archived here too, or a restore would quietly refill the ledger. */
+        archivedAt: Long? = null
     ): Long {
         return try {
             val candidate = Expense(
@@ -645,6 +660,7 @@ class ExpensesRepository(
                 direction = direction,
                 receiptImageName = imageName,
                 isStub = isStub,
+                archivedAt = archivedAt,
                 createdAt = createdAt,
                 source = source,
                 manuallyEdited = manuallyEdited,
@@ -754,6 +770,89 @@ class ExpensesRepository(
         }
     }
 
+    /**
+     * One edit written across many records.
+     *
+     * Each row is read and written individually rather than by a single UPDATE: the fields being set
+     * are decided per record (an edit leaves untouched what it does not name), the provenance of each
+     * one changes, and a bulk statement would have to reproduce that logic in SQL where it could
+     * drift from the version in [BulkEdit]. Twenty rows is twenty writes and nobody notices; the
+     * alternative is two definitions of the same rule.
+     *
+     * [Expense.manuallyEdited] is deliberately not set. It means a person looked at this record and
+     * vouched for it, which is what the edit screen's Save says and what [dataScore] pins its trust
+     * to; choosing a category for twenty records vouches for their categories and for nothing else
+     * about them. What was actually answered is recorded field by field instead, so a record whose
+     * bank is still missing goes on saying so.
+     */
+    suspend fun applyBulkEdit(ids: Collection<Long>, edit: BulkEdit): Int {
+        if (edit.isEmpty || ids.isEmpty()) return 0
+        var changed = 0
+        for (id in ids) {
+            val existing = expenseDao.getWithDetailsById(id)?.expense ?: continue
+            val updated = edit.applyTo(existing).copy(updatedAt = System.currentTimeMillis())
+            if (updated != existing) {
+                expenseDao.update(updated)
+                changed++
+            }
+        }
+        Logger.d("ExpensesRepository", "Bulk edit touched $changed of ${ids.size} record(s)")
+        return changed
+    }
+
+    /**
+     * Records put out of the way, and brought back.
+     *
+     * One statement for the lot, unlike the bulk edit: there is a single column to write and the
+     * same value goes into every row, so there is no per-record decision for Kotlin to make. The
+     * write bumps [Expense.updatedAt] because archiving is an edit like any other as far as another
+     * device is concerned — otherwise a sync would hand the record straight back.
+     */
+    suspend fun archiveExpenses(ids: Collection<Long>): Int {
+        if (ids.isEmpty()) return 0
+        val now = System.currentTimeMillis()
+        expenseDao.setArchivedAt(ids.toList(), now, now)
+        Logger.d("ExpensesRepository", "Archived ${ids.size} record(s)")
+        return ids.size
+    }
+
+    suspend fun restoreExpenses(ids: Collection<Long>): Int {
+        if (ids.isEmpty()) return 0
+        expenseDao.setArchivedAt(ids.toList(), null, System.currentTimeMillis())
+        Logger.d("ExpensesRepository", "Restored ${ids.size} record(s)")
+        return ids.size
+    }
+
+    /**
+     * The archive emptying itself of whatever has been in it too long.
+     *
+     * [olderThanMillis] is a moment, not a duration: what to keep is a setting, and turning a
+     * setting into a cutoff is the caller's business — this only knows how to delete what is past
+     * it. Each record goes the ordinary way, so the tombstones and the attachment cleanup happen
+     * exactly as they would if somebody had deleted it by hand.
+     */
+    suspend fun purgeArchivedBefore(olderThanMillis: Long): Int {
+        val ids = expenseDao.archivedBefore(olderThanMillis)
+        if (ids.isEmpty()) return 0
+        deleteExpenses(ids)
+        Logger.d("ExpensesRepository", "Archive kept ${ids.size} record(s) past their time; deleted")
+        return ids.size
+    }
+
+    /**
+     * Several records deleted as one act.
+     *
+     * Row by row rather than one DELETE, for the same reason the bulk edit is: each removal owes a
+     * tombstone so another device learns it was deleted rather than sending it back, and it owes
+     * its attachments the reference-counted cleanup. A statement that cleared the rows would leave
+     * both undone.
+     */
+    suspend fun deleteExpenses(ids: Collection<Long>): Int {
+        for (id in ids) deleteExpenseById(id)
+        Logger.d("ExpensesRepository", "Deleted ${ids.size} record(s) as a selection")
+        return ids.size
+    }
+
     suspend fun deleteExpense(expense: Expense) {
         expenseDao.delete(expense)
         expenseDao.insertTombstone(ExpenseTombstone(expense.uid, System.currentTimeMillis()))
@@ -770,7 +869,7 @@ class ExpensesRepository(
     }
 
     suspend fun deleteAllExpenses() {
-        val all = expensesSnapshot()
+        val all = allExpensesSnapshot()
         expenseDao.deleteAll()
         val now = System.currentTimeMillis()
         expenseDao.insertTombstones(all.map { ExpenseTombstone(it.uid, now) })

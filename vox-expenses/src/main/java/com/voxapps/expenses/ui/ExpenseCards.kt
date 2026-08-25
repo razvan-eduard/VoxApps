@@ -1,7 +1,6 @@
 package com.voxapps.expenses.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.Icon
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voxapps.design.selection.voxSelectable
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.ExpenseWithDetails
@@ -59,7 +59,10 @@ fun ExpenseCard(
     recurring: Boolean = false,
     /** What this record is missing, when the list is narrowed to the ones that need somebody. A
      *  card in a "needs you" list that does not say why makes the person open it to find out. */
-    missing: String? = null
+    missing: String? = null,
+    /** Picked out of the list, for something about to be done to several records at once. */
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     val expense = expenseWithDetails.expense
     val category = expenseWithDetails.category
@@ -70,7 +73,11 @@ fun ExpenseCard(
         attachmentDao.observeFor(ExpensesAttachments.RECORD_TYPE, expense.id)
     }.collectAsStateWithLifecycle(initialValue = emptyList())
 
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .voxSelectable(selected = selected, onClick = onClick, onLongClick = onLongClick)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically

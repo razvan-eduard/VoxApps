@@ -40,8 +40,8 @@ class ExpensesSyncHandlerTest {
 
         every { settingsRepo.getSnapshot() } returns ExpensesSettings(isBiometricRequired = false)
         every { expensesRepo.categories } returns flowOf(emptyList())
-        every { expensesRepo.expensesWithDetails } returns flowOf(emptyList())
-        coEvery { expensesRepo.expensesSnapshot() } returns emptyList()
+        every { expensesRepo.allWithDetails } returns flowOf(emptyList())
+        coEvery { expensesRepo.allExpensesSnapshot() } returns emptyList()
         coEvery { expensesRepo.tombstonesSince(any()) } returns emptyList()
         coEvery { expensesRepo.mostRecentCategoryColor() } returns null
     }
@@ -63,7 +63,7 @@ class ExpensesSyncHandlerTest {
 
     @Test
     fun `export only includes entries updated after since`() = runTest {
-        every { expensesRepo.expensesWithDetails } returns flowOf(listOf(
+        every { expensesRepo.allWithDetails } returns flowOf(listOf(
             withDetails(expense(uid = "old", updatedAt = 100L)),
             withDetails(expense(uid = "new", updatedAt = 2000L))
         ))
@@ -79,7 +79,7 @@ class ExpensesSyncHandlerTest {
     @Test
     fun `export restricts to scopeNames when provided, matching category name case-insensitively`() = runTest {
         val groceries = Category(id = 1, name = "Groceries", colorArgb = 0, position = 0, createdAt = 0)
-        every { expensesRepo.expensesWithDetails } returns flowOf(listOf(
+        every { expensesRepo.allWithDetails } returns flowOf(listOf(
             withDetails(expense(uid = "in-scope", updatedAt = 100L, categoryId = 1), category = groceries),
             withDetails(expense(uid = "uncategorized", updatedAt = 100L, categoryId = null))
         ))
@@ -98,7 +98,7 @@ class ExpensesSyncHandlerTest {
             ExpenseLineItem(expenseId = 1, name = "Bread", quantity = 1.0, unitPrice = 5.0, position = 1),
             ExpenseLineItem(expenseId = 1, name = "Milk", quantity = 2.0, unitPrice = 3.0, position = 0)
         )
-        every { expensesRepo.expensesWithDetails } returns flowOf(listOf(
+        every { expensesRepo.allWithDetails } returns flowOf(listOf(
             withDetails(expense(uid = "a", updatedAt = 100L), items = items)
         ))
 
@@ -129,7 +129,7 @@ class ExpensesSyncHandlerTest {
         val result = handler.export(since = 0L, scopeNames = null)
 
         assertFalse(result.ok)
-        coVerify(exactly = 0) { expensesRepo.expensesSnapshot() }
+        coVerify(exactly = 0) { expensesRepo.allExpensesSnapshot() }
     }
 
     // --- merge ---
@@ -162,7 +162,7 @@ class ExpensesSyncHandlerTest {
 
     @Test
     fun `merge updates when the remote updatedAt is newer, preserving the local id`() = runTest {
-        coEvery { expensesRepo.expensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 100L).copy(id = 42))
+        coEvery { expensesRepo.allExpensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 100L).copy(id = 42))
         coEvery { expensesRepo.getIdByUid("a") } returns 42L
         coEvery { expensesRepo.updateSyncedExpense(any(), any()) } just Runs
 
@@ -175,7 +175,7 @@ class ExpensesSyncHandlerTest {
 
     @Test
     fun `merge replaces an updated expense's line items with whatever the remote sent, including empty`() = runTest {
-        coEvery { expensesRepo.expensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 100L).copy(id = 42))
+        coEvery { expensesRepo.allExpensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 100L).copy(id = 42))
         coEvery { expensesRepo.getIdByUid("a") } returns 42L
         coEvery { expensesRepo.updateSyncedExpense(any(), any()) } just Runs
 
@@ -189,7 +189,7 @@ class ExpensesSyncHandlerTest {
 
     @Test
     fun `merge ignores a remote entry that is not newer than the local one`() = runTest {
-        coEvery { expensesRepo.expensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 500L))
+        coEvery { expensesRepo.allExpensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 500L))
 
         val payload = """{"entries":[{"uid":"a","totalAmount":99.0,"currencyCode":"RON","dateTime":0,"createdAt":100,"updatedAt":100}],"tombstones":[]}"""
         handler.merge(payload)
@@ -200,7 +200,7 @@ class ExpensesSyncHandlerTest {
 
     @Test
     fun `merge deletes a locally-present uid named in a tombstone`() = runTest {
-        coEvery { expensesRepo.expensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 100L))
+        coEvery { expensesRepo.allExpensesSnapshot() } returns listOf(expense(uid = "a", updatedAt = 100L))
         coEvery { expensesRepo.deleteExpenseByUid("a") } just Runs
 
         val payload = """{"entries":[],"tombstones":[{"uid":"a","deletedAt":9999}]}"""
@@ -227,7 +227,7 @@ class ExpensesSyncHandlerTest {
         val result = handler.merge("{ not json")
 
         assertFalse(result.ok)
-        coVerify(exactly = 0) { expensesRepo.expensesSnapshot() }
+        coVerify(exactly = 0) { expensesRepo.allExpensesSnapshot() }
     }
 
     @Test
@@ -238,6 +238,6 @@ class ExpensesSyncHandlerTest {
         val result = handler.merge("""{"entries":[],"tombstones":[]}""")
 
         assertFalse(result.ok)
-        coVerify(exactly = 0) { expensesRepo.expensesSnapshot() }
+        coVerify(exactly = 0) { expensesRepo.allExpensesSnapshot() }
     }
 }

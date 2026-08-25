@@ -49,7 +49,7 @@ class ExpensesSyncHandler(
         // expensesWithDetails (the same joined query ExpensesExportImportHandler's OP_EXPORT path
         // uses) resolves each expense's category and line items in one query — no separate
         // categoryNameById map to build, and line items ride along for free.
-        val changed = expensesRepo.expensesWithDetails.first()
+        val changed = expensesRepo.allWithDetails.first()
             .filter { it.expense.updatedAt > since }
             .filter { details ->
                 if (scopeSet == null) return@filter true
@@ -106,7 +106,9 @@ class ExpensesSyncHandler(
             .map { tombstonesJson.getJSONObject(it).optString(SyncDeltaKeys.UID) }
             .toSet()
 
-        val local = expensesRepo.expensesSnapshot()
+        // Archived rows are part of the merge: the other device has to learn a record was put away
+        // rather than be told nothing and send it back as new.
+        val local = expensesRepo.allExpensesSnapshot()
         val plan = ExpenseSyncIdentity.planMerge(local, remoteEntries.map { it.first }, remoteTombstoneUids)
         val itemsByUid = remoteEntries.associate { (expense, items) -> expense.uid to items }
 
@@ -143,6 +145,7 @@ private fun Expense.toSyncJson(categoryName: String?, items: List<ExpenseLineIte
     put("direction", direction.toJsonValue())
     put("receiptImageName", receiptImageName)
     put("isStub", isStub)
+    put("archivedAt", archivedAt)
     put("createdAt", createdAt)
     put(SyncDeltaKeys.UPDATED_AT, updatedAt)
     put("lineItems", JSONArray(items.sortedBy { it.position }.map { it.toSyncJson() }))
@@ -194,6 +197,9 @@ private fun JSONObject.toExpense(categoryId: Long?): Expense = Expense(
     direction = optTransactionDirection(),
     receiptImageName = optNullableString("receiptImageName"),
     isStub = optBoolean("isStub", false),
+    // Archiving travels: a peer that only heard about the ledger would hand back every record the
+    // other device put away, as if it were new.
+    archivedAt = if (has("archivedAt") && !isNull("archivedAt")) optLong("archivedAt") else null,
     createdAt = optLong("createdAt"),
     updatedAt = optLong(SyncDeltaKeys.UPDATED_AT)
 )
