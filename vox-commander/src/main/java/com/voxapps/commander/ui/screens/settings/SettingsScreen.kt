@@ -39,6 +39,7 @@ import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.logging.ui.LogViewerStrings
 import com.voxapps.design.settings.LogsSettingsTab
 import com.voxapps.design.settings.LogsTabStrings
+import com.voxapps.design.settings.SettingsMenuDescription
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.commander.domain.localization.LanguageManager
 import com.voxapps.commander.service.WakeWordService
@@ -253,55 +254,65 @@ fun SettingsContent(
                         SettingsSectionHeader(languageManager.getString("settings_section_general"))
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_general")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_general_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Tune, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                         )
                         SettingsSectionHeader(languageManager.getString("settings_section_engines"))
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_ai_models")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_ai_models_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Memory, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.MODELS }
                         )
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_service")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_service_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Mic, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SERVICE }
                         )
                         SettingsSectionHeader(languageManager.getString("settings_section_apps"))
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_app_manager")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_app_manager_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Apps, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.APP_MANAGER }
                         )
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_integrations")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_integrations_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Extension, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS }
                         )
                         SettingsSectionHeader(languageManager.getString("settings_section_system"))
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_permissions")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_permissions_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Shield, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.PERMISSIONS }
                         )
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_advanced")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_advanced_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Build, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.ADVANCED }
                         )
                         ListItem(
                             headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("logs_settings_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.BugReport, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                         )
                         SettingsSectionHeader(languageManager.getString("settings_section_data"))
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_backup")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_backup_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Backup, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                         )
                         ListItem(
                             headlineContent = { Text(languageManager.getString("tab_diagnostics")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("tab_diagnostics_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Speed, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.DIAGNOSTICS }
                         )
@@ -370,16 +381,19 @@ fun SettingsContent(
                     ) {
                         ListItem(
                             headlineContent = { Text(languageManager.getString("integrations_apps_title")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("integrations_apps_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Extension, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS_APPS }
                         )
                         ListItem(
                             headlineContent = { Text(languageManager.getString("media_services_section")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("media_services_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS_MEDIA }
                         )
                         ListItem(
                             headlineContent = { Text(languageManager.getString("search_section")) },
+                            supportingContent = { SettingsMenuDescription(languageManager.getString("search_menu_desc")) },
                             leadingContent = { Icon(Icons.Default.Search, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.INTEGRATIONS_SEARCH }
                         )

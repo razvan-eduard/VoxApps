@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.settings.LogsSettingsTab
 import com.voxapps.design.settings.LogsTabStrings
+import com.voxapps.design.settings.SettingsMenuDescription
 import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
@@ -121,18 +122,21 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                 SettingsSectionHeader(languageManager.getString("settings_section_general"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("general")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("general_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("theme_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("logs_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                 )

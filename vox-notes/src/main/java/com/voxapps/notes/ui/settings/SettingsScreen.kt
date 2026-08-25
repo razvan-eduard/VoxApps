@@ -47,6 +47,7 @@ import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.notifications.NotificationSoundPlayer
 import com.voxapps.design.settings.NotificationSettingsCard
+import com.voxapps.design.settings.SettingsMenuDescription
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
@@ -133,40 +134,47 @@ fun SettingsScreen(
                 SettingsSectionHeader(languageManager.getString("settings_section_general"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("general")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("general_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("theme_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_notifications"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("notifications_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_data"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("categories_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("categories_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.MergeType, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CATEGORIES }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("note_cleanup_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("note_cleanup_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.CleaningServices, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTE_CLEANUP }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("backup_restore_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("backup_restore_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("logs_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                 )
