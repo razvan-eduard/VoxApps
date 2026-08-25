@@ -754,5 +754,7 @@
   "bulk_edit_done_one": "%d record updated",
   "archive_confirm_title_one": "Archive %d record?",
   "archive_done_one": "%d record archived",
-  "delete_forever_confirm_title_one": "Delete %d record forever?"
+  "delete_forever_confirm_title_one": "Delete %d record forever?",
+  "expense_card": "Card",
+  "expense_bank_account": "Bank account"
 }

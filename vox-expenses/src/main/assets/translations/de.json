@@ -754,5 +754,7 @@
   "bulk_edit_done_one": "%d Eintrag aktualisiert",
   "archive_confirm_title_one": "%d Eintrag archivieren?",
   "archive_done_one": "%d Eintrag archiviert",
-  "delete_forever_confirm_title_one": "%d Eintrag endgültig löschen?"
+  "delete_forever_confirm_title_one": "%d Eintrag endgültig löschen?",
+  "expense_card": "Karte",
+  "expense_bank_account": "Bankkonto"
 }

@@ -13,7 +13,6 @@ object ExpenseSanitizer : RecordSanitizer<Expense> {
     override fun sanitize(record: Expense): Expense = record.copy(
         title = FieldCleaner.clean(record.title, "title", recordLabel(record)),
         vendor = FieldCleaner.clean(record.vendor, "vendor", recordLabel(record)),
-        bank = FieldCleaner.clean(record.bank, "bank", recordLabel(record)),
         location = FieldCleaner.clean(record.location, "location", recordLabel(record)),
         comments = FieldCleaner.clean(record.comments, "comments", recordLabel(record))
     )
@@ -21,7 +20,6 @@ object ExpenseSanitizer : RecordSanitizer<Expense> {
     override fun dirtyFields(record: Expense): List<DirtyField> = listOfNotNull(
         FieldCleaner.dirtyValue(record.title)?.let { DirtyField("title", it) },
         FieldCleaner.dirtyValue(record.vendor)?.let { DirtyField("vendor", it) },
-        FieldCleaner.dirtyValue(record.bank)?.let { DirtyField("bank", it) },
         FieldCleaner.dirtyValue(record.location)?.let { DirtyField("location", it) },
         FieldCleaner.dirtyValue(record.comments)?.let { DirtyField("comments", it) }
     )

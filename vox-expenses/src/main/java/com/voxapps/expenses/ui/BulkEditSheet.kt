@@ -39,6 +39,7 @@ import com.voxapps.expenses.data.ExpenseWithDetails
 import com.voxapps.expenses.data.FieldVocabularies
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.domain.bulk.BulkEdit
 import com.voxapps.expenses.domain.bulk.Shared
 import com.voxapps.expenses.state.ExpensesStateManager
@@ -78,25 +79,30 @@ fun BulkEditSheet(
     var vendor by remember { mutableStateOf<String?>(null) }
     var bank by remember { mutableStateOf<String?>(null) }
     var accountId by remember { mutableStateOf<Long?>(null) }
+    var cardId by remember { mutableStateOf<Long?>(null) }
     var location by remember { mutableStateOf<String?>(null) }
     var direction by remember { mutableStateOf<TransactionDirection?>(null) }
     var namingVendor by remember { mutableStateOf(false) }
-    var namingBank by remember { mutableStateOf(false) }
     var namingLocation by remember { mutableStateOf(false) }
 
     val edit = BulkEdit(
         categoryId = categoryId,
         vendor = vendor,
         bank = bank,
-        bankAccountId = accountId,
+        bankAccountId = cardId ?: accountId,
         location = location,
         direction = direction
     )
 
     val expenses = remember(records) { records.map { it.expense } }
     val sharedVendor = remember(expenses) { Shared.across(expenses) { it.vendor?.takeIf { v -> v.isNotBlank() } } }
-    val sharedBank = remember(expenses) { Shared.across(expenses) { it.bank?.takeIf { v -> v.isNotBlank() } } }
-    val sharedAccount = remember(expenses) { Shared.across(expenses) { it.bankAccountId } }
+    val sharedPointer = remember(expenses) { Shared.across(expenses) { it.bankAccountId } }
+    val sharedAccount = remember(sharedPointer, accounts) {
+        Shared(BankAccountTree.chosen(sharedPointer.value, accounts).accountId, sharedPointer.agreed)
+    }
+    val sharedCard = remember(sharedPointer, accounts) {
+        Shared(BankAccountTree.chosen(sharedPointer.value, accounts).cardId, sharedPointer.agreed)
+    }
     val sharedLocation = remember(expenses) { Shared.across(expenses) { it.location?.takeIf { v -> v.isNotBlank() } } }
     val sharedCategory = remember(expenses) { Shared.across(expenses) { it.categoryId } }
     val sharedDirection = remember(expenses) { Shared.across(expenses) { it.direction } }
@@ -149,24 +155,7 @@ fun BulkEditSheet(
                 }
             )
 
-            val (bankText, bankIsPlaceholder) = shown(bank, sharedBank)
-            Picklist(
-                items = names.banks,
-                selected = bank,
-                itemLabel = { it },
-                onSelect = { bank = it },
-                noneLabel = unchanged,
-                onNoneSelected = { bank = null },
-                searchPlaceholder = languageManager.getString("filter_search_hint"),
-                extraWhileSearching = names.banksKnown,
-                actionLabel = languageManager.getString("account_bank_new"),
-                onAction = { namingBank = true },
-                anchor = { _, onClick ->
-                    BulkField(languageManager.getString("expense_bank"), bankText, bankIsPlaceholder, onClick)
-                }
-            )
-
-            val chosenAccount = offered.firstOrNull { it.id == accountId }
+            val chosenAccount = offered.firstOrNull { it.isAccount && it.id == accountId }
             val (accountText, accountIsPlaceholder) = when {
                 chosenAccount != null -> chosenAccount.displayName() to false
                 !sharedAccount.agreed -> multiple to true
@@ -174,20 +163,55 @@ fun BulkEditSheet(
                     (sharedAccount.value == null)
             }
             Picklist(
-                items = offered,
+                items = offered.filter { it.isAccount },
                 selected = chosenAccount,
-                itemLabel = { it.displayName() },
-                onSelect = { accountId = it.id },
+                itemLabel = { it.title() },
+                itemSubtitle = { it.subtitle() },
+                // The account answers for the bank as well: they are one fact, and a batch that set
+                // them separately could set twenty records to a bank their card is not with.
+                onSelect = { chosen ->
+                    accountId = chosen.id
+                    if (cardId != null && accounts.firstOrNull { it.id == cardId }?.parentId != chosen.id) {
+                        cardId = null
+                    }
+                    bank = BankAccountTree.bankNameOf(chosen, accounts)
+                },
                 noneLabel = unchanged,
-                onNoneSelected = { accountId = null },
+                onNoneSelected = { accountId = null; cardId = null; bank = null },
                 searchPlaceholder = languageManager.getString("filter_search_hint"),
                 anchor = { _, onClick ->
                     BulkField(
-                        languageManager.getString("account_filter_label"),
+                        languageManager.getString("expense_bank_account"),
                         accountText,
                         accountIsPlaceholder,
                         onClick
                     )
+                }
+            )
+
+            val cards = remember(offered, accountId) { offered.filter { !it.isAccount && it.parentId == accountId } }
+            val chosenCard = cards.firstOrNull { it.id == cardId }
+            val (cardText, cardIsPlaceholder) = when {
+                chosenCard != null -> chosenCard.title() to false
+                !sharedCard.agreed -> multiple to true
+                else -> (accounts.firstOrNull { it.id == sharedCard.value }?.title() ?: none) to
+                    (sharedCard.value == null)
+            }
+            Picklist(
+                items = cards,
+                selected = chosenCard,
+                itemLabel = { it.title() },
+                itemSubtitle = { it.subtitle() },
+                onSelect = { chosen ->
+                    cardId = chosen.id
+                    chosen.parentId?.let { accountId = it }
+                    bank = BankAccountTree.bankNameOf(chosen, accounts)
+                },
+                noneLabel = unchanged,
+                onNoneSelected = { cardId = null },
+                searchPlaceholder = languageManager.getString("filter_search_hint"),
+                anchor = { _, onClick ->
+                    BulkField(languageManager.getString("expense_card"), cardText, cardIsPlaceholder, onClick)
                 }
             )
 
@@ -292,19 +316,6 @@ fun BulkEditSheet(
                 scope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, named) }
             },
             onDismiss = { namingVendor = false }
-        )
-    }
-    if (namingBank) {
-        VoxNameDialog(
-            title = languageManager.getString("account_bank_new"),
-            label = languageManager.getString("expense_bank"),
-            saveLabel = languageManager.getString("save"),
-            cancelLabel = languageManager.getString("cancel"),
-            onNamed = { named ->
-                bank = named
-                scope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, named) }
-            },
-            onDismiss = { namingBank = false }
         )
     }
     if (namingLocation) {

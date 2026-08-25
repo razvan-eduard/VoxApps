@@ -32,7 +32,6 @@ object DebugDataSeeder {
                 totalAmount = random.nextDouble(5.0, 400.0),
                 currencyCode = currencyCode,
                 vendor = SAMPLE_VENDORS.random(random),
-                bank = SAMPLE_BANKS.random(random),
                 location = null,
                 dateTime = millis,
                 comments = null,

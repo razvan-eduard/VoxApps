@@ -16,6 +16,7 @@ class ExpensesRepositoryRemapMemoryTest {
     private lateinit var categoryDao: CategoryDao
     private lateinit var remapRuleDao: RemapRuleDao
     private lateinit var sightingDao: FakeSightingDao
+    private lateinit var bankAccountDao: BankAccountDao
     private lateinit var repository: ExpensesRepository
 
     private val groceries = Category(id = 5L, name = "Groceries", colorArgb = 0L, createdAt = 0L)
@@ -39,7 +40,7 @@ class ExpensesRepositoryRemapMemoryTest {
         ExpenseWithDetails(
             expense = Expense(
                 id = id, title = title, totalAmount = 1.0, currencyCode = "RON",
-                vendor = vendor, bank = null, location = null, dateTime = 0L,
+                vendor = vendor, location = null, dateTime = 0L, bankAccountId = 5L,
                 comments = null, categoryId = categoryId
             ),
             items = emptyList()
@@ -57,10 +58,15 @@ class ExpensesRepositoryRemapMemoryTest {
         categoryDao = mockk(relaxed = true)
         remapRuleDao = mockk(relaxed = true)
         sightingDao = FakeSightingDao()
+        bankAccountDao = mockk(relaxed = true)
+        // The bank a capture "also carried" is the name of the account it points at.
+        coEvery { bankAccountDao.getAll() } returns listOf(
+            BankAccount(id = 5, currencyCode = "RON", createdAt = 0L, bankName = "ING")
+        )
         repository = ExpensesRepository(
             mockk(relaxed = true), categoryDao, mockk(relaxed = true), mockk(relaxed = true),
             remapRuleDao, sightingDao, mockk<Context>(), mockk(relaxed = true),
-            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true)
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), bankAccountDao
         )
         coEvery { categoryDao.getAll() } returns listOf(groceries, transport)
         coEvery { remapRuleDao.getByMatch(any()) } returns null
@@ -200,7 +206,7 @@ class ExpensesRepositoryRemapMemoryTest {
     fun `what every capture also carried is offered, not imposed`() = runTest {
         repository.recordRemapPatternSightings(
             details(1, "Lidl", categoryId = null).let {
-                it.copy(expense = it.expense.copy(bank = "ING", location = "Cluj"))
+                it.copy(expense = it.expense.copy(location = "Cluj"))
             },
             edited(1, "Lidl", categoryId = groceries.id), threshold = 1
         )
@@ -216,11 +222,11 @@ class ExpensesRepositoryRemapMemoryTest {
     @Test
     fun `a value only one capture carried is not offered`() = runTest {
         repository.recordRemapPatternSightings(
-            details(1, "Lidl").let { it.copy(expense = it.expense.copy(bank = "ING", location = "Cluj")) },
+            details(1, "Lidl").let { it.copy(expense = it.expense.copy(location = "Cluj")) },
             edited(1, "Lidl", categoryId = groceries.id), threshold = 2
         )
         repository.recordRemapPatternSightings(
-            details(2, "Lidl").let { it.copy(expense = it.expense.copy(bank = "ING", location = "Oradea")) },
+            details(2, "Lidl").let { it.copy(expense = it.expense.copy(location = "Oradea")) },
             edited(2, "Lidl", categoryId = groceries.id), threshold = 2
         )
         coVerify(exactly = 1) {

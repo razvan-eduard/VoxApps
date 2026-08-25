@@ -1,5 +1,6 @@
 package com.voxapps.expenses.receiver
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
@@ -49,6 +50,7 @@ class ExpensesSyncHandler(
         // expensesWithDetails (the same joined query ExpensesExportImportHandler's OP_EXPORT path
         // uses) resolves each expense's category and line items in one query — no separate
         // categoryNameById map to build, and line items ride along for free.
+        val accountsForSync = expensesRepo.bankAccountsSnapshot()
         val changed = expensesRepo.allWithDetails.first()
             .filter { it.expense.updatedAt > since }
             .filter { details ->
@@ -59,7 +61,15 @@ class ExpensesSyncHandler(
         val tombstones = expensesRepo.tombstonesSince(since)
 
         val json = JSONObject()
-        json.put(SyncDeltaKeys.ENTRIES, JSONArray(changed.map { it.expense.toSyncJson(it.category?.name, it.items) }))
+        json.put(
+            SyncDeltaKeys.ENTRIES,
+            JSONArray(changed.map {
+                it.expense.toSyncJson(
+                    it.category?.name, it.items,
+                    BankAccountTree.bankNameFor(it.expense.bankAccountId, accountsForSync)
+                )
+            })
+        )
         json.put(SyncDeltaKeys.TOMBSTONES, JSONArray(tombstones.map { JSONObject().put(SyncDeltaKeys.UID, it.uid).put(SyncDeltaKeys.DELETED_AT, it.deletedAt) }))
         return VoxResult(ok = true, text = json.toString())
     }
@@ -131,13 +141,18 @@ private object ExpenseSyncIdentity : SyncIdentity<Expense> {
     override fun updatedAtOf(record: Expense): Long = record.updatedAt
 }
 
-private fun Expense.toSyncJson(categoryName: String?, items: List<ExpenseLineItem>): JSONObject = JSONObject().apply {
+private fun Expense.toSyncJson(
+    categoryName: String?,
+    items: List<ExpenseLineItem>,
+    /** Derived from the account, sent so a peer can name the bank without one. */
+    bankName: String?
+): JSONObject = JSONObject().apply {
     put(SyncDeltaKeys.UID, uid)
     put("title", title)
     put("totalAmount", totalAmount)
     put("currencyCode", currencyCode)
     put("vendor", vendor)
-    put("bank", bank)
+    put("bank", bankName)
     put("location", location)
     put("dateTime", dateTime)
     put("comments", comments)
@@ -189,7 +204,6 @@ private fun JSONObject.toExpense(categoryId: Long?): Expense = Expense(
     totalAmount = optDouble("totalAmount"),
     currencyCode = optString("currencyCode"),
     vendor = optNullableString("vendor"),
-    bank = optNullableString("bank"),
     location = optNullableString("location"),
     dateTime = optLong("dateTime"),
     comments = optNullableString("comments"),

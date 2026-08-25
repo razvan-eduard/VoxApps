@@ -26,8 +26,7 @@ class BudgetMathTest {
         currency: String = "RON",
         direction: TransactionDirection = TransactionDirection.OUTGOING
     ) = Expense(
-        title = null, totalAmount = amount, currencyCode = currency, vendor = null, bank = null,
-        location = null, dateTime = at(day), comments = null, categoryId = null,
+        title = null, totalAmount = amount, currencyCode = currency, vendor = null, location = null, dateTime = at(day), comments = null, categoryId = null,
         direction = direction, bankAccountId = accountId
     )
 

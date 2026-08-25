@@ -147,8 +147,7 @@ class ExpensesExportImportHandlerTest {
 
         coVerify(exactly = 1) {
             expensesRepo.addExpense(
-                title = null, totalAmount = 5.0, currencyCode = "RON", vendor = null, bank = null,
-                location = null, dateTime = any(), comments = null, categoryId = null, items = emptyList(),
+                title = null, totalAmount = 5.0, currencyCode = "RON", vendor = null, location = null, dateTime = any(), comments = null, categoryId = null, items = emptyList(),
                 imageName = null, createdAt = 42L, checkForDuplicate = false
             )
         }
@@ -163,8 +162,7 @@ class ExpensesExportImportHandlerTest {
 
         coVerify(exactly = 1) {
             expensesRepo.addExpense(
-                title = null, totalAmount = 5.0, currencyCode = "RON", vendor = null, bank = null,
-                location = null, dateTime = any(), comments = null, categoryId = null, items = emptyList(),
+                title = null, totalAmount = 5.0, currencyCode = "RON", vendor = null, location = null, dateTime = any(), comments = null, categoryId = null, items = emptyList(),
                 imageName = "rec_x.jpg", createdAt = any(), checkForDuplicate = false
             )
         }

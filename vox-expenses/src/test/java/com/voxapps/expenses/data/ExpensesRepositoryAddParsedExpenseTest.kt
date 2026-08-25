@@ -58,8 +58,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         coEvery { remapRuleDao.getAll() } returns listOf(lidlRule(groceries.id))
 
         repository.addParsedExpense(
-            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Lidl", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Lidl", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = "Shopping", defaultCategoryId = null, autoCreate = false
         )
 
@@ -73,8 +72,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         coEvery { remapRuleDao.getAll() } returns emptyList()
 
         repository.addParsedExpense(
-            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Lidl", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Lidl", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = "Shopping", defaultCategoryId = null, autoCreate = false
         )
 
@@ -88,8 +86,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         coEvery { remapRuleDao.getAll() } returns listOf(lidlRule(groceries.id)) // category no longer exists
 
         repository.addParsedExpense(
-            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Lidl", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Lidl", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = "Shopping", defaultCategoryId = null, autoCreate = false
         )
 
@@ -104,8 +101,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         coEvery { categoryDao.insert(any()) } returns 42L
 
         val id = repository.addParsedExpense(
-            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Kaufland", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 10.0, currencyCode = "RON", vendor = "Kaufland", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = "Produce", defaultCategoryId = null, autoCreate = true
         )
 
@@ -132,8 +128,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         coEvery { remapRuleDao.getAll() } returns listOf(overRule("50000"))
 
         repository.addParsedExpense(
-            title = null, totalAmount = 763.0, currencyCode = "RON", vendor = "Emag", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 763.0, currencyCode = "RON", vendor = "Emag", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = null, defaultCategoryId = null, autoCreate = false
         )
 
@@ -152,8 +147,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         coEvery { remapRuleDao.getAll() } returns listOf(overRule("50000"))
 
         repository.addParsedExpense(
-            title = null, totalAmount = 12.0, currencyCode = "RON", vendor = "Lidl", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 12.0, currencyCode = "RON", vendor = "Lidl", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = null, defaultCategoryId = null, autoCreate = false
         )
 
@@ -169,8 +163,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
             listOf(overRule("50000", mapOf("categoryId" to groceries.id.toString())))
 
         repository.addParsedExpense(
-            title = null, totalAmount = 763.0, currencyCode = "RON", vendor = "Emag", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 763.0, currencyCode = "RON", vendor = "Emag", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = "Shopping", defaultCategoryId = null, autoCreate = false
         )
 
@@ -185,8 +178,7 @@ class ExpensesRepositoryAddParsedExpenseTest {
         coEvery { remapRuleDao.getAll() } returns listOf(overRule("50000").copy(enabled = false))
 
         repository.addParsedExpense(
-            title = null, totalAmount = 763.0, currencyCode = "RON", vendor = "Emag", bank = null,
-            location = null, comments = null, dateTime = 1000L,
+            title = null, totalAmount = 763.0, currencyCode = "RON", vendor = "Emag", bank = null, location = null, comments = null, dateTime = 1000L,
             spokenCategory = null, defaultCategoryId = null, autoCreate = false
         )
 

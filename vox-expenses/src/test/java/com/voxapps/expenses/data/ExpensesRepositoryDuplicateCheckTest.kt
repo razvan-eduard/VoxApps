@@ -22,6 +22,7 @@ class ExpensesRepositoryDuplicateCheckTest {
     private lateinit var lineItemDao: ExpenseLineItemDao
     private lateinit var spendingLimitDao: SpendingLimitDao
     private lateinit var duplicateRuleDao: DuplicateRuleDao
+    private lateinit var bankAccountDao: BankAccountDao
     private lateinit var repository: ExpensesRepository
 
     private fun rule(fieldIds: List<String>, combinator: RuleCombinator = RuleCombinator.AND) =
@@ -36,21 +37,26 @@ class ExpensesRepositoryDuplicateCheckTest {
         duplicateRuleDao = mockk(relaxed = true)
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
         coEvery { duplicateRuleDao.getAll() } returns emptyList()
+        bankAccountDao = mockk(relaxed = true)
         repository = ExpensesRepository(
             expenseDao, categoryDao, lineItemDao, spendingLimitDao, mockk(relaxed = true), mockk(relaxed = true), mockk<Context>(), mockk(relaxed = true),
-            duplicateRuleDao, mockk(relaxed = true), mockk(relaxed = true)
+            duplicateRuleDao, mockk(relaxed = true), mockk(relaxed = true), bankAccountDao
+        )
+        // A record's bank is the name of the account it points at, so a rule about banks needs one.
+        coEvery { bankAccountDao.getAll() } returns listOf(
+            BankAccount(id = 5, currencyCode = "RON", createdAt = 0L, bankName = "Some Bank")
         )
     }
 
     @Test
     fun `addExpense inserts normally when duplicate checking is off by default`() = runTest {
-        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", dateTime = 1000L)
+        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", dateTime = 1000L, bankAccountId = 5L)
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(existing)
         coEvery { expenseDao.insert(any()) } returns 7L
 
         val result = repository.addExpense(
             title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour",
-            bank = null, location = null, dateTime = 1000L, comments = null, categoryId = null
+            location = null, dateTime = 1000L, comments = null, categoryId = null
         )
 
         // nearDuplicateCheckEnabled defaults to false — no rule engine query happens at all.
@@ -60,14 +66,14 @@ class ExpensesRepositoryDuplicateCheckTest {
 
     @Test
     fun `an enabled rule matching every relevant field returns DUPLICATE_ENTRY_RESULT, not a merge`() = runTest {
-        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", bank = "Some Bank", dateTime = 1000L)
+        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", dateTime = 1000L, bankAccountId = 5L)
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(existing)
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("title", "totalAmount", "vendor", "bank"))))
         coEvery { duplicateRuleDao.getAll() } returns listOf(rule(listOf("title", "totalAmount", "vendor", "bank")))
 
         val result = repository.addExpense(
             title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour",
-            bank = "Some Bank", location = null, dateTime = 1000L, comments = null, categoryId = null,
+            location = null, dateTime = 1000L, comments = null, categoryId = null, bankAccountId = 5L,
             nearDuplicateCheckEnabled = true,
             nearDuplicateConfig = NearDuplicateConfig(timeWindowMillis = TimeUnit.MINUTES.toMillis(2))
         )
@@ -81,7 +87,7 @@ class ExpensesRepositoryDuplicateCheckTest {
 
     @Test
     fun `checkForDuplicate = false bypasses the check entirely (Hub import path)`() = runTest {
-        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", dateTime = 1000L)
+        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", dateTime = 1000L, bankAccountId = 5L)
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(existing)
         coEvery { expenseDao.insert(any()) } returns 9L
         every { duplicateRuleDao.observeAll() } returns flowOf(listOf(rule(listOf("title", "totalAmount"))))
@@ -89,7 +95,7 @@ class ExpensesRepositoryDuplicateCheckTest {
 
         val result = repository.addExpense(
             title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour",
-            bank = null, location = null, dateTime = 1000L, comments = null, categoryId = null,
+            location = null, dateTime = 1000L, comments = null, categoryId = null, bankAccountId = 5L,
             checkForDuplicate = false,
             nearDuplicateCheckEnabled = true
         )
@@ -108,7 +114,7 @@ class ExpensesRepositoryDuplicateCheckTest {
 
         val result = repository.addExpense(
             title = "Payment to Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
-            bank = null, location = null, dateTime = 1050L, comments = null, categoryId = null
+            location = null, dateTime = 1050L, comments = null, categoryId = null
         )
 
         assertEquals(5L, result)
@@ -125,14 +131,16 @@ class ExpensesRepositoryDuplicateCheckTest {
         coEvery { duplicateRuleDao.getAll() } returns listOf(rule(listOf("totalAmount", "title")))
 
         val result = repository.addExpense(
+            // The candidate brings the account the stored row never had — which is what makes this
+            // an enrichment rather than a plain duplicate.
             title = "Payment to Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
-            bank = "Some Bank", location = null, dateTime = 1050L, comments = null, categoryId = null,
+            location = null, dateTime = 1050L, comments = null, categoryId = null, bankAccountId = 5L,
             nearDuplicateCheckEnabled = true,
             nearDuplicateConfig = NearDuplicateConfig(timeWindowMillis = TimeUnit.MINUTES.toMillis(2))
         )
 
         assertEquals(NEAR_DUPLICATE_MERGED_RESULT, result)
-        coVerify(exactly = 1) { expenseDao.update(match { it.id == 1L && it.bank == "Some Bank" }) }
+        coVerify(exactly = 1) { expenseDao.update(match { it.id == 1L }) }
         coVerify(exactly = 0) { expenseDao.insert(any()) }
     }
 
@@ -145,7 +153,7 @@ class ExpensesRepositoryDuplicateCheckTest {
 
         val result = repository.addExpense(
             title = "Example Store", totalAmount = 99.0, currencyCode = "RON", vendor = null,
-            bank = null, location = null, dateTime = 1000L + TimeUnit.HOURS.toMillis(1), comments = null, categoryId = null,
+            location = null, dateTime = 1000L + TimeUnit.HOURS.toMillis(1), comments = null, categoryId = null,
             nearDuplicateCheckEnabled = true,
             nearDuplicateConfig = NearDuplicateConfig(timeWindowMillis = TimeUnit.MINUTES.toMillis(2))
         )
@@ -157,14 +165,14 @@ class ExpensesRepositoryDuplicateCheckTest {
 
     @Test
     fun `no enabled rules means nothing ever matches, even with an identical candidate nearby`() = runTest {
-        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", dateTime = 1000L)
+        val existing = Expense(id = 1, title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour", dateTime = 1000L, bankAccountId = 5L)
         coEvery { expenseDao.getForDateRange(any(), any()) } returns listOf(existing)
         coEvery { expenseDao.insert(any()) } returns 11L
         // setup()'s default: duplicateRuleDao.observeAll() returns an empty rule list.
 
         val result = repository.addExpense(
             title = "Groceries", totalAmount = 42.0, currencyCode = "RON", vendor = "Carrefour",
-            bank = null, location = null, dateTime = 1000L, comments = null, categoryId = null,
+            location = null, dateTime = 1000L, comments = null, categoryId = null, bankAccountId = 5L,
             nearDuplicateCheckEnabled = true
         )
 
@@ -188,7 +196,7 @@ class ExpensesRepositoryDuplicateCheckTest {
 
         val result = repository.addExpense(
             title = "Payment", totalAmount = 1000.0, currencyCode = "RON", vendor = null,
-            bank = null, location = null, dateTime = 1000L, comments = null, categoryId = null,
+            location = null, dateTime = 1000L, comments = null, categoryId = null,
             direction = TransactionDirection.OUTGOING,
             nearDuplicateCheckEnabled = true,
             nearDuplicateConfig = NearDuplicateConfig(timeWindowMillis = TimeUnit.MINUTES.toMillis(2))

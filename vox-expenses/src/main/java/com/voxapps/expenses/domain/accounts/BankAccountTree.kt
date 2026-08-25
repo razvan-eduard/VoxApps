@@ -36,6 +36,51 @@ object BankAccountTree {
         return family
     }
 
+    /**
+     * The account a row belongs to: itself if it is one, else the account its card hangs under.
+     *
+     * Bounded by the number of rows, like [familyOf], so a cycle somebody made by hand cannot hang
+     * the walk.
+     */
+    fun rootOf(account: BankAccount, all: List<BankAccount>): BankAccount {
+        var current = account
+        repeat(all.size) {
+            val parent = current.parentId?.let { id -> all.firstOrNull { it.id == id } } ?: return current
+            current = parent
+        }
+        return current
+    }
+
+    /** The bank a row is with — the name of the account it belongs to. A record's bank is this and
+     *  nothing else: there is no bank apart from the account it names. */
+    fun bankNameOf(account: BankAccount, all: List<BankAccount>): String? =
+        rootOf(account, all).let { it.bankName?.takeIf { n -> n.isNotBlank() } ?: it.label?.takeIf { l -> l.isNotBlank() } }
+
+    /**
+     * The bank a record is with, from the row it points at.
+     *
+     * The record keeps no bank of its own: the bank is the name of the account, so a record that
+     * points at nothing is with no bank. Everything that used to read a column asks this instead.
+     */
+    fun bankNameFor(pointedAt: Long?, all: List<BankAccount>): String? {
+        val row = pointedAt?.let { id -> all.firstOrNull { it.id == id } } ?: return null
+        return bankNameOf(row, all)
+    }
+
+    /**
+     * The account and the card a record's single pointer stands for.
+     *
+     * A record names one row, because one row is what a message identifies — but a person thinks in
+     * two, "which account, and on which card". A pointer at a card is both: the card, and the
+     * account it hangs under.
+     */
+    data class Chosen(val accountId: Long?, val cardId: Long?)
+
+    fun chosen(pointedAt: Long?, all: List<BankAccount>): Chosen {
+        val row = pointedAt?.let { id -> all.firstOrNull { it.id == id } } ?: return Chosen(null, null)
+        return if (row.isAccount) Chosen(row.id, null) else Chosen(row.parentId, row.id)
+    }
+
     /** The cards under [accountId], in the order they are stored. */
     fun childrenOf(accountId: Long, all: List<BankAccount>): List<BankAccount> =
         all.filter { it.parentId == accountId }

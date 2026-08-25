@@ -370,7 +370,8 @@ private fun AccountEditDialog(
                     Picklist(
                         items = possibleParents,
                         selected = possibleParents.firstOrNull { it.id == parentId },
-                        itemLabel = { it.displayName() },
+                        itemLabel = { it.title() },
+                        itemSubtitle = { it.subtitle() },
                         onSelect = { parentId = it.id },
                         noneLabel = languageManager.getString("account_belongs_to_none"),
                         onNoneSelected = { parentId = null },

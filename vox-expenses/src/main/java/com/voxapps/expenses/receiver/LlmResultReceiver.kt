@@ -1,5 +1,6 @@
 package com.voxapps.expenses.receiver
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.docread.InvoiceTotalsReconciler
 import com.voxapps.docread.TableItemsPreParse
 import android.content.BroadcastReceiver
@@ -417,7 +418,13 @@ class LlmResultReceiver : BroadcastReceiver() {
                         }
                         var didSomething = false
                         if (parsed != null && existing != null) {
-                            val offered = buildFieldSuggestion(parsed, existing)
+                            val offered = buildFieldSuggestion(
+                                parsed, existing,
+                                BankAccountTree.bankNameFor(
+                                    existing.expense.bankAccountId,
+                                    container.expensesRepository.bankAccountsSnapshot()
+                                )
+                            )
                             if (offered.isNotEmpty()) {
                                 container.suggestionStore.offer(existing.expense.id, offered, sourceGroupId)
                                 didSomething = true
@@ -638,7 +645,6 @@ class LlmResultReceiver : BroadcastReceiver() {
             totalAmount = parsed.totalAmount,
             currencyCode = parsed.currency ?: settings.defaultCurrency,
             vendor = parsed.vendor,
-            bank = parsed.bank,
             // Same priority (and same toggle-respects-everything rule) as the first-attempt path:
             // LLM-read beats GPS-derived, and the whole thing is skipped if the user turned location
             // prefill off. A retry can land long after the original scan, so this is *current*
@@ -742,7 +748,6 @@ class LlmResultReceiver : BroadcastReceiver() {
             totalAmount = preParse?.total ?: 0.0,
             currencyCode = settings.defaultCurrency,
             vendor = null,
-            bank = null,
             location = null,
             dateTime = mergeDateTime(preParse?.date, preParse?.time),
             comments = "LLM parsing failed for this scan.",
@@ -785,7 +790,12 @@ class LlmResultReceiver : BroadcastReceiver() {
      *  there's an actual difference to offer. Returns null (nothing to persist) if every field
      *  already matches. Category is compared by name (the record's current category, if any) since
      *  [ExpenseParseResultParser.Parsed.category] is a raw name, not an id. */
-    private fun buildFieldSuggestion(parsed: ExpenseParseResultParser.Parsed, existing: ExpenseWithDetails): Map<String, String?> {
+    private fun buildFieldSuggestion(
+        parsed: ExpenseParseResultParser.Parsed,
+        existing: ExpenseWithDetails,
+        /** The record's bank — the name of the account it points at, resolved by the caller. */
+        knownBankName: String?
+    ): Map<String, String?> {
         val expense = existing.expense
         fun String?.diffOrNull(current: String?): String? {
             val clean = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
@@ -793,7 +803,6 @@ class LlmResultReceiver : BroadcastReceiver() {
         }
         val title = parsed.title.diffOrNull(expense.title)
         val vendor = parsed.vendor.diffOrNull(expense.vendor)
-        val bank = parsed.bank.diffOrNull(expense.bank)
         val location = parsed.location.diffOrNull(expense.location)
         val currencyCode = parsed.currency?.uppercase()?.diffOrNull(expense.currencyCode)
         val category = parsed.category.diffOrNull(existing.category?.name)
@@ -812,7 +821,7 @@ class LlmResultReceiver : BroadcastReceiver() {
         return mapOf(
             ExpenseSuggestionTarget.KEY_TITLE to title,
             ExpenseSuggestionTarget.KEY_VENDOR to vendor,
-            ExpenseSuggestionTarget.KEY_BANK to bank,
+            ExpenseSuggestionTarget.KEY_BANK to parsed.bank.diffOrNull(knownBankName),
             ExpenseSuggestionTarget.KEY_AMOUNT to totalAmount?.toString(),
             ExpenseSuggestionTarget.KEY_CURRENCY to currencyCode,
             ExpenseSuggestionTarget.KEY_CATEGORY to category,

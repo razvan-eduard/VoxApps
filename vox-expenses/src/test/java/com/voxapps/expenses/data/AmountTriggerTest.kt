@@ -75,8 +75,7 @@ class AmountTriggerTest {
     fun `the trigger reads the draft's own amount`() {
         val field = ExpenseRemapFields.matchFields.first { it.id == ExpenseRemapFields.ID_AMOUNT }
         val draft = ExpenseRemapFields.Draft(
-            totalAmount = 160.0, title = null, vendor = null, bank = null,
-            location = null, comments = null, category = null
+            totalAmount = 160.0, title = null, vendor = null, bank = null, location = null, comments = null, category = null
         )
         assertEquals(ExpenseRemapFields.amountKey(160.0), field.valueOf(draft))
         assertNull(field.valueOf(draft.copy(totalAmount = null)))

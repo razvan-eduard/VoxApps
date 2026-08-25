@@ -44,7 +44,6 @@ data class BulkEdit(
         return expense.copy(
             categoryId = categoryId ?: expense.categoryId,
             vendor = vendor ?: expense.vendor,
-            bank = bank ?: expense.bank,
             bankAccountId = bankAccountId ?: expense.bankAccountId,
             location = location ?: expense.location,
             direction = direction ?: expense.direction,

@@ -151,6 +151,7 @@ class ExpensesStateManager(
                 ExpensesUiState.Unlocked(
                     expenses = withAttentionFilter(rt, categories, accounts, ExpenseFilter.apply(
                         expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank,
+                        { id -> BankAccountTree.bankNameFor(id, accounts) },
                         rt.selectedVendor, rt.selectedLocation, rt.selectedAmount,
                         // A card answers for itself; an account answers for its cards too. The
                         // narrower choice wins because it is the one made second.
@@ -182,7 +183,10 @@ class ExpensesStateManager(
                         expenses.minOfOrNull { it.expense.totalAmount } ?: 0.0,
                         expenses.maxOfOrNull { it.expense.totalAmount } ?: 0.0
                     ),
-                    availableBanks = expenses.mapNotNull { it.expense.bank }.distinct().sorted(),
+                    // The banks this device deals with are its accounts, not a column on its
+                    // records: one list, and one place it can be wrong.
+                    availableBanks = accounts.filter { it.isAccount }
+                        .mapNotNull { BankAccountTree.bankNameOf(it, accounts) }.distinct().sorted(),
                     availableLocations = expenses.mapNotNull { it.expense.location }.distinct().sorted(),
                     availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted(),
                     nextScheduledDedupMillis = nextRunMillis
@@ -318,6 +322,12 @@ class ExpensesStateManager(
     fun addTypedBankAccount(text: String, currencyCode: String) {
         scope.launch { expensesRepo.addTypedBankAccount(text, currencyCode) }
     }
+    /** The account at a bank named by hand: the one already there, or a new one. [onReady] takes
+     *  its id, for the screen that asked to point at it. */
+    fun accountNamed(bankName: String, currencyCode: String, onReady: (Long?) -> Unit = {}) {
+        scope.launch { onReady(expensesRepo.accountNamed(bankName, currencyCode)) }
+    }
+
     fun updateBankAccount(account: BankAccount) { scope.launch { expensesRepo.updateBankAccount(account) } }
     fun deleteBankAccount(account: BankAccount) { scope.launch { expensesRepo.deleteBankAccount(account) } }
     fun setNotificationAssumedDirection(mode: String) { scope.launch { settingsRepo.setNotificationAssumedDirection(mode) } }
@@ -461,7 +471,8 @@ class ExpensesStateManager(
         totalAmount: Double,
         currencyCode: String,
         vendor: String?,
-        bank: String?,
+        /** The account or card this went through — the bank is its name, never a field of its own. */
+        bankAccountId: Long? = null,
         location: String?,
         dateTime: Long,
         comments: String?,
@@ -491,7 +502,8 @@ class ExpensesStateManager(
             val silentMergeEnabled = localModeActive && !settings.automaticProtectionReviewOnly
             val nearDuplicateConfig = settings.toNearDuplicateConfig()
             val id = expensesRepo.addExpense(
-                title, totalAmount, currencyCode, vendor, bank, location, dateTime, comments, categoryId, items, imageName, isStub,
+                title, totalAmount, currencyCode, vendor, location, dateTime, comments, categoryId, items, imageName, isStub,
+                bankAccountId = bankAccountId,
                 direction = direction,
                 source = ExpenseSource.MANUAL,
                 nearDuplicateCheckEnabled = silentMergeEnabled,

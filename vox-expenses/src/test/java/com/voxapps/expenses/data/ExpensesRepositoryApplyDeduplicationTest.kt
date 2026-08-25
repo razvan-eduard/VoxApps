@@ -76,7 +76,7 @@ class ExpensesRepositoryApplyDeduplicationTest {
         )
         val duplicate = Expense(
             id = 7, title = null, totalAmount = 42.0, currencyCode = "RON", vendor = null,
-            bank = "Some Bank", location = "Bucharest", dateTime = 1000L, source = ExpenseSource.VOICE
+            location = "Bucharest", dateTime = 1000L, source = ExpenseSource.VOICE
         )
         coEvery { expenseDao.getWithDetailsById(12) } returns ExpenseWithDetails(keeper)
         coEvery { expenseDao.getWithDetailsById(7) } returns ExpenseWithDetails(duplicate)
@@ -84,7 +84,7 @@ class ExpensesRepositoryApplyDeduplicationTest {
         repository.applyExpenseDeduplication(listOf(DuplicateGroup(keepId = 12, duplicateIds = listOf(7))))
 
         coVerify(exactly = 1) {
-            expenseDao.update(match { it.id == 12L && it.bank == "Some Bank" && it.location == "Bucharest" && it.vendor == "Lidl" })
+            expenseDao.update(match { it.id == 12L && it.location == "Bucharest" && it.vendor == "Lidl" })
         }
         coVerify(exactly = 1) { expenseDao.deleteByIds(listOf(7)) }
     }

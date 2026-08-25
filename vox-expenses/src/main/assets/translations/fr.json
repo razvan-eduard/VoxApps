@@ -754,5 +754,7 @@
   "bulk_edit_done_one": "%d enregistrement mis à jour",
   "archive_confirm_title_one": "Archiver %d enregistrement ?",
   "archive_done_one": "%d enregistrement archivé",
-  "delete_forever_confirm_title_one": "Supprimer définitivement %d enregistrement ?"
+  "delete_forever_confirm_title_one": "Supprimer définitivement %d enregistrement ?",
+  "expense_card": "Carte",
+  "expense_bank_account": "Compte bancaire"
 }

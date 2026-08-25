@@ -24,7 +24,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         AttachmentEntity::class, DuplicateRuleEntity::class, com.voxapps.suggestions.FieldSuggestion::class,
         LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class,
         RecurringPayment::class, BankAccount::class, AccountBudget::class],
-    version = 38,
+    version = 40,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -395,6 +395,90 @@ abstract class ExpensesDatabase : RoomDatabase() {
          * why a card is held by its tail rather than in full, and for the one optional level of
          * nesting a card may sit at under an account.
          */
+        /**
+         * The bank leaves the record entirely — see [BankAccount].
+         *
+         * A record points at the account it went through, and the bank is that account's name; the
+         * column was the same answer written a second time, in a place that could disagree with the
+         * first. Anything still carrying a name and no account was linked when accounts were made
+         * (see the previous migration), so nothing is being dropped that is not already stored.
+         *
+         * SQLite cannot drop a column here, so the table is rebuilt: every column but that one,
+         * copied across, and both indices put back exactly as Room declares them.
+         */
+        private val MIGRATION_39_40 = object : Migration(39, 40) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE expenses_new (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL, title TEXT, totalAmount REAL NOT NULL, previousBalanceAmount REAL, totalToPayAmount REAL, netAmount REAL, vatAmount REAL, currencyCode TEXT NOT NULL, vendor TEXT, bankAccountId INTEGER, originsJson TEXT, location TEXT, dateTime INTEGER NOT NULL, comments TEXT, categoryId INTEGER, direction TEXT NOT NULL, receiptImageName TEXT, isStub INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, source TEXT NOT NULL, manuallyEdited INTEGER NOT NULL, archivedAt INTEGER)" )
+                db.execSQL("INSERT INTO expenses_new (id, uid, title, totalAmount, previousBalanceAmount, totalToPayAmount, netAmount, vatAmount, currencyCode, vendor, bankAccountId, originsJson, location, dateTime, comments, categoryId, direction, receiptImageName, isStub, createdAt, updatedAt, source, manuallyEdited, archivedAt) SELECT id, uid, title, totalAmount, previousBalanceAmount, totalToPayAmount, netAmount, vatAmount, currencyCode, vendor, bankAccountId, originsJson, location, dateTime, comments, categoryId, direction, receiptImageName, isStub, createdAt, updatedAt, source, manuallyEdited, archivedAt FROM expenses")
+                db.execSQL("DROP TABLE expenses")
+                db.execSQL("ALTER TABLE expenses_new RENAME TO expenses")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_expenses_categoryId ON expenses (categoryId)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_expenses_uid ON expenses (uid)")
+            }
+        }
+
+        /**
+         * A bank stops being a thing of its own: it is the name of an account whose number may not
+         * be known yet — see [BankAccount].
+         *
+         * Two halves. The number stops being required, which SQLite can only do by rebuilding the
+         * table; then every bank a record ever named becomes the account it always was, and the
+         * records that named it point at it. Linking only where exactly one account carries that
+         * name, because two accounts at one bank is a real ambiguity and picking either would file
+         * half the records against the wrong one — the same rule the reader itself follows.
+         */
+        private val MIGRATION_38_39 = object : Migration(38, 39) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE bank_accounts_new (" +
+                        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "digits TEXT, " +
+                        "kind TEXT, " +
+                        "parentId INTEGER, " +
+                        "label TEXT, " +
+                        "currencyCode TEXT NOT NULL, " +
+                        "bankName TEXT, " +
+                        "icon TEXT, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "autoCreated INTEGER NOT NULL, " +
+                        "archived INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO bank_accounts_new (id, digits, kind, parentId, label, currencyCode, " +
+                        "bankName, icon, createdAt, autoCreated, archived) " +
+                        "SELECT id, digits, kind, parentId, label, currencyCode, bankName, icon, " +
+                        "createdAt, autoCreated, archived FROM bank_accounts"
+                )
+                db.execSQL("DROP TABLE bank_accounts")
+                db.execSQL("ALTER TABLE bank_accounts_new RENAME TO bank_accounts")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bank_accounts_digits ON bank_accounts (digits)")
+
+                val now = System.currentTimeMillis()
+                // The currency of the newest record naming that bank: the account has to have one,
+                // and what its own records were written in is the only evidence there is.
+                db.execSQL(
+                    "INSERT INTO bank_accounts (digits, kind, parentId, label, currencyCode, bankName, " +
+                        "icon, createdAt, autoCreated, archived) " +
+                        "SELECT NULL, NULL, NULL, NULL, " +
+                        "COALESCE((SELECT x.currencyCode FROM expenses x " +
+                        "  WHERE LOWER(TRIM(x.bank)) = LOWER(TRIM(e.bank)) ORDER BY x.dateTime DESC LIMIT 1), ''), " +
+                        "TRIM(e.bank), NULL, $now, 1, 0 " +
+                        "FROM (SELECT DISTINCT bank FROM expenses " +
+                        "      WHERE bank IS NOT NULL AND TRIM(bank) != '') e " +
+                        "WHERE NOT EXISTS (SELECT 1 FROM bank_accounts a " +
+                        "  WHERE a.parentId IS NULL AND LOWER(TRIM(a.bankName)) = LOWER(TRIM(e.bank)))"
+                )
+                db.execSQL(
+                    "UPDATE expenses SET bankAccountId = (" +
+                        "  SELECT a.id FROM bank_accounts a " +
+                        "  WHERE a.parentId IS NULL AND LOWER(TRIM(a.bankName)) = LOWER(TRIM(expenses.bank))) " +
+                        "WHERE bankAccountId IS NULL AND bank IS NOT NULL AND TRIM(bank) != '' " +
+                        "AND (SELECT COUNT(*) FROM bank_accounts a " +
+                        "     WHERE a.parentId IS NULL AND LOWER(TRIM(a.bankName)) = LOWER(TRIM(expenses.bank))) = 1"
+                )
+            }
+        }
+
         /** Records put out of the way rather than destroyed — see [Expense.archivedAt]. */
         private val MIGRATION_37_38 = object : Migration(37, 38) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -639,7 +723,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate

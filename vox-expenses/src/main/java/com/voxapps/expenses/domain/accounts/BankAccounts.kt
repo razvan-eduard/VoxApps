@@ -40,7 +40,7 @@ object BankAccounts {
      */
     fun resolve(text: String?, existing: List<BankAccount>): Outcome {
         val ref = AccountIdentifiers.single(text) ?: return Outcome.None
-        val known = existing.filter { it.asRef().sameAs(ref) }
+        val known = existing.filter { it.asRef()?.sameAs(ref) == true }
         // Two stored accounts matching one reading means the tail is too short to tell them apart —
         // "••00" against two cards ending 00. Claiming either would be a coin toss.
         if (known.size > 1) return Outcome.None
@@ -90,15 +90,42 @@ object BankAccounts {
      *
      * Only cards. An IBAN names an account outright and is not a way of reaching another one.
      */
-    fun soleAccountOf(bankName: String?, kind: AccountIdentifiers.Kind, existing: List<BankAccount>): BankAccount? {
-        if (kind == AccountIdentifiers.Kind.IBAN) return null
+    fun soleAccountOf(bankName: String?, kind: AccountIdentifiers.Kind, existing: List<BankAccount>): BankAccount? =
+        if (kind == AccountIdentifiers.Kind.IBAN) null else accountNamed(bankName, existing)
+
+    /**
+     * The account a bank's name alone identifies.
+     *
+     * Exactly one, or nothing — the rule every reading in this app follows. Somebody with two ING
+     * accounts has not been told which by a message that says "ING", and choosing either would file
+     * half their records against the wrong one.
+     *
+     * An archived account does not count as one of them: two rows where one is retired still leaves
+     * one place for this to mean.
+     */
+    fun accountNamed(bankName: String?, existing: List<BankAccount>): BankAccount? {
         val bank = bankName?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
         return existing
-            // An archived account is not one of the bank's accounts for this purpose: two rows where
-            // one is retired is still one place a new card can belong.
-            .filter { !it.archived && it.parentId == null && it.bankName?.trim()?.lowercase() == bank }
+            .filter { !it.archived && it.isAccount && it.bankName?.trim()?.lowercase() == bank }
             .singleOrNull()
     }
+
+    /**
+     * The account a bank named by itself becomes.
+     *
+     * No number, because the message gave none — and that is not a lesser kind of row. It is the
+     * account at that bank, findable by name from now on, and the IBAN is written onto it the day a
+     * message finally carries one.
+     */
+    fun newBankAccount(bankName: String, currencyCode: String, nowMillis: Long): BankAccount =
+        BankAccount(
+            digits = null,
+            kind = null,
+            currencyCode = currencyCode,
+            bankName = bankName.trim(),
+            createdAt = nowMillis,
+            autoCreated = true
+        )
 
     /**
      * Whether a stored account should take a fuller spelling of itself.
@@ -108,7 +135,7 @@ object BankAccounts {
      * longer tail still ends with the shorter one.
      */
     fun widens(stored: BankAccount, ref: AccountIdentifiers.AccountRef): Boolean =
-        stored.asRef().sameAs(ref) &&
+        stored.asRef()?.sameAs(ref) == true &&
             ref.kind != AccountIdentifiers.Kind.IBAN &&
-            ref.digits.length > stored.digits.length
+            ref.digits.length > stored.digits.orEmpty().length
 }

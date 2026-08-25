@@ -87,11 +87,6 @@ interface ExpenseDao {
     suspend fun insert(expense: Expense): Long
 
     /** Detach all expenses from a category being deleted (code-level ON DELETE SET NULL). */
-    /** The banks this device's own records name — what a field asking for one should offer, rather
-     *  than every bank the recogniser knows. */
-    @Query("SELECT DISTINCT bank FROM expenses WHERE archivedAt IS NULL AND bank IS NOT NULL AND TRIM(bank) != '' ORDER BY bank")
-    fun observeBanksInUse(): Flow<List<String>>
-
     /** The same for shops. */
     @Query("SELECT DISTINCT vendor FROM expenses WHERE archivedAt IS NULL AND vendor IS NOT NULL AND TRIM(vendor) != '' ORDER BY vendor")
     fun observeVendorsInUse(): Flow<List<String>>

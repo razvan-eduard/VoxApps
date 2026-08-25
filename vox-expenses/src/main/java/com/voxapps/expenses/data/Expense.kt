@@ -68,13 +68,13 @@ data class Expense(
     val vatAmount: Double? = null,
     val currencyCode: String,
     val vendor: String? = null,
-    val bank: String? = null,
     /**
-     * The card or account this went through, where a message named one — see [BankAccount].
+     * The account this went through, or the card it was made with — see [BankAccount].
      *
-     * Beside [bank] rather than instead of it: the bank is who the account is with, and a message
-     * can name either without the other. Null is ordinary, and means nothing in the text carried an
-     * account's format.
+     * The only thing a record says about where the money came from. There is no bank beside it: a
+     * bank is the name of an account, so the bank of a record is the name of the account it points
+     * at, read through [com.voxapps.expenses.domain.accounts.BankAccountTree.bankNameFor] rather
+     * than stored twice. Null is ordinary — a payment in cash went through nothing.
      */
     val bankAccountId: Long? = null,
     /**

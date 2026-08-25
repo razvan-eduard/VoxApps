@@ -720,7 +720,6 @@ private fun expensePreview(expense: Expense, languageManager: com.voxapps.expens
     expense.title?.takeIf { it.isNotBlank() }?.let { parts += it }
     parts += formatAmount(expense.totalAmount, expense.currencyCode)
     expense.vendor?.takeIf { it.isNotBlank() }?.let { parts += it }
-    expense.bank?.takeIf { it.isNotBlank() }?.let { parts += it }
     parts += DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(expense.dateTime))
     // Same signal Expense.dataScore uses for the keep-picker's default selection — shown here so
     // that default is explainable rather than a black box.
