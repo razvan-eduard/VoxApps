@@ -31,6 +31,7 @@ import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.labelled
 import com.voxapps.expenses.ui.LocalLanguageManager
+import com.voxapps.expenses.ui.ExpenseFilterBar
 import com.voxapps.expenses.ui.formatAmount
 import com.voxapps.design.settings.SettingsSectionCard
 
@@ -50,6 +51,9 @@ fun SpendingLimitsSettingsTab(
     accounts: List<com.voxapps.expenses.data.BankAccount>,
     budgets: List<com.voxapps.expenses.data.AccountBudget>,
     expenses: List<com.voxapps.expenses.data.Expense>,
+    /** The narrowing the figures below are drawn under, so the same control that set it can be
+     *  reached from the screen it changes. Absent only while the app is locked. */
+    listState: com.voxapps.expenses.state.ExpensesUiState.Unlocked?,
     knownCurrencies: List<String>,
     widgetBudgetMode: String,
     widgetBudgetAccountIds: Set<Long>,
@@ -64,6 +68,12 @@ fun SpendingLimitsSettingsTab(
     var categoryMenuExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // These figures count the records the list is currently showing, so the control that decides
+        // which those are belongs here too — the same button, over the same state, as on the list and
+        // the reports. A number whose basis can be changed elsewhere and only seen elsewhere is a
+        // number nobody can check.
+        listState?.let { ExpenseFilterBar(state = it, stateManager = stateManager) }
+
         // What you meant to spend comes before what you refuse to exceed: the budget is the plan,
         // the limit is the guard on it.
         AccountBudgetsSection(
