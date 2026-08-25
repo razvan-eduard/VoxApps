@@ -1,6 +1,8 @@
 package com.voxapps.design
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +29,7 @@ import androidx.compose.ui.unit.dp
  * apiece: one could be disabled, the other could show a suggestion chip. Both are here, and both
  * default to the behaviour the other one had.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PaperTapField(
     label: String,
@@ -35,6 +38,8 @@ fun PaperTapField(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     trailingIcon: @Composable () -> Unit = {},
+    /** Holding it, where the caller has something for that — renaming the value in place, say. */
+    onLongClick: (() -> Unit)? = null,
     /** An offer to fill this field — "the scan says Tesco, use it?" — beside the current value. */
     suggestion: (@Composable () -> Unit)? = null,
     /** Whether [value] stands in for a value rather than being one — "Multiple values", "Leave
@@ -42,7 +47,17 @@ fun PaperTapField(
      *  says from what it is only reporting about itself. */
     placeholder: Boolean = false
 ) {
-    Column(modifier = modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick)) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (onLongClick == null) {
+                    Modifier.clickable(enabled = enabled, onClick = onClick)
+                } else {
+                    Modifier.combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
+                }
+            )
+    ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
             verticalAlignment = Alignment.CenterVertically,

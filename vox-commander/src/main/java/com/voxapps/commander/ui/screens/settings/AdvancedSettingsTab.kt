@@ -148,7 +148,7 @@ fun AdvancedSettingsTab(
                         ?: (offlineFallbackTimeout to "${offlineFallbackTimeout} s"),
                     itemLabel = { it.second },
                     onSelect = { (seconds, _) -> appStateManager.setOfflineFallbackTimeout(seconds) },
-                    anchor = { label, onClick -> PicklistCompactAnchor(label, onClick) },
+                    anchor = { label, onClick, _ -> PicklistCompactAnchor(label, onClick) },
                     menuFillsWidth = false
                 )
             }

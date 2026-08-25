@@ -1,5 +1,6 @@
 package com.voxapps.expenses.state
 
+import com.voxapps.datahygiene.NameCasing
 import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.data.BankAccount
 import com.voxapps.design.filter.VoxRangeBuckets
@@ -737,7 +738,7 @@ class ExpensesStateManager(
      * through would disable the whole vocabulary silently.
      */
     suspend fun addVocabularyTerm(vocabulary: String, term: String): FieldVocabularies.Rejection? {
-        val cleaned = term.trim()
+        val cleaned = NameCasing.capitalized(term).orEmpty()
         val settings = settingsRepo.getSnapshot()
         FieldVocabularies.rejectionFor(cleaned, vocabulary, appContext, settings)?.let { return it }
         settingsRepo.setCustomVocabulary(vocabulary, customOf(settings, vocabulary) + cleaned)
@@ -760,6 +761,33 @@ class ExpensesStateManager(
         if (!allowed) return
         vendor?.trim()?.takeIf { it.isNotEmpty() }?.let { addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, it) }
         bank?.trim()?.takeIf { it.isNotEmpty() }?.let { addVocabularyTerm(FieldVocabularies.VOCAB_BANK, it) }
+    }
+
+    /**
+     * A term of one's own, spelled differently.
+     *
+     * The list is a list of names, and a name is the kind of thing that gets typed wrong once and
+     * lived with for a year. Renaming is the old one out and the new one in, in that order, so a
+     * spelling that only differs in case or punctuation is not refused as already present.
+     *
+     * Only terms this device added: a supplied word is not this app's to rewrite — switch it off
+     * and add your own if you want it spelled another way.
+     */
+    suspend fun renameVocabularyTerm(
+        vocabulary: String,
+        from: String,
+        to: String
+    ): FieldVocabularies.Rejection? {
+        val cleaned = to.trim()
+        if (cleaned.isEmpty()) return FieldVocabularies.Rejection.EMPTY
+        if (cleaned == from.trim()) return null
+        val settings = settingsRepo.getSnapshot()
+        val without = customOf(settings, vocabulary) - from
+        settingsRepo.setCustomVocabulary(vocabulary, without)
+        return addVocabularyTerm(vocabulary, cleaned).also { rejection ->
+            // Put it back rather than leaving the person with neither spelling.
+            if (rejection != null) settingsRepo.setCustomVocabulary(vocabulary, without + from)
+        }
     }
 
     fun removeVocabularyTerm(vocabulary: String, term: String) {

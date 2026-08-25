@@ -71,4 +71,37 @@ class NameCasingTest {
         assertEquals("4 Wheels", NameCasing.titleCased("4 wheels"))
         assertEquals("Drive-thru", NameCasing.titleCased("drive-thru"))
     }
+
+    @Test
+    fun `capitalized lifts the first letter of every word`() {
+        assertEquals("Dentist Ioana", NameCasing.capitalized("dentist ioana"))
+        assertEquals("Dentist Ioana", NameCasing.capitalized("dentist Ioana"))
+    }
+
+    /** The case title casing gets wrong: capitals that are the name, not a hurried keystroke. */
+    @Test
+    fun `capitalized leaves the rest of the word alone`() {
+        assertEquals("ING", NameCasing.capitalized("ING"))
+        assertEquals("MEGA IMAGE SRL", NameCasing.capitalized("MEGA IMAGE SRL"))
+        assertEquals("McDonalds", NameCasing.capitalized("McDonalds"))
+        assertEquals("Banca Transilvania", NameCasing.capitalized("banca Transilvania"))
+    }
+
+    @Test
+    fun `capitalized keeps the diacritic a capital`() {
+        assertEquals("Întreținere", NameCasing.capitalized("întreținere"))
+    }
+
+    @Test
+    fun `capitalized collapses whitespace and refuses nothing at all`() {
+        assertEquals("Dentist Ioana", NameCasing.capitalized("  dentist    ioana  "))
+        assertNull(NameCasing.capitalized(null))
+        assertNull(NameCasing.capitalized("   "))
+    }
+
+    @Test
+    fun `capitalized once is capitalized forever`() {
+        val once = NameCasing.capitalized("dentist ioana")
+        assertEquals(once, NameCasing.capitalized(once))
+    }
 }

@@ -1,5 +1,8 @@
 package com.voxapps.design.picklist
 
+import com.voxapps.datahygiene.NameCasing
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
@@ -17,7 +20,8 @@ import androidx.compose.ui.Modifier
  *
  * The other half of [Picklist]'s action row: the list offers "New shop…", and this is what opens.
  * One box, and it will not accept blank — a list gains nothing from an entry with no name, and the
- * caller has to handle the empty case anyway if the dialog lets it through.
+ * caller has to handle the empty case anyway if the dialog lets it through. What it hands over is
+ * trimmed and capitalized word by word, the same as a rename made in the list itself.
  */
 @Composable
 fun VoxNameDialog(
@@ -38,12 +42,13 @@ fun VoxNameDialog(
                 onValueChange = { typed = it },
                 label = { Text(label) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = {
             TextButton(
-                onClick = { onNamed(typed.trim()); onDismiss() },
+                onClick = { NameCasing.capitalized(typed)?.let(onNamed); onDismiss() },
                 enabled = typed.isBlank().not()
             ) { Text(saveLabel) }
         },
