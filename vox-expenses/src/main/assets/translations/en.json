@@ -756,5 +756,6 @@
   "archive_done_one": "%d record archived",
   "delete_forever_confirm_title_one": "Delete %d record forever?",
   "expense_card": "Card",
-  "expense_bank_account": "Bank account"
+  "expense_bank_account": "Bank account",
+  "selection_select_none": "Select none"
 }

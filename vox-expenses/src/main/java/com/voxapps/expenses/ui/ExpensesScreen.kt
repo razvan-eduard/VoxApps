@@ -1,5 +1,6 @@
 package com.voxapps.expenses.ui
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import java.util.Date
 import java.text.DateFormat
 import com.voxapps.expenses.state.sortKeyOf
@@ -27,7 +28,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
@@ -207,10 +208,18 @@ fun ExpensesScreen(
                     onClose = { selection.clear() },
                     closeContentDescription = languageManager.getString("cancel")
                 ) {
-                    IconButton(onClick = { selection.selectAll(state.expenses.map { it.expense.id }) }) {
+                    // One control for both halves of the same thought. Taking none leaves the mode
+                    // with it, because a selection of nothing is not a mode, it is the list again.
+                    val listed = state.expenses.map { it.expense.id }
+                    val allPicked = listed.isNotEmpty() && selection.ids.containsAll(listed)
+                    IconButton(onClick = {
+                        if (allPicked) selection.clear() else selection.selectAll(listed)
+                    }) {
                         Icon(
-                            Icons.Filled.SelectAll,
-                            contentDescription = languageManager.getString("selection_select_all")
+                            Icons.Filled.Checklist,
+                            contentDescription = languageManager.getString(
+                                if (allPicked) "selection_select_none" else "selection_select_all"
+                            )
                         )
                     }
                     IconButton(onClick = { showBulkEdit = true }) {
@@ -258,7 +267,7 @@ fun ExpensesScreen(
                             // count in the bar says immediately how many that turned out to be.
                             DropdownMenuItem(
                                 text = { Text(languageManager.getString("selection_select_all")) },
-                                leadingIcon = { Icon(Icons.Filled.SelectAll, contentDescription = null) },
+                                leadingIcon = { Icon(Icons.Filled.Checklist, contentDescription = null) },
                                 enabled = state.expenses.isNotEmpty(),
                                 onClick = {
                                     menuOpen = false
@@ -404,7 +413,13 @@ fun ExpensesScreen(
                             expenseWithDetails = calItem.ewd,
                             onClick = { onCardClick(calItem.ewd) },
                             selected = calItem.ewd.expense.id in selection,
-                            onLongClick = { onCardLongClick(calItem.ewd) }
+                            onLongClick = { onCardLongClick(calItem.ewd) },
+                            bankName = BankAccountTree.bankNameFor(
+                                calItem.ewd.expense.bankAccountId, state.bankAccounts
+                            ),
+                            // The day heading above these rows already said which day; the hour
+                            // is what tells two of them apart.
+                            showDay = false
                         )
                     }
                 )
@@ -428,6 +443,7 @@ fun ExpensesScreen(
                             onClick = { onCardClick(ewd) },
                             selected = ewd.expense.id in selection,
                             onLongClick = { onCardLongClick(ewd) },
+                            bankName = BankAccountTree.bankNameFor(ewd.expense.bankAccountId, state.bankAccounts),
                             recurring = RecurringPayment.vendorKeyOf(ewd.expense.vendor) in confirmedVendorKeys,
                             // Only while the list is narrowed to them: on the ordinary list this
                             // would be a red line on half the rows, which is not information.

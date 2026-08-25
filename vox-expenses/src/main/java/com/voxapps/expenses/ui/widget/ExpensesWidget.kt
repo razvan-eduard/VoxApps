@@ -64,6 +64,7 @@ import com.voxapps.ipc.VoxOcrRequest
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import java.time.format.FormatStyle
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -317,7 +318,14 @@ private fun RecentExpensesList(
         chrome = chrome,
         emptyDayText = languageManager.getString("widget_nothing_today"),
         dayLabel = { date -> dayLabel(date, today, languageManager, locale) }
-    ) { _, dayItems ->
+    ) { day, dayItems ->
+        // Today is the day you are still living through, so when a payment happened is worth
+        // knowing; on any earlier day it is settled and the hour says nothing you need.
+        val timeOfDay = if (day == today) {
+            DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale).withZone(zoneId)
+        } else {
+            null
+        }
         dayItems.forEach { item ->
         val editIntent = Intent(context, ExpensesActivity::class.java).apply {
             putExtra(VoxIpc.EXTRA_EXPENSE_ID, item.expense.id)
@@ -341,6 +349,14 @@ private fun RecentExpensesList(
                         text = icon,
                         style = TextStyle(fontSize = 14.sp),
                         modifier = GlanceModifier.padding(end = 4.dp)
+                    )
+                }
+                timeOfDay?.let { formatter ->
+                    Text(
+                        text = formatter.format(Instant.ofEpochMilli(item.expense.dateTime)),
+                        maxLines = 1,
+                        style = TextStyle(fontSize = 12.sp, color = GlanceTheme.colors.onSurfaceVariant),
+                        modifier = GlanceModifier.padding(end = 6.dp)
                     )
                 }
                 Text(
