@@ -103,6 +103,9 @@ import com.voxapps.design.SpeedDialAction
 import com.voxapps.location.ui.VoxLocationField
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.PicklistButtonAnchor
+import com.voxapps.expenses.domain.accounts.BankAccountTree
+import com.voxapps.expenses.domain.accounts.BankAccounts
 import com.voxapps.design.picklist.VoxNameDialog
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpensesAttachments
@@ -171,7 +174,6 @@ private data class EditSnapshot(
     val totalText: String,
     val currency: String,
     val vendor: String,
-    val bank: String,
     val location: String,
     val comments: String,
     val dateTime: Long,
@@ -229,7 +231,6 @@ fun ExpenseEditScreen(
     var totalText by remember { mutableStateOf(existing?.expense?.totalAmount?.let { formatDecimal(it, useComma) } ?: "") }
     var currency by remember { mutableStateOf(existing?.expense?.currencyCode ?: defaultCurrency) }
     var vendor by remember { mutableStateOf(existing?.expense?.vendor ?: "") }
-    var bank by remember { mutableStateOf(existing?.expense?.bank ?: "") }
     var namingBank by remember { mutableStateOf(false) }
     // What the record says about where its own fields came from. A field the user edits below stops
     // claiming anything, since from that moment the answer is "you did".
@@ -242,15 +243,29 @@ fun ExpenseEditScreen(
     // device switched off, plus its own.
     val settingsSnapshot by settingsRepository.settingsFlow
         .collectAsStateWithLifecycle(initialValue = ExpensesSettings())
-    var bankAccountId by remember { mutableStateOf(existing?.expense?.bankAccountId) }
     val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    // One pointer on the record, two fields on the screen: which account, and — where a message
+    // said so — which card of it. Neither is required; a payment can be from the account itself,
+    // and a card met before its account is one nobody has placed yet.
+    var accountId by remember(accounts) {
+        mutableStateOf(BankAccountTree.chosen(existing?.expense?.bankAccountId, accounts).accountId)
+    }
+    var cardId by remember(accounts) {
+        mutableStateOf(BankAccountTree.chosen(existing?.expense?.bankAccountId, accounts).cardId)
+    }
+    // The record points at the card when there is one, because that is the more precise of the two
+    // and the account is reachable from it.
+    val bankAccountId = cardId ?: accountId
     // Archived ones still hold their records and still answer for a message that names their digits;
     // what they stop doing is being offered, which is the whole meaning of archiving one.
-    val accountsOffered = remember(accounts) { accounts.filter { !it.archived } }
+    val accountsOffered = remember(accounts, accountId) {
+        accounts.filter { it.isAccount && (!it.archived || it.id == accountId) }
+    }
+    val cardsOffered = remember(accounts, accountId, cardId) {
+        accounts.filter { !it.isAccount && (it.parentId == accountId || it.id == cardId) && (!it.archived || it.id == cardId) }
+    }
     val names = rememberFieldNameLists(stateManager, settingsSnapshot)
     val vendorNames = names.vendors
-    val bankNames = names.banks
-    val banksKnown = names.banksKnown
     var location by remember { mutableStateOf(existing?.expense?.location ?: "") }
     // New expense only (never overrides a real edit) — resolveCurrentCity's own first step is a
     // synchronous cache check, so this resolves near-instantly when a fresh city is already cached,
@@ -362,7 +377,7 @@ fun ExpenseEditScreen(
                 totalAmount = expense.totalAmount,
                 currencyCode = expense.currencyCode,
                 vendor = expense.vendor,
-                bank = expense.bank,
+                bankAccountId = expense.bankAccountId,
                 location = expense.location,
                 dateTime = expense.dateTime,
                 comments = expense.comments,
@@ -434,10 +449,10 @@ fun ExpenseEditScreen(
     // actually anything to prompt about — closing an untouched screen (just viewing, or a
     // freshly-created blank draft) shouldn't interrupt with a dialog.
     val initialSnapshot = remember {
-        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList())
+        EditSnapshot(title, totalText, currency, vendor, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList())
     }
     fun isDirty(): Boolean =
-        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList()) != initialSnapshot ||
+        EditSnapshot(title, totalText, currency, vendor, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList()) != initialSnapshot ||
             // A pending suggestion row surviving means there's still something Discard needs to
             // clear even if no field's been touched — a chip left untapped changes no local value,
             // so the diff above alone would silently miss it (the exact bug: chips visible, back
@@ -490,7 +505,6 @@ fun ExpenseEditScreen(
             totalAmount = total,
             currencyCode = currency.ifBlank { defaultCurrency },
             vendor = vendor,
-            bank = bank,
             location = location,
             dateTime = dateTime,
             comments = comments,
@@ -505,7 +519,7 @@ fun ExpenseEditScreen(
                 buildSet {
                     if (title != existing?.expense?.title.orEmpty()) add(ExpenseOrigins.FIELD_TITLE)
                     if (vendor != existing?.expense?.vendor.orEmpty()) add(ExpenseOrigins.FIELD_VENDOR)
-                    if (bank != existing?.expense?.bank.orEmpty()) add(ExpenseOrigins.FIELD_BANK)
+                    if (bankAccountId != existing?.expense?.bankAccountId) add(ExpenseOrigins.FIELD_BANK)
                     if (location != existing?.expense?.location.orEmpty()) add(ExpenseOrigins.FIELD_LOCATION)
                     if (currency != existing?.expense?.currencyCode.orEmpty()) add(ExpenseOrigins.FIELD_CURRENCY)
                     if (categoryId != existing?.expense?.categoryId) add(ExpenseOrigins.FIELD_CATEGORY)
@@ -628,56 +642,81 @@ fun ExpenseEditScreen(
                         actionLabel = languageManager.getString("expense_vendor_new"),
                         onAction = { namingVendor = true }
                     )
-                    // Chosen from the banks this app recognises, not typed: the same list a message
-                    // is read by, so a record's bank and a capture's bank are one vocabulary rather
-                    // than two that happen to agree. A name a model wrote and nobody listed is kept
-                    // and shown — it is what this record says — but adding one adds it to the list,
-                    // where a later notification can be read by it too.
-                    suggested[ExpenseSuggestionTarget.KEY_BANK]?.takeIf { it != bank && "bank" !in dismissedSuggestionFields }?.let { proposed ->
-                        FieldSuggestionChip(proposed, onDismiss = { dismissedSuggestionFields += "bank" }) { bank = proposed }
-                    }
+                    // One field, because there is one fact: the account the money moved through.
+                    // A bank is the name of an account, not something a record carries beside it —
+                    // so choosing here answers both, and [bank] is written from what was chosen
+                    // rather than asked for a second time.
+                    suggested[ExpenseSuggestionTarget.KEY_BANK]
+                        ?.takeIf { "bank" !in dismissedSuggestionFields }
+                        ?.let { proposed -> BankAccounts.accountNamed(proposed, accountsOffered) }
+                        ?.takeIf { it.id != accountId }
+                        ?.let { proposedAccount ->
+                            FieldSuggestionChip(
+                                proposedAccount.displayName(),
+                                onDismiss = { dismissedSuggestionFields += "bank" }
+                            ) {
+                                accountId = proposedAccount.id
+                                }
+                        }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        Text(languageManager.getString("expense_bank"), style = MaterialTheme.typography.labelLarge)
+                        Text(languageManager.getString("expense_bank_account"), style = MaterialTheme.typography.labelLarge)
                         FieldOriginMark(
                             origin = origins[ExpenseOrigins.FIELD_BANK],
                             description = { languageManager.getString(originStringKey(it)) }
                         )
                     }
                     Picklist(
-                        items = remember(bankNames, bank) {
-                            if (bank.isNotBlank() && bankNames.none { it.equals(bank, ignoreCase = true) }) {
-                                listOf(bank) + bankNames
-                            } else bankNames
+                        items = accountsOffered,
+                        selected = accountsOffered.firstOrNull { it.id == accountId },
+                        itemLabel = { it.title() },
+                        itemSubtitle = { it.subtitle() },
+                        onSelect = { chosen ->
+                            accountId = chosen.id
+                            // A card belongs to one account; choosing a different one leaves it
+                            // behind rather than filing the record under a card that is not there.
+                            if (cardId != null && accounts.firstOrNull { it.id == cardId }?.parentId != chosen.id) {
+                                cardId = null
+                            }
                         },
-                        selected = bank.takeIf { it.isNotBlank() },
-                        itemLabel = { it },
-                        onSelect = { bank = it },
                         noneLabel = languageManager.getString("none"),
-                        onNoneSelected = { bank = "" },
+                        onNoneSelected = { accountId = null; cardId = null },
                         searchPlaceholder = languageManager.getString("filter_search_hint"),
-                        extraWhileSearching = banksKnown,
                         actionLabel = languageManager.getString("account_bank_new"),
-                        onAction = { namingBank = true }
+                        onAction = { namingBank = true },
+                        // A record whose bank named two accounts, or none, still says which bank it
+                        // was — so the closed field shows that rather than "None", while the row
+                        // that clears it goes on saying exactly what it does.
+                        anchor = { label, onClick ->
+                            PicklistButtonAnchor(
+                                label = label,
+                                onClick = onClick
+                            )
+                        }
                     )
-                    // Which card or account the money moved through. A capture fills this in when a
-                    // message names one it recognises; where nothing did, this is where a person
-                    // says so — and the record stops being counted as one that never found its card.
+                    // The card, where one was named. Offered on its own terms rather than folded
+                    // into the account: they are two questions, and a payment answers either, both,
+                    // or neither.
                     Text(
-                        languageManager.getString("account_filter_label"),
+                        languageManager.getString("expense_card"),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                     Picklist(
-                        items = accountsOffered,
-                        selected = accountsOffered.firstOrNull { it.id == bankAccountId },
-                        itemLabel = { it.displayName() },
-                        onSelect = { bankAccountId = it.id },
+                        items = cardsOffered,
+                        selected = cardsOffered.firstOrNull { it.id == cardId },
+                        itemLabel = { it.title() },
+                        itemSubtitle = { it.subtitle() },
+                        onSelect = { chosen ->
+                            cardId = chosen.id
+                            // A card names its account: picking one answers the field above too.
+                            chosen.parentId?.let { parent -> accountId = parent }
+                        },
                         noneLabel = languageManager.getString("none"),
-                        onNoneSelected = { bankAccountId = null },
+                        onNoneSelected = { cardId = null },
                         searchPlaceholder = languageManager.getString("filter_search_hint")
                     )
                     // Search-first entry (OpenStreetMap place search + GPS lock). The GPS lambda
@@ -1007,16 +1046,19 @@ fun ExpenseEditScreen(
     }
 
     if (namingBank) {
-        // Added to the vocabulary as well as to this record: a bank named here is one a later
-        // notification can be read by, which is the whole reason it is a list and not a text field.
+        // Naming a bank here makes the account it is the name of, and this record points at it.
+        // The name also joins the vocabulary, so a later notification can be read by it — which is
+        // the whole reason this is a list and not a text field.
         VoxNameDialog(
             title = languageManager.getString("account_bank_new"),
             label = languageManager.getString("expense_bank"),
             saveLabel = languageManager.getString("save"),
             cancelLabel = languageManager.getString("cancel"),
             onNamed = { named ->
-                bank = named
-                bankScope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, named) }
+                bankScope.launch {
+                    stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, named)
+                    stateManager.accountNamed(named, defaultCurrency) { id -> accountId = id; cardId = null }
+                }
             },
             onDismiss = { namingBank = false }
         )

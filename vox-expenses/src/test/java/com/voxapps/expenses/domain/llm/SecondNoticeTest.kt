@@ -36,8 +36,7 @@ class SecondNoticeTest {
         dateTime = at,
         source = source,
         manuallyEdited = edited,
-        vendor = vendor,
-        bank = bank
+        vendor = vendor
     )
 
     // --- what counts as the same payment ---
@@ -99,7 +98,7 @@ class SecondNoticeTest {
     fun `a hand-edited record is never folded into`() {
         assertFalse(
             SecondNotice.isAnotherNoticeOf(
-                notice(bank = "SchemeCard", edited = true),
+                notice(edited = true),
                 notice(vendor = "SHOP RO-490", at = t0 + 20_000)
             )
         )
@@ -113,7 +112,7 @@ class SecondNoticeTest {
      */
     @Test
     fun `the merchant survives whichever announcement arrives first`() {
-        val withMerchant = notice(vendor = "SHOP RO-490", bank = "SchemeCard")
+        val withMerchant = notice(vendor = "SHOP RO-490")
         val without = notice(bank = "SchemeCard")
 
         assertEquals("SHOP RO-490", enrichWithNearDuplicate(existing = without, candidate = withMerchant).vendor)

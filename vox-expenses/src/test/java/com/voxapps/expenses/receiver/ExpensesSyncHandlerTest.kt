@@ -42,6 +42,8 @@ class ExpensesSyncHandlerTest {
         every { expensesRepo.categories } returns flowOf(emptyList())
         every { expensesRepo.allWithDetails } returns flowOf(emptyList())
         coEvery { expensesRepo.allExpensesSnapshot() } returns emptyList()
+        // The bank a delta names is read from the accounts, so the double has to have some.
+        coEvery { expensesRepo.bankAccountsSnapshot() } returns emptyList()
         coEvery { expensesRepo.tombstonesSince(any()) } returns emptyList()
         coEvery { expensesRepo.mostRecentCategoryColor() } returns null
     }

@@ -2,6 +2,7 @@ package com.voxapps.expenses.data
 
 import com.voxapps.datahygiene.RemapCondition
 import com.voxapps.textmatch.extract.AccountIdentifiers
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.domain.accounts.BankAccounts
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
@@ -135,7 +136,17 @@ class ExpensesRepository(
         val dao = bankAccountDao ?: return null
         val existing = dao.getAll()
         return when (val outcome = BankAccounts.resolve(text, existing)) {
-            is BankAccounts.Outcome.None -> null
+            // No number in the text, but a bank named: that is an account of theirs at that bank,
+            // identified as far as the message allows. It becomes a row so the next message naming
+            // the same bank lands on the same account rather than on nothing.
+            is BankAccounts.Outcome.None -> {
+                val named = bankName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+                BankAccounts.accountNamed(named, existing)?.let { return it.id }
+                if (!autoCreate) return null
+                val id = dao.insert(BankAccounts.newBankAccount(named, defaultCurrency, nowMillis))
+                Logger.d(TAG_ACCOUNTS, "Account created from a bank named without a number")
+                if (id > 0) id else BankAccounts.accountNamed(named, dao.getAll())?.id
+            }
             is BankAccounts.Outcome.Known -> {
                 val ref = AccountIdentifiers.single(text)
                 if (ref != null && BankAccounts.widens(outcome.account, ref)) {
@@ -157,7 +168,7 @@ class ExpensesRepository(
                 // IGNORE on conflict, so a race between two captures naming one card leaves one row
                 // rather than failing the second capture outright.
                 val id = dao.insert(created)
-                if (id > 0) id else dao.getAll().firstOrNull { it.asRef().sameAs(outcome.ref) }?.id
+                if (id > 0) id else dao.getAll().firstOrNull { it.asRef()?.sameAs(outcome.ref) == true }?.id
             }
         }
     }
@@ -175,7 +186,7 @@ class ExpensesRepository(
     suspend fun addTypedBankAccount(text: String, currencyCode: String): Long {
         val dao = bankAccountDao ?: return -1L
         val ref = AccountIdentifiers.single(text) ?: return -1L
-        dao.getAll().firstOrNull { it.asRef().sameAs(ref) }?.let { return it.id }
+        dao.getAll().firstOrNull { it.asRef()?.sameAs(ref) == true }?.let { return it.id }
         return dao.insert(
             BankAccount(
                 digits = ref.digits,
@@ -187,6 +198,30 @@ class ExpensesRepository(
         )
     }
 
+    /**
+     * The account at [bankName]: the one already on file, or one made now.
+     *
+     * For a person naming a bank by hand, which is the same act as a capture naming one — there is
+     * no bank to record apart from the account it is the name of. [BankAccount.autoCreated] stays
+     * false: they made it.
+     */
+    suspend fun accountNamed(bankName: String, currencyCode: String): Long? {
+        val dao = bankAccountDao ?: return null
+        val named = bankName.trim().takeIf { it.isNotEmpty() } ?: return null
+        BankAccounts.accountNamed(named, dao.getAll())?.let { return it.id }
+        val id = dao.insert(
+            BankAccounts.newBankAccount(named, currencyCode, System.currentTimeMillis())
+                .copy(autoCreated = false)
+        )
+        return if (id > 0) id else BankAccounts.accountNamed(named, dao.getAll())?.id
+    }
+
+    /**
+     * Writes the account.
+     *
+     * Renaming one needs no follow-up anywhere: its records point at it, and its name is read from
+     * it. That is the whole reason the name is not kept on the records as well.
+     */
     suspend fun updateBankAccount(account: BankAccount) {
         bankAccountDao?.update(account)
     }
@@ -217,16 +252,13 @@ class ExpensesRepository(
     val spendingLimits: Flow<List<SpendingLimit>> = spendingLimitDao.observeAll().distinctUntilChanged()
 
     /**
-     * The banks this device actually deals with: what its records name, and what its accounts are
-     * held at. Not the recogniser's vocabulary, which lists every bank it can read a message by —
-     * that is a much larger thing and answers a different question.
+     * The banks this device actually deals with — which is to say its accounts, since a bank is the
+     * name of one. Not the recogniser's vocabulary, which lists every bank it can read a message by
+     * and answers a much larger question.
      */
     val banksInUse: Flow<List<String>> =
-        combine(
-            expenseDao.observeBanksInUse(),
-            bankAccounts
-        ) { fromRecords, accounts ->
-            (fromRecords + accounts.mapNotNull { it.bankName })
+        bankAccounts.map { accounts ->
+            accounts.mapNotNull { it.bankName }
                 .map { it.trim() }.filter { it.isNotEmpty() }
                 .distinctBy { it.lowercase() }
                 .sorted()
@@ -312,8 +344,9 @@ class ExpensesRepository(
      *  shared field list [com.voxapps.datahygiene.RuleBasedDuplicateChecker] alone would allow. */
     private suspend fun buildDuplicateChecker(config: NearDuplicateConfig, automaticOnly: Boolean = false): DuplicateChecker<Expense> {
         val rules = duplicateRuleDao.getAll().filter { it.enabled && (!automaticOnly || it.appliesAutomatically) }
-        val exactFields = ExpenseRuleFields(fuzzyMatchEnabled = false, timeWindowMillis = config.timeWindowMillis).all
-        val fuzzyFields = ExpenseRuleFields(fuzzyMatchEnabled = true, timeWindowMillis = config.timeWindowMillis).all
+        val accountsNow = bankAccountDao?.getAll().orEmpty()
+        val exactFields = ExpenseRuleFields(false, config.timeWindowMillis, accountsNow).all
+        val fuzzyFields = ExpenseRuleFields(true, config.timeWindowMillis, accountsNow).all
         // Hoisted out of the lambda below: it runs once per expense *pair* in the O(n²) scans, so
         // building a checker per rule in there allocated O(n² · rules) of them for objects that are
         // identical every time.
@@ -380,7 +413,14 @@ class ExpensesRepository(
         }
         note(ExpenseRemapFields.ID_TITLE, old.expense.title, new.title)
         note(ExpenseRemapFields.ID_VENDOR, old.expense.vendor, new.vendor)
-        note(ExpenseRemapFields.ID_BANK, old.expense.bank, new.bank)
+        // The bank of a record is the name of the account it points at, so changing the account is
+        // what "the bank changed" means now.
+        val accountsForNames = bankAccountDao?.getAll().orEmpty()
+        note(
+            ExpenseRemapFields.ID_BANK,
+            BankAccountTree.bankNameFor(old.expense.bankAccountId, accountsForNames),
+            BankAccountTree.bankNameFor(new.bankAccountId, accountsForNames)
+        )
         note(ExpenseRemapFields.ID_LOCATION, old.expense.location, new.location)
         note(ExpenseRemapFields.ID_COMMENTS, old.expense.comments, new.comments)
         val oldCat = catName(old.expense.categoryId)
@@ -422,7 +462,8 @@ class ExpensesRepository(
                     ExpenseRemapFields.Draft(
                         totalAmount = old.expense.totalAmount,
                         title = old.expense.title, vendor = old.expense.vendor,
-                        bank = old.expense.bank, location = old.expense.location,
+                        bank = BankAccountTree.bankNameFor(old.expense.bankAccountId, accountsForNames),
+                        location = old.expense.location,
                         comments = old.expense.comments, category = oldCat
                     )
                 )?.let { v -> RemapValueKey.normalize(v)?.let { field.id to it } }
@@ -542,8 +583,17 @@ class ExpensesRepository(
      *  matching the convention that this repository never reads settings itself. */
     suspend fun recordFieldCorrections(old: ExpenseWithDetails, new: Expense, newItems: List<ExpenseLineItem>) {
         val oldItems = old.items.sortedBy { it.position }
-        val oldFields = mutableListOf(old.expense.title, old.expense.vendor, old.expense.bank, old.expense.location, old.expense.comments)
-        val newFields = mutableListOf(new.title, new.vendor, new.bank, new.location, new.comments)
+        val accountNames = bankAccountDao?.getAll().orEmpty()
+        val oldFields = mutableListOf(
+            old.expense.title, old.expense.vendor,
+            BankAccountTree.bankNameFor(old.expense.bankAccountId, accountNames),
+            old.expense.location, old.expense.comments
+        )
+        val newFields = mutableListOf(
+            new.title, new.vendor,
+            BankAccountTree.bankNameFor(new.bankAccountId, accountNames),
+            new.location, new.comments
+        )
         // Item lists pair by position, and only when no item was added or removed — a shifted list
         // pairs unrelated names, which is exactly the mislabel the equal-size rule removes.
         if (oldItems.size == newItems.size) {
@@ -606,7 +656,6 @@ class ExpensesRepository(
         totalAmount: Double,
         currencyCode: String,
         vendor: String?,
-        bank: String?,
         location: String?,
         dateTime: Long,
         comments: String?,
@@ -651,7 +700,6 @@ class ExpensesRepository(
                 invoiceOwnAmount = invoiceOwnAmount,
                 currencyCode = currencyCode,
                 vendor = vendor?.trim()?.takeIf { it.isNotEmpty() },
-                bank = bank?.trim()?.takeIf { it.isNotEmpty() },
                 bankAccountId = bankAccountId,
                 location = location?.trim()?.takeIf { it.isNotEmpty() },
                 dateTime = dateTime,
@@ -1038,16 +1086,21 @@ class ExpensesRepository(
             if (id > 0) resolved = FuzzyNameMatcher.Resolved(id, spoken)
         }
 
+        // A rule that set the bank named an account, not a string on the record: it takes effect
+        // only where exactly one account carries that name, the same rule a message follows.
+        val ruledAccountId = effBank
+            ?.takeIf { it != BankAccountTree.bankNameFor(bankAccountId, bankAccountDao?.getAll().orEmpty()) }
+            ?.let { BankAccounts.accountNamed(it, bankAccountDao?.getAll().orEmpty())?.id }
         val newId = addExpense(
-            effTitle, totalAmount, currencyCode, effVendor, effBank, effLocation, dateTime, effComments, resolved.id, effItems, imageName,
+            effTitle, totalAmount, currencyCode, effVendor, effLocation, dateTime, effComments, resolved.id, effItems, imageName,
+            bankAccountId = ruledAccountId ?: bankAccountId,
             origins = origins,
             direction = direction,
             nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,
             nearDuplicateConfig = nearDuplicateConfig,
             source = source,
             previousBalanceAmount = previousBalanceAmount,
-            invoiceOwnAmount = invoiceOwnAmount,
-            bankAccountId = bankAccountId
+            invoiceOwnAmount = invoiceOwnAmount
         )
 
         if (newId > 0 && alerting.isNotEmpty()) {

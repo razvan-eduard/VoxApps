@@ -25,6 +25,9 @@ object ExpenseFilter {
         dateFrom: Long?,
         dateTo: Long?,
         bank: FilterValue?,
+        /** The bank a record is with, resolved from the account it points at — a record carries no
+         *  bank of its own. Supplied by the caller, which has the accounts. */
+        bankOf: (Long?) -> String?,
         vendor: FilterValue?,
         location: FilterValue?,
         amount: VoxRange?,
@@ -42,7 +45,7 @@ object ExpenseFilter {
             (categoryId == null || e.categoryId == categoryId) &&
                 (dateFrom == null || e.dateTime >= dateFrom) &&
                 (dateTo == null || e.dateTime <= dateTo) &&
-                (bank == null || bank.matches(e.bank)) &&
+                (bank == null || bank.matches(bankOf(e.bankAccountId))) &&
                 (vendor == null || vendor.matches(e.vendor)) &&
                 (location == null || location.matches(e.location)) &&
                 (amount == null || amount.contains(e.totalAmount)) &&

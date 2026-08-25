@@ -16,7 +16,7 @@ class ExpenseDataScoreTest {
     ) = Expense(
         title = "Groceries", totalAmount = 42.0, currencyCode = "RON", dateTime = 1000L,
         source = source, manuallyEdited = manuallyEdited,
-        vendor = vendor, bank = bank, location = location, comments = comments, categoryId = categoryId
+        vendor = vendor, location = location, comments = comments, categoryId = categoryId
     )
 
     @Test
@@ -28,7 +28,7 @@ class ExpenseDataScoreTest {
 
     @Test
     fun `more complete fields outrank a sparser record at the same source tier`() {
-        val complete = expense(source = ExpenseSource.VOICE, vendor = "Lidl", bank = "ING", location = "Cluj")
+        val complete = expense(source = ExpenseSource.VOICE, vendor = "Lidl", location = "Cluj")
         val sparse = expense(source = ExpenseSource.VOICE)
         assertTrue(complete.dataScore() > sparse.dataScore())
     }
@@ -36,7 +36,7 @@ class ExpenseDataScoreTest {
     @Test
     fun `manually edited voice record outranks an unedited manual record`() {
         val editedVoice = expense(source = ExpenseSource.VOICE, manuallyEdited = true)
-        val uneditedManual = expense(source = ExpenseSource.MANUAL, vendor = "Lidl", bank = "ING", location = "Cluj", comments = "note")
+        val uneditedManual = expense(source = ExpenseSource.MANUAL, vendor = "Lidl", location = "Cluj", comments = "note")
         assertTrue(editedVoice.dataScore() > uneditedManual.dataScore())
     }
 }

@@ -20,7 +20,7 @@ class NameAlreadyKnownTest {
     private fun record(vendor: String? = null, bank: String? = null, edited: Boolean = true) =
         Expense(
             title = vendor, totalAmount = 1.0, currencyCode = "RON", dateTime = 0L,
-            vendor = vendor, bank = bank, manuallyEdited = edited
+            vendor = vendor, manuallyEdited = edited
         )
 
     // --- which names may be renamed to ---
@@ -45,12 +45,6 @@ class NameAlreadyKnownTest {
     fun `blank and repeated names do not reach the pool`() {
         val records = listOf(record(vendor = "Mega Image"), record(vendor = "  "), record(vendor = "Mega Image"))
         assertEquals(listOf("Mega Image"), NameAlreadyKnown.vouchedNames(records) { it.vendor })
-    }
-
-    @Test
-    fun `banks are drawn from their own column`() {
-        val records = listOf(record(vendor = "Mega Image", bank = "Banca Transilvania"))
-        assertEquals(listOf("Banca Transilvania"), NameAlreadyKnown.vouchedNames(records) { it.bank })
     }
 
     // --- what resembles what ---

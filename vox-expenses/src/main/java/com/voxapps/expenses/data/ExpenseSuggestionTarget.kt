@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.recordflow.FieldWeight
 import com.voxapps.suggestions.AcceptMode
 import com.voxapps.suggestions.SuggestableField
@@ -47,7 +48,7 @@ class ExpenseSuggestionTarget(
         return when (fieldKey) {
             KEY_TITLE -> e.title
             KEY_VENDOR -> e.vendor
-            KEY_BANK -> e.bank
+            KEY_BANK -> BankAccountTree.bankNameFor(e.bankAccountId, repository.bankAccountsSnapshot())
             KEY_LOCATION -> e.location
             KEY_COMMENTS -> e.comments
             KEY_AMOUNT -> e.totalAmount.toString()

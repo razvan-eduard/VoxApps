@@ -760,5 +760,7 @@
   "archive_done_one": "%d înregistrare arhivată",
   "archive_done_many": "%d de înregistrări arhivate",
   "delete_forever_confirm_title_one": "Ștergi definitiv %d înregistrare?",
-  "delete_forever_confirm_title_many": "Ștergi definitiv %d de înregistrări?"
+  "delete_forever_confirm_title_many": "Ștergi definitiv %d de înregistrări?",
+  "expense_card": "Card",
+  "expense_bank_account": "Cont bancar"
 }

@@ -1,5 +1,6 @@
 package com.voxapps.expenses.receiver
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import android.content.Context
 import android.net.Uri
 import com.voxapps.attachments.AttachmentDao
@@ -94,6 +95,7 @@ class ExpensesExportImportHandler(
             // The archive too: a backup that kept only the ledger would destroy everything somebody
             // put away, on the one operation whose entire purpose is losing nothing.
             val expensesWithDetails = expensesRepo.allWithDetails.first()
+            val accountsForExport = expensesRepo.bankAccountsSnapshot()
             val remapRules = expensesRepo.remapRulesSnapshot()
             json.put("categories", JSONArray(categories.map { it.toJson() }))
             json.put("spendingLimits", JSONArray(spendingLimits.map { it.toJson() }))
@@ -104,7 +106,10 @@ class ExpensesExportImportHandler(
                     expensesWithDetails.map {
                         val attachments = attachmentDao.getFor(ExpensesAttachments.RECORD_TYPE, it.expense.id)
                         allAttachmentFileNames += attachments.map { a -> a.fileName }
-                        it.expense.toJson(it.items, attachments)
+                        it.expense.toJson(
+                            it.items, attachments,
+                            BankAccountTree.bankNameFor(it.expense.bankAccountId, accountsForExport)
+                        )
                     }
                 )
             )
@@ -394,7 +399,7 @@ class ExpensesExportImportHandler(
         val importedAccountToLocal = mutableMapOf<Long, Long>()
         if (root.has("bankAccounts")) {
             val imported = root.optJSONArray("bankAccounts") ?: JSONArray()
-            val existing = expensesRepo.bankAccountsSnapshot().associateBy { it.digits.lowercase() }
+            val existing = expensesRepo.bankAccountsSnapshot().associateBy { it.digits.orEmpty().lowercase() }
             val entries = (0 until imported.length()).map { imported.getJSONObject(it) }
             for (a in entries) {
                 val digits = a.optString("digits").takeIf { it.isNotBlank() } ?: continue
@@ -467,12 +472,14 @@ class ExpensesExportImportHandler(
                         totalAmount = e.optDouble("totalAmount"),
                         currencyCode = e.optString("currencyCode"),
                         vendor = e.optStringOrNull("vendor"),
-                        bank = e.optStringOrNull("bank"),
                         // Through the same map the account rows were merged by, so a record restored
                         // onto a device that already knew the card points at the row it already has.
+                        // A backup old enough to name only the bank still lands on an account: the
+                        // name becomes one, exactly as the migration made them.
                         bankAccountId = e.optLong("bankAccountId")
                             .takeIf { e.has("bankAccountId") && !e.isNull("bankAccountId") }
-                            ?.let { importedAccountToLocal[it] },
+                            ?.let { importedAccountToLocal[it] }
+                            ?: e.optStringOrNull("bank")?.let { expensesRepo.accountNamed(it, settings.defaultCurrency) },
                         location = e.optStringOrNull("location"),
                         dateTime = e.optLong("dateTime", System.currentTimeMillis()),
                         comments = e.optStringOrNull("comments"),
@@ -648,13 +655,16 @@ private fun RemapRuleEntity.toJson(): JSONObject = JSONObject().apply {
     put("updatedAt", updatedAt)
 }
 
-private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<AttachmentEntity> = emptyList()): JSONObject = JSONObject().apply {
+private fun Expense.toJson(
+    items: List<ExpenseLineItem>,
+    attachments: List<AttachmentEntity> = emptyList(),
+    bankName: String? = null
+): JSONObject = JSONObject().apply {
     put("id", id)
     put("title", title)
     put("totalAmount", totalAmount)
     put("currencyCode", currencyCode)
     put("vendor", vendor)
-    put("bank", bank)
     bankAccountId?.let { put("bankAccountId", it) }
     put("location", location)
     put("dateTime", dateTime)
@@ -665,6 +675,10 @@ private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<Attac
     put("createdAt", createdAt)
     put("source", source.name)
     put("manuallyEdited", manuallyEdited)
+    // Derived from the account rather than stored on the record: written so a backup names the bank
+    // in plain sight and an older build can still read one. On the way back in it is turned into
+    // the account it names.
+    put("bank", bankName)
     put("archivedAt", archivedAt)
     put("items", JSONArray(items.map { it.toJson() }))
     put("attachments", JSONArray(attachments.map { it.toBackupJson() }))

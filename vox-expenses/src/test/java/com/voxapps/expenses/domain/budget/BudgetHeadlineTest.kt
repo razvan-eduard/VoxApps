@@ -23,8 +23,7 @@ class BudgetHeadlineTest {
         AccountBudget(id = id, accountId = account, currencyCode = currency, amount = amount)
 
     private fun spend(amount: Double, account: Long, currency: String) = Expense(
-        title = null, totalAmount = amount, currencyCode = currency, vendor = null, bank = null,
-        location = null, dateTime = at(20), comments = null, categoryId = null,
+        title = null, totalAmount = amount, currencyCode = currency, vendor = null, location = null, dateTime = at(20), comments = null, categoryId = null,
         direction = TransactionDirection.OUTGOING, bankAccountId = account
     )
 

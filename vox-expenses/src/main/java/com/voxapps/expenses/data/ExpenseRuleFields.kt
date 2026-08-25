@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.datahygiene.FuzzyMatcher
 import com.voxapps.datahygiene.RuleField
 import com.voxapps.datahygiene.exactField
@@ -23,14 +24,20 @@ import com.voxapps.textmatch.FuzzyNameMatcher
  */
 class ExpenseRuleFields(
     fuzzyMatchEnabled: Boolean,
-    timeWindowMillis: Long
+    timeWindowMillis: Long,
+    /** The accounts, so a rule about a bank can be answered: a record carries the account it went
+     *  through, and the bank is that account's name. Empty leaves the field answering null, which
+     *  is what a screen listing the available fields wants anyway. */
+    private val accounts: List<BankAccount> = emptyList()
 ) {
     private val fuzzyMatcher = FuzzyMatcher(FuzzyNameMatcher::namesMatch)
 
     val all: List<RuleField<Expense>> = listOf(
         stringField(ID_TITLE, "duplicate_rule_field_title", fuzzyMatchEnabled, fuzzyMatcher) { it.title },
         stringField(ID_VENDOR, "duplicate_rule_field_vendor", fuzzyMatchEnabled, fuzzyMatcher) { it.vendor },
-        stringField(ID_BANK, "duplicate_rule_field_bank", fuzzyMatchEnabled, fuzzyMatcher) { it.bank },
+        stringField(ID_BANK, "duplicate_rule_field_bank", fuzzyMatchEnabled, fuzzyMatcher) {
+            BankAccountTree.bankNameFor(it.bankAccountId, accounts)
+        },
         stringField(ID_LOCATION, "duplicate_rule_field_location", fuzzyMatchEnabled, fuzzyMatcher) { it.location },
         stringField(ID_COMMENTS, "duplicate_rule_field_comments", fuzzyMatchEnabled, fuzzyMatcher) { it.comments },
         exactField(ID_TOTAL_AMOUNT, "duplicate_rule_field_amount") { it.totalAmount },

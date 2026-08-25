@@ -384,7 +384,7 @@ class NotificationExpenseFlow(
         return NameAlreadyKnown.match(
             vendor, acceptedFor(FieldVocabularies.VOCAB_VENDOR) { it.vendor }, RENAME_MATCH_LEVEL
         ) to NameAlreadyKnown.match(
-            bank, acceptedFor(FieldVocabularies.VOCAB_BANK) { it.bank }, RENAME_MATCH_LEVEL
+            bank, acceptedFor(FieldVocabularies.VOCAB_BANK) { null }, RENAME_MATCH_LEVEL
         )
     }
 
@@ -411,7 +411,6 @@ class NotificationExpenseFlow(
                     totalAmount = it,
                     currencyCode = record.currency ?: container.settingsRepository.getSnapshot().defaultCurrency,
                     vendor = record.vendor,
-                    bank = record.bank,
                     dateTime = System.currentTimeMillis(),
                     direction = record.direction,
                     source = ExpenseSource.NOTIFICATION

@@ -19,6 +19,11 @@ class ExpenseFilterTest {
         category = null
     )
 
+    // A record says which account it went through, and the bank is that account's name — which is
+    // what the filter asks this resolver for.
+    private val ACCOUNTS = mapOf(1L to "ING", 2L to "BCR", 3L to "ING Bank")
+    private val bankOf: (Long?) -> String? = { id -> ACCOUNTS[id] }
+
     private fun expense(
         id: Long,
         vendor: String? = null,
@@ -28,7 +33,8 @@ class ExpenseFilterTest {
     ) = ExpenseWithDetails(
         expense = Expense(
             id = id, title = vendor, totalAmount = 10.0, currencyCode = "RON",
-            dateTime = at, vendor = vendor, bank = bank, location = location
+            dateTime = at, vendor = vendor, location = location,
+            bankAccountId = ACCOUNTS.entries.firstOrNull { it.value == bank }?.key
         ),
         items = emptyList(),
         category = null
@@ -47,7 +53,8 @@ class ExpenseFilterTest {
         location: String? = null
     ) = ExpenseFilter.apply(
         all, null, null, null,
-        bank?.let(FilterValue::picked), vendor?.let(FilterValue::picked), location?.let(FilterValue::picked),
+        bank?.let(FilterValue::picked), bankOf,
+        vendor?.let(FilterValue::picked), location?.let(FilterValue::picked),
         null, null, null, SortMode.NEWEST
     ).map { it.expense.id }.sorted()
 
@@ -97,7 +104,7 @@ class ExpenseFilterTest {
             expense(3, vendor = "KAUFLAND")
         )
         val picked = ExpenseFilter.apply(
-            shops, null, null, null, null, FilterValue.picked("LIDL"), null, null, null, null, SortMode.NEWEST
+            shops, null, null, null, null, bankOf, FilterValue.picked("LIDL"), null, null, null, null, SortMode.NEWEST
         )
         assertEquals(listOf(1L), picked.map { it.expense.id })
     }
@@ -111,7 +118,7 @@ class ExpenseFilterTest {
             expense(3, vendor = "KAUFLAND")
         )
         val queried = ExpenseFilter.apply(
-            shops, null, null, null, null, FilterValue.typed("LIDL"), null, null, null, null, SortMode.NEWEST
+            shops, null, null, null, null, bankOf, FilterValue.typed("LIDL"), null, null, null, null, SortMode.NEWEST
         )
         assertEquals(listOf(1L, 2L), queried.map { it.expense.id }.sorted())
     }
@@ -119,13 +126,13 @@ class ExpenseFilterTest {
     @Test
     fun `a query is case-insensitive`() {
         val shops = listOf(expense(1, vendor = "LIDL RO-490"))
-        assertEquals(1, ExpenseFilter.apply(shops, null, null, null, null, FilterValue.typed("lidl"), null, null, null, null, SortMode.NEWEST).size)
+        assertEquals(1, ExpenseFilter.apply(shops, null, null, null, null, bankOf, FilterValue.typed("lidl"), null, null, null, null, SortMode.NEWEST).size)
     }
 
     @Test
     fun `a record with nothing in that field never matches a query`() {
         val shops = listOf(expense(1, vendor = null), expense(2, vendor = "LIDL"))
-        assertEquals(listOf(2L), ExpenseFilter.apply(shops, null, null, null, null, FilterValue.typed("LIDL"), null, null, null, null, SortMode.NEWEST).map { it.expense.id })
+        assertEquals(listOf(2L), ExpenseFilter.apply(shops, null, null, null, null, bankOf, FilterValue.typed("LIDL"), null, null, null, null, SortMode.NEWEST).map { it.expense.id })
     }
 
     @Test
@@ -134,8 +141,8 @@ class ExpenseFilterTest {
             expense(1, bank = "ING Bank", location = "Bucuresti Sector 3"),
             expense(2, bank = "BCR", location = "Cluj")
         )
-        assertEquals(listOf(1L), ExpenseFilter.apply(all, null, null, null, FilterValue.typed("ING"), null, null, null, null, null, SortMode.NEWEST).map { it.expense.id })
-        assertEquals(listOf(1L), ExpenseFilter.apply(all, null, null, null, null, null, FilterValue.typed("Sector"), null, null, null, SortMode.NEWEST).map { it.expense.id })
+        assertEquals(listOf(1L), ExpenseFilter.apply(all, null, null, null, FilterValue.typed("ING"), bankOf, null, null, null, null, null, SortMode.NEWEST).map { it.expense.id })
+        assertEquals(listOf(1L), ExpenseFilter.apply(all, null, null, null, null, bankOf, null, FilterValue.typed("Sector"), null, null, null, SortMode.NEWEST).map { it.expense.id })
     }
 
     // --- narrowing by what a record cost ---
@@ -143,7 +150,7 @@ class ExpenseFilterTest {
     private val priced = listOf(priced(1, 5.0), priced(2, 50.0), priced(3, 100.0), priced(4, 500.0))
 
     private fun inRange(range: VoxRange?) =
-        ExpenseFilter.apply(priced, null, null, null, null, null, null, range, null, null, SortMode.NEWEST)
+        ExpenseFilter.apply(priced, null, null, null, null, bankOf, null, null, range, null, null, SortMode.NEWEST)
             .map { it.expense.id }.sorted()
 
     @Test
@@ -182,7 +189,7 @@ class ExpenseFilterTest {
             )
         )
         val out = ExpenseFilter.apply(
-            mixed, null, null, null, null, FilterValue.picked("LIDL"), null, VoxRange(50.0, 100.0), null, null, SortMode.NEWEST
+            mixed, null, null, null, null, bankOf, FilterValue.picked("LIDL"), null, VoxRange(50.0, 100.0), null, null, SortMode.NEWEST
         )
         assertEquals(listOf(1L), out.map { it.expense.id })
     }
@@ -205,7 +212,7 @@ class ExpenseFilterTest {
     )
 
     private fun through(ids: Set<Long>?) =
-        ExpenseFilter.apply(banked, null, null, null, null, null, null, null, ids, null, SortMode.NEWEST)
+        ExpenseFilter.apply(banked, null, null, null, null, bankOf, null, null, null, ids, null, SortMode.NEWEST)
             .map { it.expense.id }.sorted()
 
     /** Spending on a card is spending from the account, so the family is what an account means. */
@@ -230,7 +237,7 @@ class ExpenseFilterTest {
 
     private fun inCurrency(code: String?) = ExpenseFilter.apply(
         listOf(onAccount(1, currency = "RON"), onAccount(2, currency = "EUR"), onAccount(3, currency = "ron")),
-        null, null, null, null, null, null, null, null, code, SortMode.NEWEST
+        null, null, null, null, bankOf, null, null, null, null, code, SortMode.NEWEST
     ).map { it.expense.id }.sorted()
 
     @Test

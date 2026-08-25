@@ -14,27 +14,27 @@ import org.junit.Test
  */
 class TwoNotificationsOnePurchaseTest {
 
-    private fun captured(vendor: String?, bank: String?) = Expense(
-        title = vendor ?: bank,
+    private fun captured(vendor: String?, accountId: Long? = null) = Expense(
+        title = vendor,
         totalAmount = 223.53,
         currencyCode = "RON",
         dateTime = 1_000L,
         source = ExpenseSource.NOTIFICATION,
         vendor = vendor,
-        bank = bank
+        bankAccountId = accountId
     )
 
     /** What the wallet's message yields once the scheme is a known issuer: the merchant. */
-    private val fromWallet = captured(vendor = "LIDL RO-490", bank = "Pluxee")
+    private val fromWallet = captured(vendor = "LIDL RO-490", accountId = 3L)
 
     /** What the scheme's own message yields: no merchant — it never names one. */
-    private val fromScheme = captured(vendor = null, bank = "Pluxee")
+    private val fromScheme = captured(vendor = null)
 
     @Test
     fun `the merchant survives when the scheme's message is filed first`() {
         val merged = enrichWithNearDuplicate(existing = fromScheme, candidate = fromWallet)
         assertEquals("LIDL RO-490", merged.vendor)
-        assertEquals("Pluxee", merged.bank)
+        assertEquals(3L, merged.bankAccountId)
     }
 
     @Test
@@ -51,7 +51,7 @@ class TwoNotificationsOnePurchaseTest {
      */
     @Test
     fun `two vendorless messages merge to a vendorless record`() {
-        val merged = enrichWithNearDuplicate(existing = fromScheme, candidate = captured(null, "Pluxee"))
+        val merged = enrichWithNearDuplicate(existing = fromScheme, candidate = captured(vendor = null))
         assertNull(merged.vendor)
     }
 

@@ -27,4 +27,4 @@ enum class ExpenseSource(override val trustTier: Int) : RecordProvenance {
  * toward completeness — identity/audit fields (id, uid, createdAt, ...) don't vary in "quality".
  */
 fun Expense.dataScore(): Int =
-    recordScore(manuallyEdited, source, listOf(title, vendor, bank, location, comments, categoryId))
+    recordScore(manuallyEdited, source, listOf(title, vendor, bankAccountId, location, comments, categoryId))

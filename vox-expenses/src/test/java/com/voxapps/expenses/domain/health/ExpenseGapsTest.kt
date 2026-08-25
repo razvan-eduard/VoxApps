@@ -24,8 +24,7 @@ class ExpenseGapsTest {
         items: List<ExpenseLineItem> = emptyList()
     ) = ExpenseWithDetails(
         expense = Expense(
-            title = title, totalAmount = amount, currencyCode = "RON", vendor = vendor, bank = null,
-            location = null, dateTime = 0L, comments = null, categoryId = categoryId,
+            title = title, totalAmount = amount, currencyCode = "RON", vendor = vendor, location = null, dateTime = 0L, comments = null, categoryId = categoryId,
             bankAccountId = accountId, source = source, isStub = stub, manuallyEdited = edited
         ),
         items = items

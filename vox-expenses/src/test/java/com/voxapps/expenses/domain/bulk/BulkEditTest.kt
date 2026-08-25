@@ -11,8 +11,7 @@ import org.junit.Test
 class BulkEditTest {
 
     private val record = Expense(
-        title = "t", totalAmount = 63.0, currencyCode = "RON", vendor = "Lidl", bank = "ING",
-        location = "Cluj", dateTime = 1000L, comments = "c", categoryId = 4L, bankAccountId = 9L,
+        title = "t", totalAmount = 63.0, currencyCode = "RON", vendor = "Lidl", location = "Cluj", dateTime = 1000L, comments = "c", categoryId = 4L, bankAccountId = 9L,
         direction = TransactionDirection.OUTGOING,
         originsJson = ExpenseOrigins.encode(mapOf(ExpenseOrigins.FIELD_VENDOR to FieldOrigin.ANSWERED))
     )
@@ -29,7 +28,6 @@ class BulkEditTest {
         val edited = BulkEdit(categoryId = 7L).applyTo(record)
         assertEquals(7L, edited.categoryId)
         assertEquals("Lidl", edited.vendor)
-        assertEquals("ING", edited.bank)
         assertEquals("Cluj", edited.location)
         assertEquals(9L, edited.bankAccountId)
         assertEquals(TransactionDirection.OUTGOING, edited.direction)
@@ -44,7 +42,6 @@ class BulkEditTest {
         val edited = BulkEdit(
             categoryId = 7L,
             vendor = "Carrefour",
-            bank = "Revolut",
             bankAccountId = 3L,
             location = "Oradea",
             direction = TransactionDirection.INCOMING
@@ -52,7 +49,6 @@ class BulkEditTest {
 
         assertEquals(7L, edited.categoryId)
         assertEquals("Carrefour", edited.vendor)
-        assertEquals("Revolut", edited.bank)
         assertEquals(3L, edited.bankAccountId)
         assertEquals("Oradea", edited.location)
         assertEquals(TransactionDirection.INCOMING, edited.direction)

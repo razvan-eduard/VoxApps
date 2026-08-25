@@ -40,7 +40,7 @@ fun enrichWithNearDuplicate(existing: Expense, candidate: Expense): Expense {
     val merged = existing.copy(
         title = FieldCleaner.clean(primary.title) ?: FieldCleaner.clean(secondary.title),
         vendor = FieldCleaner.clean(primary.vendor) ?: FieldCleaner.clean(secondary.vendor),
-        bank = FieldCleaner.clean(primary.bank) ?: FieldCleaner.clean(secondary.bank),
+        bankAccountId = primary.bankAccountId ?: secondary.bankAccountId,
         location = FieldCleaner.clean(primary.location) ?: FieldCleaner.clean(secondary.location),
         comments = FieldCleaner.clean(primary.comments) ?: FieldCleaner.clean(secondary.comments),
         categoryId = primary.categoryId ?: secondary.categoryId,
