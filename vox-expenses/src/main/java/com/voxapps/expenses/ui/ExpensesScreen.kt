@@ -248,6 +248,23 @@ fun ExpensesScreen(
                             Icon(Icons.Filled.MoreVert, contentDescription = languageManager.getString("more"))
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            // Choosing every record without picking one first. The list a filter has
+                            // narrowed is usually the whole point — "the twelve that have no card" is
+                            // a set somebody wants to act on as a set, and reaching it by holding one
+                            // record and then finding a second control is two gestures too many.
+                            //
+                            // It takes what the filter defines rather than what the calendar layout
+                            // happens to be showing, exactly as the bar's own select-all does; the
+                            // count in the bar says immediately how many that turned out to be.
+                            DropdownMenuItem(
+                                text = { Text(languageManager.getString("selection_select_all")) },
+                                leadingIcon = { Icon(Icons.Filled.SelectAll, contentDescription = null) },
+                                enabled = state.expenses.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    selection.selectAll(state.expenses.map { it.expense.id })
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text(languageManager.getString("archive_title")) },
                                 leadingIcon = { Icon(Icons.Filled.Archive, contentDescription = null) },
