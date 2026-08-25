@@ -6,7 +6,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import com.voxapps.design.selection.VoxSelectionBackHandler
+import com.voxapps.design.selection.rememberVoxSelection
+import com.voxapps.design.selection.voxSelectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -141,38 +143,28 @@ fun CalendarScreen(
     var sidebarVisible by remember { mutableStateOf(false) }
 
     // --- Day/Week multi-select (see SelectionActionBar) ---
-    var selectionMode by remember { mutableStateOf(false) }
-    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val selection = rememberVoxSelection<Long>()
     var showBulkDeleteConfirm by remember { mutableStateOf(false) }
     var showMoveExistingPicker by remember { mutableStateOf(false) }
     var showMoveNewForm by remember { mutableStateOf(false) }
 
-    fun exitSelectionMode() {
-        selectionMode = false
-        selectedIds = emptySet()
-    }
-
     val effectiveOnItemClick: (EntryCalendarItem) -> Unit = { item ->
-        if (selectionMode) {
-            val id = item.entryWithTags.entry.id
-            selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
-            if (selectedIds.isEmpty()) selectionMode = false
-        } else {
-            onEditEntry(item)
-        }
+        selection.tap(item.entryWithTags.entry.id) { onEditEntry(item) }
     }
     // A subscribed calendar's entries are view-only end-to-end — long-pressing one never enters
     // selection mode, since there's nothing a batch delete/move could meaningfully do to it (it would
     // just come back, or get wiped, on the next sync anyway).
     val effectiveOnItemLongClick: (EntryCalendarItem) -> Unit = { item ->
         val entry = item.entryWithTags.entry
-        if (!selectionMode && layerById[entry.layerId]?.kind != CalendarLayerKind.SUBSCRIBED) {
-            selectionMode = true
-            selectedIds = setOf(entry.id)
-        }
+        if (layerById[entry.layerId]?.kind != CalendarLayerKind.SUBSCRIBED) selection.start(entry.id)
     }
 
-    DoubleBackToExitHandler(message = languageManager.getString("press_back_again_to_exit"))
+    // Leaving the app is what back means only when there is nothing smaller to leave first.
+    DoubleBackToExitHandler(
+        message = languageManager.getString("press_back_again_to_exit"),
+        enabled = !selection.active
+    )
+    VoxSelectionBackHandler(selection)
 
     val context = LocalContext.current
     val visionInstalled = remember { VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) }
@@ -210,10 +202,10 @@ fun CalendarScreen(
 
     Scaffold(
         topBar = {
-            if (selectionMode) {
+            if (selection.active) {
                 SelectionActionBar(
-                    selectedCount = selectedIds.size,
-                    onClose = ::exitSelectionMode,
+                    selectedCount = selection.size,
+                    onClose = { selection.clear() },
                     onDelete = { showBulkDeleteConfirm = true },
                     onMoveExisting = { showMoveExistingPicker = true },
                     onMoveNew = { showMoveNewForm = true }
@@ -356,7 +348,7 @@ fun CalendarScreen(
                                     item = item,
                                     layer = layerById[item.entryWithTags.entry.layerId],
                                     onClick = { effectiveOnItemClick(item) },
-                                    isSelected = item.entryWithTags.entry.id in selectedIds,
+                                    isSelected = item.entryWithTags.entry.id in selection,
                                     onLongClick = { effectiveOnItemLongClick(item) }
                                 )
                             }
@@ -377,7 +369,7 @@ fun CalendarScreen(
                         todayEffectPrimaryColor = todayEffectPrimaryColor,
                         todayEffectSecondaryColor = todayEffectSecondaryColor,
                         todayEffectSpeed = todayEffectSpeed,
-                        selectedIds = selectedIds,
+                        selectedIds = selection.ids,
                         onItemLongClick = effectiveOnItemLongClick,
                         // Selecting the new week's Monday is enough: WeekView derives the week it
                         // shows from whatever date is selected.
@@ -396,7 +388,7 @@ fun CalendarScreen(
                         todayEffectPrimaryColor = todayEffectPrimaryColor,
                         todayEffectSecondaryColor = todayEffectSecondaryColor,
                         todayEffectSpeed = todayEffectSpeed,
-                        selectedIds = selectedIds,
+                        selectedIds = selection.ids,
                         onItemLongClick = effectiveOnItemLongClick,
                         onNavigateDay = { delta ->
                             val zoneId = java.time.ZoneId.systemDefault()
@@ -449,13 +441,13 @@ fun CalendarScreen(
     if (showBulkDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showBulkDeleteConfirm = false },
-            title = { Text(String.format(languageManager.getString("selection_delete_confirm_title"), selectedIds.size)) },
+            title = { Text(String.format(languageManager.getString("selection_delete_confirm_title"), selection.size)) },
             text = { Text(languageManager.getString("selection_delete_confirm_desc")) },
             confirmButton = {
                 TextButton(onClick = {
-                    stateManager.bulkDeleteEntries(selectedIds.toList())
+                    stateManager.bulkDeleteEntries(selection.ids.toList())
                     showBulkDeleteConfirm = false
-                    exitSelectionMode()
+                    selection.clear()
                 }) { Text(languageManager.getString("selection_delete"), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
@@ -474,9 +466,9 @@ fun CalendarScreen(
                     localLayers.forEach { layer ->
                         Row(
                             modifier = Modifier.fillMaxWidth().clickable {
-                                stateManager.bulkMoveEntries(selectedIds.toList(), layer.id)
+                                stateManager.bulkMoveEntries(selection.ids.toList(), layer.id)
                                 showMoveExistingPicker = false
-                                exitSelectionMode()
+                                selection.clear()
                             }.padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -530,9 +522,9 @@ fun CalendarScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        stateManager.createLayerAndMoveEntries(newLayerName, newLayerColor, selectedIds.toList())
+                        stateManager.createLayerAndMoveEntries(newLayerName, newLayerColor, selection.ids.toList())
                         showMoveNewForm = false
-                        exitSelectionMode()
+                        selection.clear()
                     },
                     enabled = newLayerName.isNotBlank()
                 ) { Text(languageManager.getString("save")) }
@@ -567,10 +559,7 @@ private fun EntryRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .let {
-                if (isSelected) it.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else it
-            }
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .voxSelectable(selected = isSelected, onClick = onClick, onLongClick = onLongClick)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
