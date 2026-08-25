@@ -1,5 +1,6 @@
 package com.voxapps.expenses.ui
 
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +59,7 @@ fun ArchiveScreen(
 ) {
     val languageManager = LocalLanguageManager.current
     val records by stateManager.archivedRecords.collectAsStateWithLifecycle(initialValue = emptyList())
+    val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
 
     val selection = rememberVoxSelection<Long>()
     var confirmingDelete by remember { mutableStateOf(false) }
@@ -75,10 +77,16 @@ fun ArchiveScreen(
                     onClose = { selection.clear() },
                     closeContentDescription = languageManager.getString("cancel")
                 ) {
-                    IconButton(onClick = { selection.selectAll(records.map { it.expense.id }) }) {
+                    val listed = records.map { it.expense.id }
+                    val allPicked = listed.isNotEmpty() && selection.ids.containsAll(listed)
+                    IconButton(onClick = {
+                        if (allPicked) selection.clear() else selection.selectAll(listed)
+                    }) {
                         Icon(
-                            Icons.Filled.SelectAll,
-                            contentDescription = languageManager.getString("selection_select_all")
+                            Icons.Filled.Checklist,
+                            contentDescription = languageManager.getString(
+                                if (allPicked) "selection_select_none" else "selection_select_all"
+                            )
                         )
                     }
                     IconButton(onClick = {
@@ -168,6 +176,7 @@ fun ArchiveScreen(
                             // and it is an ordinary record again.
                             onClick = { selection.tap(ewd.expense.id) { selection.start(ewd.expense.id) } },
                             selected = ewd.expense.id in selection,
+                            bankName = BankAccountTree.bankNameFor(ewd.expense.bankAccountId, accounts),
                             onLongClick = { selection.start(ewd.expense.id) }
                         )
                     }

@@ -62,7 +62,18 @@ fun ExpenseCard(
     missing: String? = null,
     /** Picked out of the list, for something about to be done to several records at once. */
     selected: Boolean = false,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    /** The bank this went through — the name of the account it points at, resolved by the caller,
+     *  which is the layer that has the accounts. */
+    bankName: String? = null,
+    /**
+     * Whether the row has to name the day as well as the hour.
+     *
+     * False wherever the list already groups by day: the date under a day heading is the heading
+     * again, in smaller type, on every row beneath it. The time is never redundant — two payments on
+     * one day are told apart by it — so it is always there.
+     */
+    showDay: Boolean = true
 ) {
     val expense = expenseWithDetails.expense
     val category = expenseWithDetails.category
@@ -143,12 +154,26 @@ fun ExpenseCard(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
-                    Text(
-                        text = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(expense.dateTime)) +
-                            (category?.let { " · ${it.name}" } ?: ""),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // What the row is filed under, in the order it is asked: when, where the money
+                    // came from, what it counts as. Anything that has nothing to say is left out
+                    // rather than printed empty.
+                    val filedAs = listOfNotNull(
+                        if (showDay) {
+                            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                                .format(Date(expense.dateTime))
+                        } else {
+                            DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(expense.dateTime))
+                        },
+                        bankName?.takeIf { it.isNotBlank() },
+                        category?.name
                     )
+                    if (filedAs.isNotEmpty()) {
+                        Text(
+                            text = filedAs.joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             Icon(
