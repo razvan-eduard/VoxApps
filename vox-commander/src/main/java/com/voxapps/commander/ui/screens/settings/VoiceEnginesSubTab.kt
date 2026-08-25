@@ -191,7 +191,7 @@ fun VoiceEnginesSubTab(
                 selected = selectedApiModel,
                 itemLabel = { it },
                 onSelect = { selectedApiModel = it },
-                anchor = { label, onClick ->
+                anchor = { label, onClick, _ ->
                     PicklistButtonAnchor(label, onClick, enabled = isSelectionEnabled)
                 }
             )

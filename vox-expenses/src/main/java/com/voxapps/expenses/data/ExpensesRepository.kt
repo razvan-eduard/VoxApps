@@ -207,7 +207,7 @@ class ExpensesRepository(
      */
     suspend fun accountNamed(bankName: String, currencyCode: String): Long? {
         val dao = bankAccountDao ?: return null
-        val named = bankName.trim().takeIf { it.isNotEmpty() } ?: return null
+        val named = NameCasing.capitalized(bankName) ?: return null
         BankAccounts.accountNamed(named, dao.getAll())?.let { return it.id }
         val id = dao.insert(
             BankAccounts.newBankAccount(named, currencyCode, System.currentTimeMillis())
@@ -223,7 +223,7 @@ class ExpensesRepository(
      * it. That is the whole reason the name is not kept on the records as well.
      */
     suspend fun updateBankAccount(account: BankAccount) {
-        bankAccountDao?.update(account)
+        bankAccountDao?.update(account.copy(label = NameCasing.capitalized(account.label)))
     }
 
     /**

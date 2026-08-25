@@ -643,7 +643,7 @@ fun RulesManagerContent(
                                     selectedDomain = domain
                                     selectedAction = IntentTaxonomy.getActionsForDomain(domain).firstOrNull() ?: ""
                                 },
-                                anchor = { value, onClick -> PicklistFieldAnchor("Domain", value, onClick) }
+                                anchor = { value, onClick, _ -> PicklistFieldAnchor("Domain", value, onClick) }
                             )
 
                             val actionLabel: (String) -> String =
@@ -653,7 +653,7 @@ fun RulesManagerContent(
                                 selected = selectedAction,
                                 itemLabel = actionLabel,
                                 onSelect = { selectedAction = it },
-                                anchor = { value, onClick -> PicklistFieldAnchor("Action", value, onClick) }
+                                anchor = { value, onClick, _ -> PicklistFieldAnchor("Action", value, onClick) }
                             )
 
                             // --- MEDIA CONTROL TYPE SELECTOR ---
@@ -715,7 +715,7 @@ fun RulesManagerContent(
                                 selected = selectedOption,
                                 itemLabel = { it.variant.label },
                                 onSelect = { option -> selectedIntentIndex = availableIntents.indexOf(option) },
-                                anchor = { value, onClick -> PicklistFieldAnchor(intentCaption, value, onClick) }
+                                anchor = { value, onClick, _ -> PicklistFieldAnchor(intentCaption, value, onClick) }
                             )
                         }
                         }

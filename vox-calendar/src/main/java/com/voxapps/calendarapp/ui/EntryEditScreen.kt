@@ -511,7 +511,7 @@ fun EntryEditScreen(
                             selected = currentLayer,
                             itemLabel = { it.name },
                             onSelect = { selectedLayerId = it.id },
-                            anchor = { value, onClick ->
+                            anchor = { value, onClick , _ ->
                                 PaperTapField(
                                     label = languageManager.getString("entry_layer"),
                                     value = value,
@@ -646,7 +646,7 @@ fun EntryEditScreen(
                             recurrence = freq
                             if (freq == RecurrenceFrequency.NONE) recurrenceUntilMillis = null
                         },
-                        anchor = { value, onClick ->
+                        anchor = { value, onClick , _ ->
                             // Green glow whenever an explicit weekday set is active — the collapsed
                             // field otherwise reads plain "Weekly" and hides that days were chosen.
                             val daysActive = recurrence == RecurrenceFrequency.WEEKLY && recurrenceDaysMask != 0

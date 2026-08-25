@@ -1,6 +1,13 @@
 package com.voxapps.design.picklist
 
+import com.voxapps.datahygiene.NameCasing
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -91,9 +98,20 @@ fun <T> Picklist(
      * not what you read a list by.
      */
     itemSubtitle: ((T) -> String?)? = null,
-    anchor: @Composable (label: String, onClick: () -> Unit) -> Unit = { label, onClick ->
-        PicklistButtonAnchor(label, onClick)
-    },
+    /**
+     * Correcting what the chosen thing is called, without leaving the field it was chosen in.
+     *
+     * A name typed wrong once is lived with until there is somewhere to fix it, and the place a
+     * person notices it is the record — not a settings page two menus away. Given, the value can be
+     * edited in place: held, the closed field becomes a text box; opened, the list carries the same
+     * box at the top. Absent, the picklist behaves exactly as it did.
+     *
+     * What arrives is trimmed and capitalized word by word, never blank — a name is a name whatever
+     * keyboard typed it, and the caller stores what it is given.
+     */
+    onRename: ((from: T, to: String) -> Unit)? = null,
+    anchor: @Composable (label: String, onClick: () -> Unit, onLongClick: (() -> Unit)?) -> Unit =
+        { label, onClick, onLongClick -> PicklistButtonAnchor(label, onClick, onLongClick = onLongClick) },
     /** Whether the menu spans the width it is given. False for an inline anchor, where a menu wider
      *  than the button it drops from reads as belonging to the whole row rather than to the value. */
     menuFillsWidth: Boolean = true,
@@ -140,6 +158,8 @@ fun <T> Picklist(
     // The width belongs to the anchor, not to this box: a full-width button fills it, an inline one
     // does not, and a box that always filled would stretch the second kind across its row.
     var query by remember { mutableStateOf("") }
+    // What the name is being changed to, while it is being changed. Null is the ordinary state.
+    var draft by remember { mutableStateOf<String?>(null) }
     val shown = remember(items, extraWhileSearching, query) {
         if (query.isBlank()) items
         else {
@@ -159,6 +179,21 @@ fun <T> Picklist(
     // about what they say.
     val close = { expanded = false; query = "" }
     val rows: @Composable () -> Unit = {
+        // At the top, because it is about the thing already chosen rather than about choosing
+        // another. The list below keeps every row, this one included: a list that changed shape
+        // with the selection would read as rows going missing.
+        if (onRename != null && selected != null) {
+            PicklistRenameRow(
+                value = draft ?: itemLabel(selected),
+                onValueChange = { draft = it },
+                onSave = {
+                    NameCasing.capitalized(draft)?.let { onRename(selected, it) }
+                    draft = null
+                    close()
+                },
+                onCancel = { draft = null }
+            )
+        }
         if (query.isNotBlank() && searchAllLabel != null) {
             PicklistRow(text = searchAllLabel(shown.size)) { onSearchAll(query.trim()); close() }
         }
@@ -196,7 +231,31 @@ fun <T> Picklist(
     }
 
     Box(modifier = modifier) {
-        anchor(selected?.let(itemLabel) ?: noneLabel.orEmpty()) { expanded = true }
+        // Held rather than tapped, the closed field becomes the box that renames it — the shortest
+        // path there is from noticing a wrong name to correcting it.
+        val editingInPlace = draft != null && !expanded
+        if (editingInPlace) {
+            PicklistRenameRow(
+                value = draft.orEmpty(),
+                onValueChange = { draft = it },
+                onSave = {
+                    val to = NameCasing.capitalized(draft)
+                    if (to != null && selected != null) onRename?.invoke(selected, to)
+                    draft = null
+                },
+                onCancel = { draft = null }
+            )
+        } else {
+            anchor(
+                selected?.let(itemLabel) ?: noneLabel.orEmpty(),
+                { expanded = true },
+                if (onRename != null && selected != null) {
+                    { draft = itemLabel(selected) }
+                } else {
+                    null
+                }
+            )
+        }
 
         if (asSheet) {
             // A list this long covers the screen whichever way it is drawn, and something covering
@@ -230,14 +289,31 @@ fun <T> Picklist(
 
 /** The default anchor: a full-width button showing the current value. */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun PicklistButtonAnchor(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    onLongClick: (() -> Unit)? = null
 ) {
-    OutlinedButton(onClick = onClick, modifier = modifier.fillMaxWidth(), enabled = enabled) {
-        Text(label)
+    if (onLongClick == null) {
+        OutlinedButton(onClick = onClick, modifier = modifier.fillMaxWidth(), enabled = enabled) {
+            Text(label)
+        }
+    } else {
+        // The button keeps its own look; the hold is caught by a surface over it, since a button
+        // consumes the press it is given and would never let one through.
+        Box(modifier = modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth(), enabled = enabled) {
+                Text(label)
+            }
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
+            )
+        }
     }
 }
 
@@ -300,6 +376,39 @@ fun PicklistCompactAnchor(
 }
 
 /** One row of a picklist, the same whether it is drawn in a menu or in a sheet. */
+/**
+ * A name being corrected: the text as it stands, a tick, a cross.
+ *
+ * The two marks rather than a dialog because the correction is a keystroke or two and a dialog is
+ * three taps around it — and because the value stays where the eye already is.
+ */
+@Composable
+private fun PicklistRenameRow(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Filled.Close, contentDescription = null)
+        }
+        IconButton(onClick = onSave, enabled = value.isNotBlank()) {
+            Icon(Icons.Filled.Check, contentDescription = null)
+        }
+    }
+}
+
 @Composable
 private fun PicklistRow(
     text: String,

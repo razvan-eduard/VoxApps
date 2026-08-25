@@ -150,7 +150,7 @@ fun BulkEditSheet(
                 searchPlaceholder = languageManager.getString("filter_search_hint"),
                 actionLabel = languageManager.getString("expense_vendor_new"),
                 onAction = { namingVendor = true },
-                anchor = { _, onClick ->
+                anchor = { _, onClick, _ ->
                     BulkField(languageManager.getString("expense_vendor"), vendorText, vendorIsPlaceholder, onClick)
                 }
             )
@@ -179,7 +179,7 @@ fun BulkEditSheet(
                 noneLabel = unchanged,
                 onNoneSelected = { accountId = null; cardId = null; bank = null },
                 searchPlaceholder = languageManager.getString("filter_search_hint"),
-                anchor = { _, onClick ->
+                anchor = { _, onClick, _ ->
                     BulkField(
                         languageManager.getString("expense_bank_account"),
                         accountText,
@@ -210,7 +210,7 @@ fun BulkEditSheet(
                 noneLabel = unchanged,
                 onNoneSelected = { cardId = null },
                 searchPlaceholder = languageManager.getString("filter_search_hint"),
-                anchor = { _, onClick ->
+                anchor = { _, onClick, _ ->
                     BulkField(languageManager.getString("expense_card"), cardText, cardIsPlaceholder, onClick)
                 }
             )
@@ -226,7 +226,7 @@ fun BulkEditSheet(
                 searchPlaceholder = languageManager.getString("filter_search_hint"),
                 actionLabel = languageManager.getString("bulk_edit_location_new"),
                 onAction = { namingLocation = true },
-                anchor = { _, onClick ->
+                anchor = { _, onClick, _ ->
                     BulkField(languageManager.getString("expense_location"), locationText, locationIsPlaceholder, onClick)
                 }
             )
@@ -253,7 +253,7 @@ fun BulkEditSheet(
                             .background(CategoryColors.fromStored(cat.colorArgb))
                     )
                 },
-                anchor = { _, onClick ->
+                anchor = { _, onClick, _ ->
                     BulkField(
                         languageManager.getString("expense_category"),
                         categoryText,
@@ -279,7 +279,7 @@ fun BulkEditSheet(
                 onSelect = { direction = it },
                 noneLabel = unchanged,
                 onNoneSelected = { direction = null },
-                anchor = { _, onClick ->
+                anchor = { _, onClick, _ ->
                     BulkField(
                         languageManager.getString("expense_direction"),
                         directionText,

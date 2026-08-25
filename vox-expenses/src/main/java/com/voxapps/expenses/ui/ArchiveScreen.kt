@@ -146,7 +146,7 @@ fun ArchiveScreen(
                 itemLabel = { retentionLabel(it, languageManager) },
                 onSelect = { stateManager.setArchiveRetentionDays(it) },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                anchor = { value, onClick ->
+                anchor = { value, onClick, _ ->
                     PaperTapField(
                         label = languageManager.getString("archive_retention_label"),
                         value = value,

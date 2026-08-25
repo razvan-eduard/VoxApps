@@ -640,7 +640,15 @@ fun ExpenseEditScreen(
                         onNoneSelected = { vendor = "" },
                         searchPlaceholder = languageManager.getString("filter_search_hint"),
                         actionLabel = languageManager.getString("expense_vendor_new"),
-                        onAction = { namingVendor = true }
+                        onAction = { namingVendor = true },
+                        // Corrected where it is noticed. The list is the same list everywhere, so
+                        // the correction reaches every record read by it, not only this one.
+                        onRename = { from, to ->
+                            vendor = to
+                            bankScope.launch {
+                                stateManager.renameVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, from, to)
+                            }
+                        }
                     )
                     // One field, because there is one fact: the account the money moved through.
                     // A bank is the name of an account, not something a record carries beside it —
@@ -687,10 +695,15 @@ fun ExpenseEditScreen(
                         searchPlaceholder = languageManager.getString("filter_search_hint"),
                         actionLabel = languageManager.getString("account_bank_new"),
                         onAction = { namingBank = true },
+                        // An account carries its own name, so this renames the row itself — the
+                        // same act as editing it in the accounts page, done from where it is seen.
+                        onRename = { account, to ->
+                            bankScope.launch { stateManager.updateBankAccount(account.copy(label = to)) }
+                        },
                         // A record whose bank named two accounts, or none, still says which bank it
                         // was — so the closed field shows that rather than "None", while the row
                         // that clears it goes on saying exactly what it does.
-                        anchor = { label, onClick ->
+                        anchor = { label, onClick, _ ->
                             PicklistButtonAnchor(
                                 label = label,
                                 onClick = onClick
@@ -714,6 +727,11 @@ fun ExpenseEditScreen(
                             cardId = chosen.id
                             // A card names its account: picking one answers the field above too.
                             chosen.parentId?.let { parent -> accountId = parent }
+                        },
+                        // A card carries its own name, so this renames the row itself — the same
+                        // act as editing it in the accounts page, done from where it is seen.
+                        onRename = { card, to ->
+                            bankScope.launch { stateManager.updateBankAccount(card.copy(label = to)) }
                         },
                         noneLabel = languageManager.getString("none"),
                         onNoneSelected = { cardId = null },
@@ -804,7 +822,7 @@ fun ExpenseEditScreen(
                                     .background(CategoryColors.fromStored(cat.colorArgb))
                             )
                         },
-                        anchor = { value, onClick ->
+                        anchor = { value, onClick, _ ->
                             PaperTapField(
                                 label = languageManager.getString("expense_category"),
                                 value = value,
@@ -878,7 +896,7 @@ fun ExpenseEditScreen(
                             )
                         },
                         onSelect = { direction = it },
-                        anchor = { value, onClick ->
+                        anchor = { value, onClick, _ ->
                             PaperTapField(
                                 label = languageManager.getString("expense_direction"),
                                 value = value,

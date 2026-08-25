@@ -233,7 +233,7 @@ fun ExpenseFilterSortSheet(
                             onSelect = { onAccountChange(it.id) },
                             noneLabel = languageManager.getString("all_accounts"),
                             onNoneSelected = { onAccountChange(null) },
-                            anchor = { label, onClick ->
+                            anchor = { label, onClick, _ ->
                                 PicklistButtonAnchor(label = label, onClick = onClick, enabled = accountUsable)
                             }
                         )
@@ -272,7 +272,7 @@ fun ExpenseFilterSortSheet(
                     onSelect = { onCurrencyChange(it) },
                     noneLabel = languageManager.getString("all_currencies"),
                     onNoneSelected = { onCurrencyChange(null) },
-                    anchor = { label, onClick ->
+                    anchor = { label, onClick, _ ->
                         PicklistButtonAnchor(label = label, onClick = onClick, enabled = currenciesUsable)
                     }
                 )

@@ -768,5 +768,6 @@
   "learn_names_title": "Învață numele din capturi",
   "learn_names_desc": "Un magazin sau o bancă citite dintr-o captură intră în listele de mai jos, ca următorul mesaj care le numește să fie citit după ele, nu dedus din nou. Tot ce se învață rămâne vizibil aici și poate fi dezactivat sau șters.",
   "learn_names_notifications": "Din notificări",
-  "learn_names_scans": "Din scanări"
+  "learn_names_scans": "Din scanări",
+  "vocabulary_rename_term": "Redenumește"
 }

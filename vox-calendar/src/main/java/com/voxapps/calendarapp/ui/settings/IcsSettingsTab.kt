@@ -214,7 +214,7 @@ private fun ImportTargetDialog(
                             selected = selectedExisting,
                             itemLabel = { it.name },
                             onSelect = { selectedExisting = it },
-                            anchor = { value, onClick -> PicklistFieldAnchor(null, value, onClick) },
+                            anchor = { value, onClick, _ -> PicklistFieldAnchor(null, value, onClick) },
                             modifier = Modifier.padding(start = 32.dp)
                         )
                     }

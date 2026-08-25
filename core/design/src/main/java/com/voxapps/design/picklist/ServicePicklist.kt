@@ -49,9 +49,8 @@ fun <T : ServiceEntry> ServicePicklist(
     offlineLabel: String = "Not reachable",
     missingCredentialLabel: String = "Needs an API key",
     noNetworkLabel: String = "No connection",
-    anchor: @Composable (label: String, onClick: () -> Unit) -> Unit = { label, onClick ->
-        PicklistButtonAnchor(label, onClick)
-    },
+    anchor: @Composable (label: String, onClick: () -> Unit, onLongClick: (() -> Unit)?) -> Unit =
+        { label, onClick, _ -> PicklistButtonAnchor(label, onClick) },
     /** Anything about the selection that no declaration covers — "requires location", say. Drawn
      *  first, above the credential field, because it is context for what follows. */
     notes: @Composable () -> Unit = {},

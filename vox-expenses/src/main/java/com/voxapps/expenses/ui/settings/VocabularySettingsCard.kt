@@ -1,5 +1,7 @@
 package com.voxapps.expenses.ui.settings
 
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,8 +11,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +64,7 @@ fun VocabularySettingsCard(
     languageManager: LanguageManager
 ) {
     var adding by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -88,6 +93,10 @@ fun VocabularySettingsCard(
                 onValueChange = { draft = it; error = null },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                // These are names — a shop, a bank, a designator — so the keyboard offers what a
+                // name looks like. Matching ignores case entirely, so this is about how the entry
+                // reads in the list, which is the only place it is ever seen.
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                 isError = error != null,
                 label = { Text(languageManager.getString("vocabulary_add_term")) },
                 supportingText = error?.let { { Text(it) } }
@@ -125,6 +134,15 @@ fun VocabularySettingsCard(
                         term = term,
                         disabled = off,
                         trailing = {
+                            // A name typed wrong once is lived with for a year unless there is a
+                            // way to correct it. Only your own: a supplied word is not this app's
+                            // to rewrite — switch it off and add your own spelling instead.
+                            IconButton(onClick = { renaming = term }) {
+                                Icon(
+                                    Icons.Filled.Edit,
+                                    contentDescription = languageManager.getString("vocabulary_rename_term")
+                                )
+                            }
                             // Switching off and deleting are different acts, so a word of one's own
                             // carries both: kept-but-unused is a state worth being able to reach.
                             IconButton(onClick = {
@@ -147,6 +165,49 @@ fun VocabularySettingsCard(
                     )
                 }
             }
+        }
+
+        renaming?.let { term ->
+            var typed by remember(term) { mutableStateOf(term) }
+            AlertDialog(
+                onDismissRequest = { renaming = null },
+                title = { Text(languageManager.getString("vocabulary_rename_term")) },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = typed,
+                            onValueChange = { typed = it; error = null },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        error?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        scope.launch {
+                            when (val rejection = stateManager.renameVocabularyTerm(vocabulary, term, typed)) {
+                                null -> { renaming = null; error = null }
+                                else -> error = languageManager.getString(
+                                    when (rejection) {
+                                        FieldVocabularies.Rejection.EMPTY -> "vocabulary_rejected_empty"
+                                        FieldVocabularies.Rejection.ALREADY_PRESENT -> "vocabulary_rejected_present"
+                                        FieldVocabularies.Rejection.IN_THE_OTHER_LIST -> "vocabulary_rejected_other_list"
+                                    }
+                                )
+                            }
+                        }
+                    }) { Text(languageManager.getString("save")) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { renaming = null; error = null }) {
+                        Text(languageManager.getString("cancel"))
+                    }
+                }
+            )
         }
 
         // The divider is the delimitation: below it is the supplied list, which behaves differently
