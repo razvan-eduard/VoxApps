@@ -757,5 +757,10 @@
   "delete_forever_confirm_title_one": "Supprimer définitivement %d enregistrement ?",
   "expense_card": "Carte",
   "expense_bank_account": "Compte bancaire",
-  "selection_select_none": "Tout désélectionner"
+  "selection_select_none": "Tout désélectionner",
+  "names_settings_title": "Commerces, banques et formes juridiques",
+  "learn_names_title": "Apprendre les noms des captures",
+  "learn_names_desc": "Un commerce ou une banque lus dans une capture rejoignent les listes ci-dessous, pour que le prochain message qui les nomme soit lu grâce à elles plutôt que déduit à nouveau. Tout ce qui est appris reste visible ici, et peut être désactivé ou supprimé.",
+  "learn_names_notifications": "Depuis les notifications",
+  "learn_names_scans": "Depuis les scans"
 }

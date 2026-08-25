@@ -136,6 +136,30 @@ data class ExpensesSettings(
      */
     val autoCreateAccountsFromScans: Boolean = false,
     val autoCreateAccountsFromNotifications: Boolean = false,
+
+    /**
+     * Whether a shop or a bank a capture read joins the lists this device reads by.
+     *
+     * The counterpart of creating a card from a capture, per route for the same reason: a scan is
+     * something you deliberately photographed, a notification arrives on its own. A name learned
+     * once from a wallet's own title is then recognised inside a bank's sentence, where nothing
+     * else would find it.
+     *
+     * On by default, unlike the accounts: the shop list starts empty and cannot fill itself any
+     * other way, and every entry is visible, switchable and removable.
+     */
+    val learnNamesFromNotifications: Boolean = true,
+    val learnNamesFromScans: Boolean = true,
+
+    /**
+     * Whether a shop a capture read joins the list of shops this device knows.
+     *
+     * The counterpart of creating a card from a capture, and it earns its keep the same way: a name
+     * read once from a wallet's own title is recognised the next time it arrives inside a bank's
+     * sentence, where nothing else would find it. On by default because the list starts empty and
+     * cannot fill itself any other way — every entry is visible, editable and removable.
+     */
+    val learnVendorsFromCaptures: Boolean = true,
     /**
      * The currency a new account is given.
      *

@@ -763,5 +763,10 @@
   "delete_forever_confirm_title_many": "Ștergi definitiv %d de înregistrări?",
   "expense_card": "Card",
   "expense_bank_account": "Cont bancar",
-  "selection_select_none": "Deselectează tot"
+  "selection_select_none": "Deselectează tot",
+  "names_settings_title": "Magazine, bănci și forme juridice",
+  "learn_names_title": "Învață numele din capturi",
+  "learn_names_desc": "Un magazin sau o bancă citite dintr-o captură intră în listele de mai jos, ca următorul mesaj care le numește să fie citit după ele, nu dedus din nou. Tot ce se învață rămâne vizibil aici și poate fi dezactivat sau șters.",
+  "learn_names_notifications": "Din notificări",
+  "learn_names_scans": "Din scanări"
 }

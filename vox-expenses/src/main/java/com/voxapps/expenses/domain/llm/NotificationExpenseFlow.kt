@@ -333,6 +333,7 @@ class NotificationExpenseFlow(
             )
         )
         kept = Kept.RECORD
+        container.expensesStateManager.learnNamesFrom(record.vendor, record.bank, fromScan = false)
         offerWhatWasNotWritten(newId, parsed, headApplied, f?.amount != null)
         // The same link the model path writes, so editing the record still teaches its template.
         f?.templateHash?.let { container.templateDirectionMemory.linkRecord(newId, it) }

@@ -19,6 +19,8 @@ object ExpenseScanCleanupPromptBuilder {
         preParsedCurrency: String? = null,
         preParsedDate: String? = null,
         preParsedTime: String? = null,
+        preParsedVendor: String? = null,
+        preParsedBank: String? = null,
         /**
          * Whether to ask for the product line items at all — set from the configured engine's
          * `long_prompt` capability.
@@ -86,6 +88,20 @@ object ExpenseScanCleanupPromptBuilder {
         val totalJsonField = if (preParsedTotal != null && !includeLineItems) "" else """"totalAmount": 12.5, """
         // Written so that a page which proved nothing produces exactly the paragraph this prompt
         // has always produced — it is tuned against real receipts, and a stray space is drift.
+        // The two the page states as plainly as its figures: a letterhead and a card slip's issuer.
+        // Read from the same lists a message is read by — see CapturedNames — so once either is
+        // settled it leaves the question exactly as the total does.
+        val vendorClause = if (preParsedVendor != null) "" else ", the vendor/store name"
+        val bankClause = if (preParsedBank != null) {
+            ""
+        } else {
+            """,
+            the bank if one is printed (e.g. the card-issuing or acquiring bank shown on a POS/card slip,
+            such as "ING BANK")"""
+        }
+        val vendorJsonField = if (preParsedVendor != null) "" else """"vendor": "...", """
+        val bankJsonField = if (preParsedBank != null) "" else """"bank": "...", """
+
         val settled = buildList {
             preParsedTotal?.let {
                 if (includeLineItems) {
@@ -96,6 +112,12 @@ object ExpenseScanCleanupPromptBuilder {
             }
             preParsedCurrency?.let {
                 add("""The currency is already known with certainty — do NOT extract, guess, or include it.""")
+            }
+            preParsedVendor?.let {
+                add("""The vendor is already known with certainty — do NOT extract, guess, or include one.""")
+            }
+            preParsedBank?.let {
+                add("""The bank is already known with certainty — do NOT extract, guess, or include one.""")
             }
             if (preParsedCurrency == null) {
                 add(
@@ -113,9 +135,7 @@ object ExpenseScanCleanupPromptBuilder {
 
             $instructionBlock
 
-            Extract it into a structured expense record: infer a short title, the vendor/store name,
-            the bank if one is printed (e.g. the card-issuing or acquiring bank shown on a POS/card slip,
-            such as "ING BANK"), the store's printed location if one appears on the receipt (a city name
+            Extract it into a structured expense record: infer a short title$vendorClause$bankClause, the store's printed location if one appears on the receipt (a city name
             is enough — prefer just the city over a full street address; omit/null if no location is
             printed anywhere, never guess or infer one from the vendor name alone)$itemsClause
 
@@ -136,7 +156,7 @@ $itemRules$totalAmountRule
 
             Respond in the "$languageCode" language.
             Return ONLY a JSON object of the shape {"title": "...", $totalJsonField$currencyJsonField
-            "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
+            $vendorJsonField$bankJsonField"location": "...", "category": "...", "date": "YYYY-MM-DD",
             "time": "HH:mm", "direction": "outgoing"$responseShapeItems}, no prose,
             no markdown. Omit/null "bank" and "location" if not printed — never guess either.$noItemsLine$ocrTextBlock
         """.trimIndent()
