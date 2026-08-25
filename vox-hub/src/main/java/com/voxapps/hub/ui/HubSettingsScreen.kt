@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.settings.LogsSettingsTab
 import com.voxapps.design.settings.LogsTabStrings
+import com.voxapps.design.settings.SettingsMenuDescription
 import com.voxapps.design.settings.SettingsSectionCard
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
@@ -146,30 +147,35 @@ fun HubSettingsScreen(
                 SettingsSectionHeader(languageManager.getString("settings_section_general"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("backup_schedule_section")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("backup_schedule_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("theme_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_integrations"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("voxconnect_section")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("voxconnect_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Wifi, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.VOXCONNECT }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_data"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("backup_restore_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("backup_restore_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Restore, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("logs_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                 )

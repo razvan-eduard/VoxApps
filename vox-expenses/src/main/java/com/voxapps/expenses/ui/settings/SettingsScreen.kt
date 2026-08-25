@@ -54,6 +54,7 @@ import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.design.notifications.NotificationSoundPlayer
 import com.voxapps.design.settings.NotificationSettingsCard
+import com.voxapps.design.settings.SettingsMenuDescription
 import com.voxapps.design.settings.SettingsSectionHeader
 import com.voxapps.design.settings.ThemeSettingsScreen
 import com.voxapps.design.settings.ThemeSettingsStrings
@@ -186,75 +187,89 @@ fun SettingsScreen(
                 SettingsSectionHeader(languageManager.getString("settings_section_general"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("general")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("general_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("notifications_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("notifications_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATIONS }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("theme_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.THEME }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_capture"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("voice_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("voice_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Mic, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.VOICE }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("notification_capture_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("notification_capture_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NOTIFICATION_CAPTURE }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("scan_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("scan_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SCANNING }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_data"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("categories_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("categories_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.AutoMirrored.Filled.MergeType, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CATEGORIES }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("expense_cleanup_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("expense_cleanup_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.CleaningServices, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.EXPENSE_CLEANUP }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("currency_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("currency_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.AttachMoney, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CURRENCY }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("names_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("names_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Storefront, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NAMES }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("budget_and_limits_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("budget_and_limits_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Shield, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.SPENDING_LIMITS }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("recurring_payments_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("recurring_payments_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Repeat, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.RECURRING }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("backup_restore_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("backup_restore_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Backup, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.BACKUP }
                 )
                 SettingsSectionHeader(languageManager.getString("settings_section_advanced"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("logs_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("logs_settings_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                 )
@@ -337,21 +352,25 @@ fun SettingsScreen(
             SettingsPage.EXPENSE_CLEANUP -> Column(mod.verticalScroll(rememberScrollState())) {
                 ListItem(
                     headlineContent = { Text(languageManager.getString("cleanup_duplicates_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("cleanup_duplicates_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_DUPLICATES }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("cleanup_corrections_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("cleanup_corrections_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Spellcheck, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_CORRECTIONS }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("cleanup_remap_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("cleanup_remap_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.SwapHoriz, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_REMAP }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("cleanup_templates_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("cleanup_templates_menu_desc")) },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CLEANUP_TEMPLATES }
                 )
