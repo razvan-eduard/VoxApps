@@ -103,6 +103,7 @@ import com.voxapps.design.SpeedDialAction
 import com.voxapps.location.ui.VoxLocationField
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.design.picklist.Picklist
+import com.voxapps.design.picklist.VoxNameDialog
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.Category
@@ -175,6 +176,7 @@ private data class EditSnapshot(
     val comments: String,
     val dateTime: Long,
     val categoryId: Long?,
+    val bankAccountId: Long?,
     val direction: TransactionDirection,
     val items: List<LineItemDraft>
 )
@@ -240,25 +242,15 @@ fun ExpenseEditScreen(
     // device switched off, plus its own.
     val settingsSnapshot by settingsRepository.settingsFlow
         .collectAsStateWithLifecycle(initialValue = ExpensesSettings())
-    // What this device deals with, not everything the recogniser can read: the banks its records
-    // and accounts name, the shops it has paid. The rest of the vocabulary stays one search away —
-    // a bank you are about to meet for the first time is three letters, not seventy-six rows.
-    val banksUsed by stateManager.banksInUse.collectAsStateWithLifecycle(initialValue = emptyList())
-    val vendorsUsed by stateManager.vendorsInUse.collectAsStateWithLifecycle(initialValue = emptyList())
-    val vendorNames = remember(vendorsUsed, settingsSnapshot.customVendors, settingsSnapshot.disabledVendors) {
-        (FieldVocabularies.merge(emptyList(), settingsSnapshot.customVendors, settingsSnapshot.disabledVendors) + vendorsUsed)
-            .distinctBy { it.lowercase() }.sorted()
-    }
-    val bankNames = remember(banksUsed, settingsSnapshot.customBanks) {
-        (banksUsed + settingsSnapshot.customBanks).distinctBy { it.lowercase() }.sorted()
-    }
-    val banksKnown = remember(settingsSnapshot.customBanks, settingsSnapshot.disabledBanks) {
-        FieldVocabularies.merge(
-            FieldVocabularies.provided(context).banks,
-            settingsSnapshot.customBanks,
-            settingsSnapshot.disabledBanks
-        )
-    }
+    var bankAccountId by remember { mutableStateOf(existing?.expense?.bankAccountId) }
+    val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    // Archived ones still hold their records and still answer for a message that names their digits;
+    // what they stop doing is being offered, which is the whole meaning of archiving one.
+    val accountsOffered = remember(accounts) { accounts.filter { !it.archived } }
+    val names = rememberFieldNameLists(stateManager, settingsSnapshot)
+    val vendorNames = names.vendors
+    val bankNames = names.banks
+    val banksKnown = names.banksKnown
     var location by remember { mutableStateOf(existing?.expense?.location ?: "") }
     // New expense only (never overrides a real edit) — resolveCurrentCity's own first step is a
     // synchronous cache check, so this resolves near-instantly when a fresh city is already cached,
@@ -442,10 +434,10 @@ fun ExpenseEditScreen(
     // actually anything to prompt about — closing an untouched screen (just viewing, or a
     // freshly-created blank draft) shouldn't interrupt with a dialog.
     val initialSnapshot = remember {
-        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, direction, items.toList())
+        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList())
     }
     fun isDirty(): Boolean =
-        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, direction, items.toList()) != initialSnapshot ||
+        EditSnapshot(title, totalText, currency, vendor, bank, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList()) != initialSnapshot ||
             // A pending suggestion row surviving means there's still something Discard needs to
             // clear even if no field's been touched — a chip left untapped changes no local value,
             // so the diff above alone would silently miss it (the exact bug: chips visible, back
@@ -503,6 +495,7 @@ fun ExpenseEditScreen(
             dateTime = dateTime,
             comments = comments,
             categoryId = categoryId,
+            bankAccountId = bankAccountId,
             direction = direction,
             isStub = false,
             // Whatever was edited is the editor's from now on: a value a person changed carries no
@@ -669,6 +662,23 @@ fun ExpenseEditScreen(
                         extraWhileSearching = banksKnown,
                         actionLabel = languageManager.getString("account_bank_new"),
                         onAction = { namingBank = true }
+                    )
+                    // Which card or account the money moved through. A capture fills this in when a
+                    // message names one it recognises; where nothing did, this is where a person
+                    // says so — and the record stops being counted as one that never found its card.
+                    Text(
+                        languageManager.getString("account_filter_label"),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Picklist(
+                        items = accountsOffered,
+                        selected = accountsOffered.firstOrNull { it.id == bankAccountId },
+                        itemLabel = { it.displayName() },
+                        onSelect = { bankAccountId = it.id },
+                        noneLabel = languageManager.getString("none"),
+                        onNoneSelected = { bankAccountId = null },
+                        searchPlaceholder = languageManager.getString("filter_search_hint")
                     )
                     // Search-first entry (OpenStreetMap place search + GPS lock). The GPS lambda
                     // routes through resolveCurrentCityName — live fix, then the TTL'd cache,
@@ -983,66 +993,32 @@ fun ExpenseEditScreen(
     }
 
     if (namingVendor) {
-        var typedVendor by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { namingVendor = false },
-            title = { Text(languageManager.getString("expense_vendor_new")) },
-            text = {
-                OutlinedTextField(
-                    value = typedVendor,
-                    onValueChange = { typedVendor = it },
-                    label = { Text(languageManager.getString("expense_vendor")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+        VoxNameDialog(
+            title = languageManager.getString("expense_vendor_new"),
+            label = languageManager.getString("expense_vendor"),
+            saveLabel = languageManager.getString("save"),
+            cancelLabel = languageManager.getString("cancel"),
+            onNamed = { named ->
+                vendor = named
+                bankScope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, named) }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val named = typedVendor.trim()
-                        vendor = named
-                        bankScope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, named) }
-                        namingVendor = false
-                    },
-                    enabled = typedVendor.isNotBlank()
-                ) { Text(languageManager.getString("save")) }
-            },
-            dismissButton = {
-                TextButton(onClick = { namingVendor = false }) { Text(languageManager.getString("cancel")) }
-            }
+            onDismiss = { namingVendor = false }
         )
     }
 
     if (namingBank) {
         // Added to the vocabulary as well as to this record: a bank named here is one a later
         // notification can be read by, which is the whole reason it is a list and not a text field.
-        var typedBank by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { namingBank = false },
-            title = { Text(languageManager.getString("account_bank_new")) },
-            text = {
-                OutlinedTextField(
-                    value = typedBank,
-                    onValueChange = { typedBank = it },
-                    label = { Text(languageManager.getString("expense_bank")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+        VoxNameDialog(
+            title = languageManager.getString("account_bank_new"),
+            label = languageManager.getString("expense_bank"),
+            saveLabel = languageManager.getString("save"),
+            cancelLabel = languageManager.getString("cancel"),
+            onNamed = { named ->
+                bank = named
+                bankScope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, named) }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val named = typedBank.trim()
-                        bank = named
-                        bankScope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, named) }
-                        namingBank = false
-                    },
-                    enabled = typedBank.isNotBlank()
-                ) { Text(languageManager.getString("save")) }
-            },
-            dismissButton = {
-                TextButton(onClick = { namingBank = false }) { Text(languageManager.getString("cancel")) }
-            }
+            onDismiss = { namingBank = false }
         )
     }
 
