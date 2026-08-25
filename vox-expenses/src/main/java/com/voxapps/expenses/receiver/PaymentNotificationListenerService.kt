@@ -106,6 +106,11 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val container = (applicationContext as ExpensesApplication).container
         val settings = container.settingsRepository.getSnapshot()
         if (sbn.packageName !in settings.paymentSourcePackages) return
+        // A group summary is a container, not a message. The OS posts one whenever several
+        // notifications from the same app pile up, and it carries their count rather than their
+        // text — so reading it as a capture reads nothing, every time, and the discard it produces
+        // is indistinguishable in a log from a real message that could not be read.
+        if (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (!force && processedKeys.isProcessed(sbn.key)) return
 
         val extras = sbn.notification.extras
