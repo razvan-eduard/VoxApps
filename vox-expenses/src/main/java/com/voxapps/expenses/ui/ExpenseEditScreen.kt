@@ -449,7 +449,15 @@ fun ExpenseEditScreen(
     // actually anything to prompt about — closing an untouched screen (just viewing, or a
     // freshly-created blank draft) shouldn't interrupt with a dialog.
     val initialSnapshot = remember {
-        EditSnapshot(title, totalText, currency, vendor, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList())
+        EditSnapshot(
+            title, totalText, currency, vendor, location, comments, dateTime, categoryId,
+            // The record's own pointer, not the state derived from it. The accounts arrive from a
+            // flow that starts empty, so on the first composition the two fields below it are still
+            // null; taking them as the baseline would mean the list arriving a frame later counts
+            // as an edit, and a screen nobody touched asks whether to discard.
+            existing?.expense?.bankAccountId,
+            direction, items.toList()
+        )
     }
     fun isDirty(): Boolean =
         EditSnapshot(title, totalText, currency, vendor, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList()) != initialSnapshot ||
