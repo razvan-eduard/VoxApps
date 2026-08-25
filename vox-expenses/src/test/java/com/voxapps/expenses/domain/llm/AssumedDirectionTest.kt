@@ -58,10 +58,11 @@ class AssumedDirectionTest {
     @Test
     fun `the assumption is the last resort, never the first`() {
         val text = flowSource()
-        val written = text.indexOf("direction = parsed?.direction")
+        // `head` is the answer where this rung lets it apply — see the flow's commit.
+        val written = text.indexOf("direction = head?.direction")
         assertTrue("the record has to name its direction rather than take a type default", written > 0)
 
-        val fromModel = text.indexOf("parsed?.direction", written)
+        val fromModel = text.indexOf("head?.direction", written)
         val fromTemplate = text.indexOf("f?.direction", written)
         val fromSetting = text.indexOf("assumedDirection()", written)
         assertTrue("a taught direction must be preferred to an assumed one", fromTemplate < fromSetting)

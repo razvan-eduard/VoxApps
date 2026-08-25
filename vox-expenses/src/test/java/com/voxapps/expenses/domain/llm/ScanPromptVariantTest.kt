@@ -18,12 +18,14 @@ class ScanPromptVariantTest {
 
     private fun full(preParsedDate: String? = null, preParsedTime: String? = null) =
         ExpenseScanCleanupPromptBuilder.build(
-            ocr, categories, "RON", "en", preParsedDate, preParsedTime, includeLineItems = true
+            ocr, categories, "RON", "en",
+            preParsedDate = preParsedDate, preParsedTime = preParsedTime, includeLineItems = true
         )
 
     private fun headerOnly(preParsedDate: String? = null, preParsedTime: String? = null) =
         ExpenseScanCleanupPromptBuilder.build(
-            ocr, categories, "RON", "en", preParsedDate, preParsedTime, includeLineItems = false
+            ocr, categories, "RON", "en",
+            preParsedDate = preParsedDate, preParsedTime = preParsedTime, includeLineItems = false
         )
 
     /** Trailing spaces at line ends are the one difference allowed: the editor strips them on save,
@@ -78,5 +80,41 @@ class ScanPromptVariantTest {
         val prompt = headerOnly("2026-08-15", "12:30")
         assertTrue(prompt.contains("EXTRACT ONLY the vendor name, bank (if printed), total amount."))
         assertFalse(prompt.contains("and line items"))
+    }
+
+    /**
+     * The reason the reading runs first: what the page proved never becomes a question.
+     *
+     * The one exception is a request that also asks for the rows. There the printed total is the
+     * anchor the rows are made to sum to — the arithmetic that makes the offline rung real — so it
+     * stays in the prompt, stated as known rather than asked for.
+     */
+    @Test
+    fun `a proved figure leaves the question`() {
+        val asked = ExpenseScanCleanupPromptBuilder.build(
+            ocr, categories, "RON", "en", includeLineItems = false
+        )
+        assertTrue("with nothing proved it still asks", asked.contains("\"totalAmount\""))
+        assertTrue(asked.contains("Use \"RON\" as the currency"))
+
+        val settled = ExpenseScanCleanupPromptBuilder.build(
+            ocr, categories, "RON", "en",
+            preParsedTotal = 33.99, preParsedCurrency = "RON", includeLineItems = false
+        )
+        assertTrue(settled.contains("total is already known"))
+        assertTrue(settled.contains("currency is already known"))
+        assertFalse("the keys leave the shape", settled.contains("\"totalAmount\""))
+        assertFalse(settled.contains("\"currency\""))
+        assertFalse("and it stops offering a default to echo", settled.contains("Use \"RON\" as the currency"))
+    }
+
+    /** With the rows asked for, the total is the anchor — it stays, as a statement. */
+    @Test
+    fun `a request for rows keeps the total as the figure they must sum to`() {
+        val withItems = ExpenseScanCleanupPromptBuilder.build(
+            ocr, categories, "RON", "en", preParsedTotal = 33.99, includeLineItems = true
+        )
+        assertTrue(withItems.contains("own total is 33.99"))
+        assertTrue("the rows still need somewhere to go", withItems.contains("\"totalAmount\""))
     }
 }

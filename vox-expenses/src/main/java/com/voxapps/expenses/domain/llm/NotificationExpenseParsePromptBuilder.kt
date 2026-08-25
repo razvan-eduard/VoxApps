@@ -34,6 +34,9 @@ object NotificationExpenseParsePromptBuilder {
         // model's job entirely — same discipline as the scan prompt's date/total bypass: a field
         // the reply must not carry is a field the model cannot invert.
         preParsedAmount: Double? = null,
+        /** The currency the message itself stated. Settled, so never asked for — see the clause it
+         *  builds below. */
+        preParsedCurrency: String? = null,
         preParsedVendor: String? = null,
         // "outgoing"/"incoming" inherited from the template memory — a human already classified
         // this exact template, so the model is not asked to.
@@ -149,6 +152,21 @@ object NotificationExpenseParsePromptBuilder {
             amountJsonField = """, "totalAmount": 12.5"""
         }
 
+        // A message almost never states a figure without saying what it is a figure of, so the
+        // currency is usually settled before the question is written. Asked anyway, it is a key the
+        // model can only echo — and one more thing it can get wrong.
+        val currencyClause: String
+        val currencyJsonField: String
+        if (preParsedCurrency != null) {
+            currencyClause = """ The currency is already known with certainty — do NOT extract,
+            guess, or include a currency."""
+            currencyJsonField = ""
+        } else {
+            currencyClause = """ Use "$defaultCurrency" as the currency unless a different one is
+            clearly stated."""
+            currencyJsonField = """"currency": "..."""
+        }
+
         val directionClause: String
         val directionJsonField: String
         if (preParsedDirection != null) {
@@ -201,6 +219,7 @@ object NotificationExpenseParsePromptBuilder {
         // prompt already guards against elsewhere.
         val exampleFields = buildList {
             if (preParsedAmount != null) add("totalAmount")
+            if (preParsedCurrency != null) add("currency")
             if (preParsedVendor != null) { add("vendor"); add("title") }
             if (preParsedDirection != null) add("direction")
         }
@@ -225,14 +244,13 @@ object NotificationExpenseParsePromptBuilder {
 $triageBlock
             $bankLine
             If it DOES describe a real transaction, extract it into a structured expense record: infer
-            a short title$vendorClause$amountClause. Use "$defaultCurrency" as the currency
-            unless a different one is clearly stated.$directionClause Also suggest a
+            a short title$vendorClause$amountClause.$currencyClause$directionClause Also suggest a
             category based on the content.
             $categoriesLine If one of the existing categories fits, copy that name verbatim,
             character-for-character — never invent a new spelling, translation, capitalization, or
             diacritics for it. Only suggest a new category name if none of the existing ones fit.
             Respond in the "$languageCode" language. Return ONLY a JSON object, no prose, no markdown,
-            of the shape {$isPaymentJsonField$titleJsonField"currency": "..."$amountJsonField$vendorJsonField$directionJsonField, "category": "..."$bankJsonField}$notPaymentAlternative.
+            of the shape {$isPaymentJsonField$titleJsonField$currencyJsonField$amountJsonField$vendorJsonField$directionJsonField, "category": "..."$bankJsonField}$notPaymentAlternative.
 
             $cleanedExamples
 

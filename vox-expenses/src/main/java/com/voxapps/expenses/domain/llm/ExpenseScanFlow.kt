@@ -87,6 +87,14 @@ class ExpenseScanFlow(
             categories,
             settings.defaultCurrency,
             settings.language,
+            // What the page's own characters settled, kept out of the question — see the builder.
+            preParsedTotal = reading.fields.reading.totals.total ?: reading.fields.reading.totals.invoiceTotal,
+            preParsedCurrency = com.voxapps.textmatch.extract.CurrencyCodes.find(
+                plainText,
+                settings.knownCurrencies(
+                    container.expensesRepository.bankAccounts.first().map { it.currencyCode }
+                )
+            ),
             preParsedDate = dateTime.date,
             preParsedTime = dateTime.time,
             // Two independent reasons to leave the item half out, and either is enough: this rung

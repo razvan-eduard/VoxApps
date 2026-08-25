@@ -1,5 +1,6 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.expenses.data.ExpenseSuggestionTarget
 import android.content.Context
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseSource
@@ -154,11 +155,14 @@ class NotificationExpenseFlow(
             notificationTitle = f.title,
             notificationText = f.text,
             existingCategories = existingCategories,
-            defaultCurrency = f.currency ?: settings.defaultCurrency,
+            // The fallback for a message that stated none; what it did state is suppressed below
+            // rather than handed over as a default to echo.
+            defaultCurrency = settings.defaultCurrency,
             languageCode = settings.language,
             knownBankName = f.bank,
             isLocalEngine = VoxCapabilityClient.isLocalEngine(context.applicationContext),
             preParsedAmount = f.amount,
+            preParsedCurrency = f.currency,
             preParsedVendor = f.vendor,
             preParsedDirection = f.direction?.toJsonValue(),
             preKnownPayment = f.knownPayment
@@ -195,6 +199,36 @@ class NotificationExpenseFlow(
         }
 
     /**
+     * What the answer said and the record did not take.
+     *
+     * A rung that writes none of the answer still heard it, and throwing it away would make the
+     * round trip pointless — so it waits on the record as a chip somebody can accept. The amount is
+     * offered only where the message itself proved none: where it did, the answer is not a second
+     * opinion worth showing, it is a misreading of a number that was already legible.
+     */
+    private suspend fun offerWhatWasNotWritten(
+        recordId: Long,
+        parsed: NotificationExpenseParseResultParser.Parsed?,
+        headApplied: Boolean,
+        amountProved: Boolean
+    ) {
+        if (parsed == null || (headApplied && amountProved)) return
+        val offerHead = !headApplied
+        container.suggestionStore.offer(
+            recordId,
+            mapOf(
+                ExpenseSuggestionTarget.KEY_TITLE to parsed.title.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_VENDOR to parsed.vendor.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_BANK to parsed.bank.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_CATEGORY to parsed.category.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_CURRENCY to parsed.currency.takeIf { offerHead },
+                ExpenseSuggestionTarget.KEY_AMOUNT to parsed.totalAmount
+                    ?.takeIf { amountProved }?.toString()
+            ).filterValues { it != null }
+        )
+    }
+
+    /**
      * Nothing here is deliberate on anyone's part — no one pressed anything — so a record is only
      * ever written where the person has already said what this kind of message means, and asked for
      * those to be filed.
@@ -210,16 +244,24 @@ class NotificationExpenseFlow(
         val settings = container.settingsRepository.getSnapshot()
         val f = reading?.fields
         val category = container.expensesRepository.defaultCategory()
-        // One record shape, whether the fields came from the page's own characters or from an
+        // Which side this rung trusts for the names — the same gate the scan honours. A level that
+        // says "send everything, write nothing" has to mean it here too: the answer arrives, and
+        // what it says goes to the record only where it applies, otherwise it is offered.
+        val headApplied = applies(FieldWeight.HEAD)
+        val head = parsed?.takeIf { headApplied }
+        // One record shape, whether the fields came from the message's own characters or from an
         // answer — the writing path is the same one every other capture goes through.
         val record = ExpenseParseResultParser.Parsed(
-            title = parsed?.title.orRead(title(f?.vendor, f?.bank, category?.name)),
-            totalAmount = parsed?.totalAmount ?: f?.amount ?: return null,
-            currency = f?.currency.orRead(parsed?.currency.orRead(settings.defaultCurrency)),
-            vendor = parsed?.vendor.orRead(f?.vendor),
-            bank = knownBank.orRead(parsed?.bank.orRead(f?.bank)),
+            title = head?.title.orRead(title(f?.vendor, f?.bank, category?.name)),
+            // What the characters proved outranks what was answered. The figure is the most
+            // certain thing a message carries — one number, under a rule that refuses anything
+            // ambiguous — so a model that read it differently read it wrong.
+            totalAmount = f?.amount ?: parsed?.totalAmount ?: return null,
+            currency = f?.currency.orRead(head?.currency.orRead(settings.defaultCurrency)),
+            vendor = head?.vendor.orRead(f?.vendor),
+            bank = knownBank.orRead(head?.bank.orRead(f?.bank)),
             location = null,
-            category = parsed?.category.orRead(category?.name),
+            category = head?.category.orRead(category?.name),
             date = null,
             time = null,
             items = emptyList(),
@@ -227,7 +269,7 @@ class NotificationExpenseFlow(
             // direction the model returned, then one a person taught for this shape, then the
             // assumption — and if there is none, the type's own default stands, which is the case
             // this flow only reaches for a shape already confirmed as outgoing.
-            direction = parsed?.direction
+            direction = head?.direction
                 ?: f?.direction
                 ?: assumedDirection()
                 ?: TransactionDirection.OUTGOING
@@ -281,16 +323,17 @@ class NotificationExpenseFlow(
                     if (f?.bank != null || knownBank != null) add(ExpenseOrigins.FIELD_BANK)
                 },
                 FieldOrigin.ANSWERED to buildSet {
-                    if (parsed?.title != null && f?.vendor == null) add(ExpenseOrigins.FIELD_TITLE)
+                    if (head?.title != null && f?.vendor == null) add(ExpenseOrigins.FIELD_TITLE)
                     if (f?.amount == null && parsed?.totalAmount != null) add(ExpenseOrigins.FIELD_AMOUNT)
-                    if (f?.currency == null && parsed?.currency != null) add(ExpenseOrigins.FIELD_CURRENCY)
-                    if (f?.vendor == null && parsed?.vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
-                    if (f?.bank == null && knownBank == null && parsed?.bank != null) add(ExpenseOrigins.FIELD_BANK)
-                    if (parsed?.category != null) add(ExpenseOrigins.FIELD_CATEGORY)
+                    if (f?.currency == null && head?.currency != null) add(ExpenseOrigins.FIELD_CURRENCY)
+                    if (f?.vendor == null && head?.vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
+                    if (f?.bank == null && knownBank == null && head?.bank != null) add(ExpenseOrigins.FIELD_BANK)
+                    if (head?.category != null) add(ExpenseOrigins.FIELD_CATEGORY)
                 }
             )
         )
         kept = Kept.RECORD
+        offerWhatWasNotWritten(newId, parsed, headApplied, f?.amount != null)
         // The same link the model path writes, so editing the record still teaches its template.
         f?.templateHash?.let { container.templateDirectionMemory.linkRecord(newId, it) }
         Logger.d(
