@@ -91,7 +91,9 @@ class ExpensesExportImportHandler(
         if (scope != VoxIpc.EXPORT_SCOPE_SETTINGS) {
             val categories = expensesRepo.categories.first()
             val spendingLimits = expensesRepo.spendingLimits.first()
-            val expensesWithDetails = expensesRepo.expensesWithDetails.first()
+            // The archive too: a backup that kept only the ledger would destroy everything somebody
+            // put away, on the one operation whose entire purpose is losing nothing.
+            val expensesWithDetails = expensesRepo.allWithDetails.first()
             val remapRules = expensesRepo.remapRulesSnapshot()
             json.put("categories", JSONArray(categories.map { it.toJson() }))
             json.put("spendingLimits", JSONArray(spendingLimits.map { it.toJson() }))
@@ -432,7 +434,8 @@ class ExpensesExportImportHandler(
 
         var expensesCreated = 0
         if (root.has("expenses")) {
-            val preExistingExpenses = expensesRepo.expensesSnapshot()
+            // Archived rows included, or a restore would re-create every one of them as new.
+            val preExistingExpenses = expensesRepo.allExpensesSnapshot()
             val importedExpenses = root.optJSONArray("expenses") ?: JSONArray()
 
             expensesCreated = VoxSnapshotReplaceImporter.restore(
@@ -488,7 +491,8 @@ class ExpensesExportImportHandler(
                         // blocked by this check (RecordSource.HUB_IMPORT: another install's already-validated data).
                         checkForDuplicate = false,
                         source = e.optExpenseSource(),
-                        manuallyEdited = e.optBoolean("manuallyEdited", false)
+                        manuallyEdited = e.optBoolean("manuallyEdited", false),
+                        archivedAt = e.optLong("archivedAt").takeIf { e.has("archivedAt") && !e.isNull("archivedAt") }
                     )
                     if (newExpenseId > 0) {
                         attachmentDao.restoreFromBackup(
@@ -661,6 +665,7 @@ private fun Expense.toJson(items: List<ExpenseLineItem>, attachments: List<Attac
     put("createdAt", createdAt)
     put("source", source.name)
     put("manuallyEdited", manuallyEdited)
+    put("archivedAt", archivedAt)
     put("items", JSONArray(items.map { it.toJson() }))
     put("attachments", JSONArray(attachments.map { it.toBackupJson() }))
 }

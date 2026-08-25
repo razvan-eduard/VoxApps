@@ -83,6 +83,7 @@ interface ExpensesSettingsRepository {
     suspend fun setAutoAcceptDuplicateMerges(enabled: Boolean)
     suspend fun setAutomaticProtectionReviewOnly(enabled: Boolean)
     suspend fun setNearDuplicateTimeWindowMinutes(minutes: Int)
+    suspend fun setArchiveRetentionDays(days: Int)
     suspend fun setDuplicateRuleSetGlobalCombinator(combinator: String)
     suspend fun setRemapProposalsEnabled(enabled: Boolean)
     suspend fun setRemapLearningSpeed(count: Int)

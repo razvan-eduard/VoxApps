@@ -6,6 +6,7 @@ import com.voxapps.ipc.VoxLlmQueueHost
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.docread.ReceiptTemplates
 import com.voxapps.expenses.di.ExpensesContainer
+import com.voxapps.expenses.domain.archive.ArchivePurgeScheduler
 import com.voxapps.expenses.domain.limits.SpendingLimitScheduler
 import com.voxapps.expenses.domain.recurring.RecurringPaymentScheduler
 import com.voxapps.expenses.domain.llm.CategoryAutoMergeScheduler
@@ -49,6 +50,7 @@ class ExpensesApplication : Application(), VoxLlmQueueHost {
         CategoryAutoMergeScheduler.reschedule(this, settingsSnapshot.scheduledMergeInterval)
         ExpenseDeduplicationScheduler.reschedule(this, settingsSnapshot.scheduledExpenseDedupInterval)
         SpendingLimitScheduler.ensureScheduled(this)
+        ArchivePurgeScheduler.ensureScheduled(this)
         RecurringPaymentScheduler.ensureScheduled(this)
         PendingLlmRequestScheduler.ensureScheduled(this)
         WidgetMidnightRefreshScheduler.ensureScheduled(this)

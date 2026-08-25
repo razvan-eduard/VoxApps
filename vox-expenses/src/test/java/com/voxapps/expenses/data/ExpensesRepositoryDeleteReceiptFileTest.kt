@@ -171,6 +171,8 @@ class ExpensesRepositoryDeleteReceiptFileTest {
         )
         coEvery { expenseDao.observeAll() } returns flowOf(expenses)
         coEvery { expenseDao.getAll() } returns expenses
+        // Deleting everything means the archive too, so it is the unfiltered read that answers here.
+        coEvery { expenseDao.getAllIncludingArchived() } returns expenses
 
         repository.deleteAllExpenses()
 

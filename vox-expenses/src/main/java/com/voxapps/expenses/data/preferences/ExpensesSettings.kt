@@ -296,6 +296,15 @@ data class ExpensesSettings(
     /** Minutes, not millis — converted at the point of use. Applies wherever a rule references
      *  [com.voxapps.expenses.data.ExpenseRuleFields.ID_DATE_TIME] — see that class's doc comment. */
     val nearDuplicateTimeWindowMinutes: Int = NEAR_DUP_DEFAULT_WINDOW_MINUTES,
+
+    /**
+     * How long the archive keeps a record before deleting it, in days.
+     *
+     * [ARCHIVE_KEEP_FOREVER] by default, and deliberately: archiving is what somebody does *instead*
+     * of deleting, and a fresh install that quietly started destroying those records after a month
+     * would be answering a question nobody asked it.
+     */
+    val archiveRetentionDays: Int = ARCHIVE_KEEP_FOREVER,
     /** How the user's [com.voxapps.expenses.data.DuplicateRuleEntity] rules combine — [MODE_LOCAL]'s
      *  duplicate check is a match if ANY enabled rule matches ([RULE_SET_OR], the default — matches
      *  the seeded default rules' own intent, "same amount+title" OR "same amount+vendor") or only if
@@ -538,6 +547,13 @@ data class ExpensesSettings(
         const val NEAR_DUP_WINDOW_10M = 10
         const val NEAR_DUP_WINDOW_15M = 15
         const val NEAR_DUP_DEFAULT_WINDOW_MINUTES = NEAR_DUP_WINDOW_2M
+
+        /** The archive deletes nothing on its own — see [archiveRetentionDays]. */
+        const val ARCHIVE_KEEP_FOREVER = 0
+
+        /** What the archive can be told to keep things for. Days throughout, so one number means
+         *  one thing wherever it is read. */
+        val ARCHIVE_RETENTION_CHOICES = listOf(ARCHIVE_KEEP_FOREVER, 30, 90, 180, 365)
 
         const val RULE_SET_OR = "OR"
         const val RULE_SET_AND = "AND"

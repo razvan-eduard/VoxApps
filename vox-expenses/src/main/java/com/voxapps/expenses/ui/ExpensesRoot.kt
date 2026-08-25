@@ -72,6 +72,7 @@ fun ExpensesRoot(
                 var showSettings by remember { mutableStateOf(false) }
                 var settingsStartPage by remember { mutableStateOf<SettingsPage?>(null) }
                 var showReports by remember { mutableStateOf(false) }
+                var showArchive by remember { mutableStateOf(false) }
                 var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
                 // Widget "Add" tap — set even while locked; once ExpensesUiState transitions to
@@ -150,6 +151,11 @@ fun ExpensesRoot(
                                 onBack = { showSettings = false; settingsStartPage = null },
                                 startPage = settingsStartPage
                             )
+                            showArchive -> ArchiveScreen(
+                                stateManager = container.expensesStateManager,
+                                retentionDays = settings.archiveRetentionDays,
+                                onBack = { showArchive = false }
+                            )
                             showReports -> ReportsScreen(
                                 expenses = state.expenses,
                                 state = state,
@@ -168,6 +174,7 @@ fun ExpensesRoot(
                                 onOpenSettings = { showSettings = true },
                                 onOpenSettingsAt = { page -> settingsStartPage = page; showSettings = true },
                                 onOpenReports = { showReports = true },
+                                onOpenArchive = { showArchive = true },
                                 todayEffect = settings.todayEffect.toEnumOr(TodayEffect.NONE),
                                 todayEffectStyle = settings.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
                                 todayEffectPrimaryColor = Color(settings.todayEffectColor.toInt()),

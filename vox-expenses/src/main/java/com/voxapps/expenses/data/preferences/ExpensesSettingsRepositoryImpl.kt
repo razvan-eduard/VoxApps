@@ -97,6 +97,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val AUTO_ACCEPT_DUPLICATE_MERGES = booleanPreferencesKey("auto_accept_duplicate_merges")
         val AUTOMATIC_PROTECTION_REVIEW_ONLY = booleanPreferencesKey("automatic_protection_review_only")
         val NEAR_DUPLICATE_TIME_WINDOW_MINUTES = intPreferencesKey("near_duplicate_time_window_minutes")
+        val ARCHIVE_RETENTION_DAYS = intPreferencesKey("archive_retention_days")
         val DUPLICATE_RULE_SET_GLOBAL_COMBINATOR = stringPreferencesKey("duplicate_rule_set_global_combinator")
         val REMAP_PROPOSALS_ENABLED = booleanPreferencesKey("merchant_category_memory_enabled")
         val REMAP_LEARNING_SPEED = intPreferencesKey("remap_learning_speed")
@@ -203,6 +204,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             automaticProtectionReviewOnly = prefs[Keys.AUTOMATIC_PROTECTION_REVIEW_ONLY] ?: false,
             nearDuplicateTimeWindowMinutes = prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES]
                 ?: ExpensesSettings.NEAR_DUP_DEFAULT_WINDOW_MINUTES,
+            archiveRetentionDays = prefs[Keys.ARCHIVE_RETENTION_DAYS]
+                ?: ExpensesSettings.ARCHIVE_KEEP_FOREVER,
             duplicateRuleSetGlobalCombinator = prefs[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR]
                 ?: ExpensesSettings.RULE_SET_OR,
             remapProposalsEnabled = prefs[Keys.REMAP_PROPOSALS_ENABLED] ?: false,
@@ -512,6 +515,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = minutes }
     }
 
+    override suspend fun setArchiveRetentionDays(days: Int) {
+        dataStore.edit { it[Keys.ARCHIVE_RETENTION_DAYS] = days }
+    }
+
     override suspend fun setDuplicateRuleSetGlobalCombinator(combinator: String) {
         dataStore.edit { it[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR] = combinator }
     }
@@ -668,6 +675,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.AUTO_ACCEPT_DUPLICATE_MERGES] = settings.autoAcceptDuplicateMerges
             prefs[Keys.AUTOMATIC_PROTECTION_REVIEW_ONLY] = settings.automaticProtectionReviewOnly
             prefs[Keys.NEAR_DUPLICATE_TIME_WINDOW_MINUTES] = settings.nearDuplicateTimeWindowMinutes
+            prefs[Keys.ARCHIVE_RETENTION_DAYS] = settings.archiveRetentionDays
             prefs[Keys.DUPLICATE_RULE_SET_GLOBAL_COMBINATOR] = settings.duplicateRuleSetGlobalCombinator
             prefs[Keys.REMAP_PROPOSALS_ENABLED] = settings.remapProposalsEnabled
             prefs[Keys.REMAP_LEARNING_SPEED] = settings.remapLearningSpeed
