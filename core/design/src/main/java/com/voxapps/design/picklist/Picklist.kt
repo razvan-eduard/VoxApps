@@ -82,6 +82,15 @@ fun <T> Picklist(
     /** A swatch, an icon — whatever marks a row out. The colour dot beside a category is the case
      *  this exists for; a list of plain names passes nothing. */
     itemLeading: (@Composable (T) -> Unit)? = null,
+    /**
+     * A second line under the label, quieter than it — an account's IBAN under its name, a card's
+     * masked number under its alias.
+     *
+     * For what identifies a row rather than what it is called: numbers are what you check a row
+     * against and what you would search for, so they are matched by the search box too, but they are
+     * not what you read a list by.
+     */
+    itemSubtitle: ((T) -> String?)? = null,
     anchor: @Composable (label: String, onClick: () -> Unit) -> Unit = { label, onClick ->
         PicklistButtonAnchor(label, onClick)
     },
@@ -135,7 +144,9 @@ fun <T> Picklist(
         if (query.isBlank()) items
         else {
             val q = query.trim()
-            val matched = items.filter { itemLabel(it).contains(q, ignoreCase = true) }
+            fun matches(item: T) = itemLabel(item).contains(q, ignoreCase = true) ||
+                itemSubtitle?.invoke(item)?.contains(q, ignoreCase = true) == true
+            val matched = items.filter { matches(it) }
             val known = matched.map { itemLabel(it).lowercase() }.toSet()
             matched + extraWhileSearching.filter {
                 itemLabel(it).contains(q, ignoreCase = true) && itemLabel(it).lowercase() !in known
@@ -157,6 +168,7 @@ fun <T> Picklist(
             val enabled = itemEnabled(item)
             PicklistRow(
                 text = itemLabel(item) + if (enabled) itemNote(item) else disabledSuffix(item),
+                subtitle = itemSubtitle?.invoke(item),
                 enabled = enabled,
                 leading = itemLeading?.let { leading -> { leading(item) } }
             ) { if (enabled) { onSelect(item); close() } }
@@ -293,6 +305,7 @@ private fun PicklistRow(
     text: String,
     enabled: Boolean = true,
     leading: (@Composable () -> Unit)? = null,
+    subtitle: String? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -304,10 +317,19 @@ private fun PicklistRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         leading?.invoke()
-        Text(
-            text = text,
-            color = if (enabled) LocalContentColor.current
-            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        )
+        Column {
+            Text(
+                text = text,
+                color = if (enabled) LocalContentColor.current
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
+            subtitle?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
