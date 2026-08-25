@@ -13,6 +13,10 @@ object ExpenseScanCleanupPromptBuilder {
         existingCategories: List<String>,
         defaultCurrency: String,
         languageCode: String,
+        /** What the page itself proved. Anything settled here leaves the question entirely — the
+         *  whole reason the reading runs first is to hand the model less, not to check its work. */
+        preParsedTotal: Double? = null,
+        preParsedCurrency: String? = null,
         preParsedDate: String? = null,
         preParsedTime: String? = null,
         /**
@@ -70,7 +74,37 @@ object ExpenseScanCleanupPromptBuilder {
         // and to the item-free wording when they are not.
         val itemsClause = if (includeLineItems) ITEMS_CLAUSE else "."
         val itemRules = if (includeLineItems) ITEM_RULES else ""
-        val totalAmountRule = if (includeLineItems) TOTAL_RULE_WITH_ITEMS else TOTAL_RULE_NO_ITEMS
+        // A figure the page proved is not a question. The one exception is a request that also asks
+        // for the rows: there the printed total is the anchor the rows are made to sum to, so it
+        // stays in the prompt — stated as known rather than asked for.
+        val totalAmountRule = when {
+            includeLineItems -> TOTAL_RULE_WITH_ITEMS
+            preParsedTotal != null -> ""
+            else -> TOTAL_RULE_NO_ITEMS
+        }
+        val currencyJsonField = if (preParsedCurrency != null) "" else """"currency": "...", """
+        val totalJsonField = if (preParsedTotal != null && !includeLineItems) "" else """"totalAmount": 12.5, """
+        // Written so that a page which proved nothing produces exactly the paragraph this prompt
+        // has always produced — it is tuned against real receipts, and a stray space is drift.
+        val settled = buildList {
+            preParsedTotal?.let {
+                if (includeLineItems) {
+                    add("""The document's own total is $it — the rows you return must sum to it.""")
+                } else {
+                    add("""The total is already known with certainty — do NOT extract, guess, or include it.""")
+                }
+            }
+            preParsedCurrency?.let {
+                add("""The currency is already known with certainty — do NOT extract, guess, or include it.""")
+            }
+            if (preParsedCurrency == null) {
+                add(
+                    """Use "$defaultCurrency" as the currency unless a different one is clearly printed on the
+            receipt."""
+                )
+            }
+        }
+        val leadIn = if (settled.isEmpty()) "" else settled.joinToString(" ") + " "
         val responseShapeItems = if (includeLineItems) RESPONSE_SHAPE_ITEMS else ""
         val noItemsLine = if (includeLineItems) "" else NO_ITEMS_LINE
 
@@ -87,8 +121,7 @@ object ExpenseScanCleanupPromptBuilder {
 
 $itemRules$totalAmountRule
 
-            Use "$defaultCurrency" as the currency unless a different one is clearly printed on the
-            receipt. Also suggest a category for this expense based on its content. $categoriesLine
+            ${leadIn}Also suggest a category for this expense based on its content. $categoriesLine
             If one of the existing categories fits, copy that name verbatim, character-for-character —
             never invent a new spelling, translation, capitalization, or diacritics for it.
             Only suggest a new category name if none of the existing ones fit, and only ever suggest
@@ -102,7 +135,7 @@ $itemRules$totalAmountRule
             or "incoming" only if it is clearly a refund, credit note, or reimbursement document instead.
 
             Respond in the "$languageCode" language.
-            Return ONLY a JSON object of the shape {"title": "...", "totalAmount": 12.5, "currency": "...",
+            Return ONLY a JSON object of the shape {"title": "...", $totalJsonField$currencyJsonField
             "vendor": "...", "bank": "...", "location": "...", "category": "...", "date": "YYYY-MM-DD",
             "time": "HH:mm", "direction": "outgoing"$responseShapeItems}, no prose,
             no markdown. Omit/null "bank" and "location" if not printed — never guess either.$noItemsLine$ocrTextBlock

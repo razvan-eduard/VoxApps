@@ -53,7 +53,7 @@ class AmountlessCaptureTest {
 
         // And the writing half refuses too, rather than relying on the policy alone.
         val commitAt = text.indexOf("override suspend fun commit(")
-        val amountLine = text.indexOf("totalAmount = parsed?.totalAmount ?: f?.amount ?: return null", commitAt)
+        val amountLine = text.indexOf("totalAmount = f?.amount ?: parsed?.totalAmount ?: return null", commitAt)
         assertTrue("commit must decline a record with no amount", amountLine > commitAt)
     }
 

@@ -267,4 +267,33 @@ class NotificationExpenseParsePromptBuilderTest {
         assertTrue(prompt.contains(""""isPayment": true"""))
     }
 
+    /**
+     * The point of reading first: what the characters settled never becomes a question.
+     *
+     * A currency asked for after the message stated it is a key the model can only echo — and one
+     * more it can get wrong. It leaves the instructions, the JSON shape, and the examples, because
+     * an example carrying a forbidden key is an invitation to copy it.
+     */
+    @Test
+    fun `a stated currency is not asked for`() {
+        val asked = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "ING Bank",
+            notificationText = "Ai platit 315,07 RON la LIDL",
+            existingCategories = listOf("Groceries"),
+            defaultCurrency = "RON",
+            languageCode = "ro"
+        )
+        assertTrue("with none stated it still asks", asked.contains("\"currency\""))
+
+        val settled = NotificationExpenseParsePromptBuilder.build(
+            notificationTitle = "ING Bank",
+            notificationText = "Ai platit 315,07 RON la LIDL",
+            existingCategories = listOf("Groceries"),
+            defaultCurrency = "RON",
+            languageCode = "ro",
+            preParsedCurrency = "RON"
+        )
+        assertTrue("it has to say so", settled.contains("currency is already known"))
+        assertFalse("the key leaves the shape and the examples", settled.contains("\"currency\":"))
+    }
 }
