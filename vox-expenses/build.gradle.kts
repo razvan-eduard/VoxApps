@@ -13,8 +13,8 @@ android {
         applicationId = "com.voxapps.expenses"
         minSdk = 29
         targetSdk = 36
-        versionCode = 39
-        versionName = "0.39"
+        versionCode = 40
+        versionName = "0.40"
         ndk { abiFilters += "arm64-v8a" }
     }
 
