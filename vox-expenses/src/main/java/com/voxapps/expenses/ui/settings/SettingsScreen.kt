@@ -396,6 +396,7 @@ fun SettingsScreen(
                 accounts = budgetAccounts,
                 budgets = accountBudgets,
                 expenses = expenses,
+                listState = ui as? ExpensesUiState.Unlocked,
                 knownCurrencies = remember(budgetAccounts, settings.homeCurrency, settings.defaultCurrency) {
                     (budgetAccounts.map { it.currencyCode } + settings.homeCurrency + settings.defaultCurrency)
                         .filter { it.isNotBlank() }.distinct().sorted()
