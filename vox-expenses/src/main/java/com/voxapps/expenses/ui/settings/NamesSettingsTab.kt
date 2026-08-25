@@ -1,6 +1,8 @@
 package com.voxapps.expenses.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -33,7 +35,15 @@ fun NamesSettingsTab(
     val context = LocalContext.current
     val provided = FieldVocabularies.provided(context)
 
-    Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    // The page scrolls on its own, as every settings page here does: the modifier it is handed
+    // only fills and pads. Without it the lists end wherever the screen does, and a term past the
+    // fold is counted but unreachable.
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         // Before the lists, because they are what fills them. A capture that read a shop or a bank
         // knows something the next capture would have to work out again; keeping it is the same act
         // as filing the card a message named, and it is switched per route for the same reason.
