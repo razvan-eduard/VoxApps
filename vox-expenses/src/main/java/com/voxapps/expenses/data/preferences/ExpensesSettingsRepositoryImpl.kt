@@ -41,6 +41,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val CAPTURE_AMOUNTLESS_PAYMENTS = booleanPreferencesKey("capture_amountless_payments")
         val AUTO_CREATE_ACCOUNTS_SCANS = booleanPreferencesKey("auto_create_accounts_scans")
         val AUTO_CREATE_ACCOUNTS_NOTIFICATIONS = booleanPreferencesKey("auto_create_accounts_notifications")
+        val LEARN_NAMES_NOTIFICATIONS = booleanPreferencesKey("learn_names_from_notifications")
+        val LEARN_NAMES_SCANS = booleanPreferencesKey("learn_names_from_scans")
+        val LEARN_VENDORS_FROM_CAPTURES = booleanPreferencesKey("learn_vendors_from_captures")
         val DEFAULT_ACCOUNT_CURRENCY = stringPreferencesKey("default_account_currency")
         val CUSTOM_VENDORS = stringSetPreferencesKey("custom_vendors")
         val DISABLED_VENDORS = stringSetPreferencesKey("disabled_vendors")
@@ -141,6 +144,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             captureAmountlessPayments = prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] ?: false,
             autoCreateAccountsFromScans = prefs[Keys.AUTO_CREATE_ACCOUNTS_SCANS] ?: false,
             autoCreateAccountsFromNotifications = prefs[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] ?: false,
+            learnNamesFromNotifications = prefs[Keys.LEARN_NAMES_NOTIFICATIONS] ?: true,
+            learnNamesFromScans = prefs[Keys.LEARN_NAMES_SCANS] ?: true,
+            learnVendorsFromCaptures = prefs[Keys.LEARN_VENDORS_FROM_CAPTURES] ?: true,
             defaultAccountCurrency = prefs[Keys.DEFAULT_ACCOUNT_CURRENCY] ?: "",
             customVendors = prefs[Keys.CUSTOM_VENDORS] ?: emptySet(),
             disabledVendors = prefs[Keys.DISABLED_VENDORS] ?: emptySet(),
@@ -345,6 +351,18 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
 
     override suspend fun setAutoCreateAccountsFromNotifications(enabled: Boolean) {
         dataStore.edit { it[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] = enabled }
+    }
+
+    override suspend fun setLearnNamesFromNotifications(enabled: Boolean) {
+        dataStore.edit { it[Keys.LEARN_NAMES_NOTIFICATIONS] = enabled }
+    }
+
+    override suspend fun setLearnNamesFromScans(enabled: Boolean) {
+        dataStore.edit { it[Keys.LEARN_NAMES_SCANS] = enabled }
+    }
+
+    override suspend fun setLearnVendorsFromCaptures(enabled: Boolean) {
+        dataStore.edit { it[Keys.LEARN_VENDORS_FROM_CAPTURES] = enabled }
     }
 
     override suspend fun setDefaultAccountCurrency(code: String) {
@@ -630,6 +648,9 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = settings.captureAmountlessPayments
             prefs[Keys.AUTO_CREATE_ACCOUNTS_SCANS] = settings.autoCreateAccountsFromScans
             prefs[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] = settings.autoCreateAccountsFromNotifications
+            prefs[Keys.LEARN_NAMES_NOTIFICATIONS] = settings.learnNamesFromNotifications
+            prefs[Keys.LEARN_NAMES_SCANS] = settings.learnNamesFromScans
+            prefs[Keys.LEARN_VENDORS_FROM_CAPTURES] = settings.learnVendorsFromCaptures
             prefs[Keys.DEFAULT_ACCOUNT_CURRENCY] = settings.defaultAccountCurrency
             prefs[Keys.CUSTOM_VENDORS] = settings.customVendors
             prefs[Keys.DISABLED_VENDORS] = settings.disabledVendors

@@ -117,4 +117,33 @@ class ScanPromptVariantTest {
         assertTrue(withItems.contains("own total is 33.99"))
         assertTrue("the rows still need somewhere to go", withItems.contains("\"totalAmount\""))
     }
+
+    /**
+     * The rule, stated for the two the page names in words rather than in figures.
+     *
+     * A letterhead and a card slip's issuer are read from the same lists a message is read by, so
+     * once either is settled it leaves the question exactly as the total does — the model is handed
+     * less, not asked to check.
+     */
+    @Test
+    fun `a proved vendor and bank leave the question`() {
+        val asked = ExpenseScanCleanupPromptBuilder.build(
+            ocr, categories, "RON", "en", includeLineItems = false
+        )
+        assertTrue(asked.contains("the vendor/store name"))
+        assertTrue(asked.contains("the bank if one is printed"))
+        assertTrue(asked.contains("\"vendor\": \"...\""))
+        assertTrue(asked.contains("\"bank\": \"...\""))
+
+        val settled = ExpenseScanCleanupPromptBuilder.build(
+            ocr, categories, "RON", "en",
+            preParsedVendor = "MEGA MART", preParsedBank = "ING", includeLineItems = false
+        )
+        assertTrue(settled.contains("vendor is already known"))
+        assertTrue(settled.contains("bank is already known"))
+        assertFalse("neither may be asked for again", settled.contains("the vendor/store name"))
+        assertFalse(settled.contains("the bank if one is printed"))
+        assertFalse("and neither key stays in the shape", settled.contains("\"vendor\": \"...\""))
+        assertFalse(settled.contains("\"bank\": \"...\""))
+    }
 }

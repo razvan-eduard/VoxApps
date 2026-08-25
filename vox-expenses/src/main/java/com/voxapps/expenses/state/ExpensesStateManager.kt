@@ -318,6 +318,8 @@ class ExpensesStateManager(
 
     fun setAutoCreateAccountsFromScans(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateAccountsFromScans(enabled) } }
     fun setAutoCreateAccountsFromNotifications(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateAccountsFromNotifications(enabled) } }
+    fun setLearnNamesFromNotifications(enabled: Boolean) { scope.launch { settingsRepo.setLearnNamesFromNotifications(enabled) } }
+    fun setLearnNamesFromScans(enabled: Boolean) { scope.launch { settingsRepo.setLearnNamesFromScans(enabled) } }
     fun setDefaultAccountCurrency(code: String) { scope.launch { settingsRepo.setDefaultAccountCurrency(code) } }
     fun addTypedBankAccount(text: String, currencyCode: String) {
         scope.launch { expensesRepo.addTypedBankAccount(text, currencyCode) }
@@ -740,6 +742,24 @@ class ExpensesStateManager(
         FieldVocabularies.rejectionFor(cleaned, vocabulary, appContext, settings)?.let { return it }
         settingsRepo.setCustomVocabulary(vocabulary, customOf(settings, vocabulary) + cleaned)
         return null
+    }
+
+    /**
+     * The names a capture just wrote, kept for the next one to be read by.
+     *
+     * The same act as filing a card read from a message: what a capture established about the world
+     * outlives the record it produced. Per route, because a scan is deliberate and a notification
+     * arrives on its own, and the person may want one and not the other.
+     *
+     * Rejections are silent by design — a term already listed, or one the vocabulary refuses, is not
+     * a failure worth reporting to somebody who never asked for this to happen.
+     */
+    suspend fun learnNamesFrom(vendor: String?, bank: String?, fromScan: Boolean) {
+        val settings = settingsRepo.getSnapshot()
+        val allowed = if (fromScan) settings.learnNamesFromScans else settings.learnNamesFromNotifications
+        if (!allowed) return
+        vendor?.trim()?.takeIf { it.isNotEmpty() }?.let { addVocabularyTerm(FieldVocabularies.VOCAB_VENDOR, it) }
+        bank?.trim()?.takeIf { it.isNotEmpty() }?.let { addVocabularyTerm(FieldVocabularies.VOCAB_BANK, it) }
     }
 
     fun removeVocabularyTerm(vocabulary: String, term: String) {

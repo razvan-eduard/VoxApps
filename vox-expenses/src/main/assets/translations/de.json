@@ -757,5 +757,10 @@
   "delete_forever_confirm_title_one": "%d Eintrag endgültig löschen?",
   "expense_card": "Karte",
   "expense_bank_account": "Bankkonto",
-  "selection_select_none": "Nichts auswählen"
+  "selection_select_none": "Nichts auswählen",
+  "names_settings_title": "Geschäfte, Banken und Rechtsformen",
+  "learn_names_title": "Namen aus Erfassungen lernen",
+  "learn_names_desc": "Ein Geschäft oder eine Bank aus einer Erfassung kommt in die Listen unten, damit die nächste Nachricht danach gelesen wird statt erneut hergeleitet. Alles Gelernte bleibt hier sichtbar und lässt sich abschalten oder entfernen.",
+  "learn_names_notifications": "Aus Benachrichtigungen",
+  "learn_names_scans": "Aus Scans"
 }

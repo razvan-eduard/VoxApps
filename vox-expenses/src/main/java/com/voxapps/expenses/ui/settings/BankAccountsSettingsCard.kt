@@ -213,8 +213,10 @@ private fun AddAccountDialog(onConfirm: (String) -> Unit, onDismiss: () -> Unit)
     )
 }
 
+/** A labelled switch on a settings card. Shared with the pages that switch the same kind of
+ *  thing — an account created from a capture, a name learned from one. */
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+internal fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically

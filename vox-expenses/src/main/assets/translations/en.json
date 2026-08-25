@@ -757,5 +757,10 @@
   "delete_forever_confirm_title_one": "Delete %d record forever?",
   "expense_card": "Card",
   "expense_bank_account": "Bank account",
-  "selection_select_none": "Select none"
+  "selection_select_none": "Select none",
+  "names_settings_title": "Shops, banks and designators",
+  "learn_names_title": "Learn names from captures",
+  "learn_names_desc": "A shop or a bank a capture read joins the lists below, so the next message naming it is read by it rather than worked out again. Everything learned stays visible here, and can be switched off or removed.",
+  "learn_names_notifications": "From notifications",
+  "learn_names_scans": "From scans"
 }

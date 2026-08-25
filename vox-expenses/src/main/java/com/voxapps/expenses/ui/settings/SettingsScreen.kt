@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -72,7 +73,7 @@ import com.voxapps.design.settings.LogsTabStrings
 enum class SettingsPage {
     MENU, GENERAL, SCANNING, THEME, NOTIFICATIONS, VOICE, CATEGORIES, EXPENSE_CLEANUP,
     CLEANUP_DUPLICATES, CLEANUP_CORRECTIONS, CLEANUP_REMAP, CLEANUP_TEMPLATES,
-    CURRENCY, NOTIFICATION_CAPTURE, SPENDING_LIMITS, RECURRING, BACKUP, LOGS
+    CURRENCY, NAMES, NOTIFICATION_CAPTURE, SPENDING_LIMITS, RECURRING, BACKUP, LOGS
 }
 
 /** Where each page's back arrow leads — the cleanup subpages return to their submenu, everything
@@ -158,6 +159,7 @@ fun SettingsScreen(
         SettingsPage.CLEANUP_TEMPLATES -> languageManager.getString("cleanup_templates_title")
         SettingsPage.CURRENCY -> languageManager.getString("currency_settings_title")
         SettingsPage.NOTIFICATION_CAPTURE -> languageManager.getString("notification_capture_title")
+        SettingsPage.NAMES -> languageManager.getString("names_settings_title")
         SettingsPage.SPENDING_LIMITS -> languageManager.getString("budget_and_limits_title")
         SettingsPage.RECURRING -> languageManager.getString("recurring_payments_title")
         SettingsPage.BACKUP -> languageManager.getString("backup_restore_title")
@@ -229,6 +231,11 @@ fun SettingsScreen(
                     headlineContent = { Text(languageManager.getString("currency_settings_title")) },
                     leadingContent = { Icon(Icons.Filled.AttachMoney, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.CURRENCY }
+                )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("names_settings_title")) },
+                    leadingContent = { Icon(Icons.Filled.Storefront, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.NAMES }
                 )
                 ListItem(
                     headlineContent = { Text(languageManager.getString("budget_and_limits_title")) },
@@ -387,6 +394,11 @@ fun SettingsScreen(
                     settings = settings,
                 stateManager = stateManager,
                 settingsRepo = settingsRepo,
+                modifier = mod
+            )
+            SettingsPage.NAMES -> NamesSettingsTab(
+                settings = settings,
+                stateManager = stateManager,
                 modifier = mod
             )
             SettingsPage.SPENDING_LIMITS -> SpendingLimitsSettingsTab(

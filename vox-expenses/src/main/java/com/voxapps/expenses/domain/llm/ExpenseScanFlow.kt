@@ -1,5 +1,7 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.expenses.domain.names.CapturedNames
+import com.voxapps.expenses.data.FieldVocabularies
 import android.content.Context
 import com.voxapps.docread.ScanReading
 import com.voxapps.docread.InvoiceTotalsReconciler
@@ -79,6 +81,10 @@ class ExpenseScanFlow(
 
     override suspend fun prompt(reading: DeterministicReading<ProvedScan>, asks: AskScope): String {
         val settings = container.settingsRepository.getSnapshot()
+        val names = CapturedNames.of(
+            reading.fields.plainText,
+            FieldVocabularies.vocabularies(context.applicationContext, settings)
+        )
         val categories = container.expensesRepository.categories.first().map { it.name }
         val plainText = reading.fields.plainText
         val dateTime = DateTimeRegexParser.parse(plainText)
@@ -88,7 +94,10 @@ class ExpenseScanFlow(
             settings.defaultCurrency,
             settings.language,
             // What the page's own characters settled, kept out of the question — see the builder.
+            // Read here rather than at commit so the rule is one rule: proved once, never asked.
             preParsedTotal = reading.fields.reading.totals.total ?: reading.fields.reading.totals.invoiceTotal,
+            preParsedVendor = names.vendor ?: reading.fields.reading.header.vendor,
+            preParsedBank = names.bank,
             preParsedCurrency = com.voxapps.textmatch.extract.CurrencyCodes.find(
                 plainText,
                 settings.knownCurrencies(
@@ -152,7 +161,11 @@ class ExpenseScanFlow(
     ): Long? {
         val reading = proved.reading
         val settings = container.settingsRepository.getSnapshot()
-        val total = head?.totalAmount ?: reading.totals.total ?: reading.totals.invoiceTotal
+        // What the page proved outranks what was answered, here as on the message route: a printed
+        // total is arithmetic the rows agreed with, and a model that read it differently read it
+        // wrong. The answer is still taken where the page proved nothing.
+        val provedTotal = reading.totals.total ?: reading.totals.invoiceTotal
+        val total = provedTotal ?: head?.totalAmount
         if (total == null || total <= 0.0) {
             Logger.d(TAG, "No total could be read — no expense created, nothing sent anywhere")
             return null
@@ -171,8 +184,17 @@ class ExpenseScanFlow(
         val category = container.expensesRepository.defaultCategory()
         // What settles a currency spelling that names several — see CurrencyCodes.
         val accountCurrencies = container.expensesRepository.bankAccounts.first().map { it.currencyCode }
-        val vendor = head?.vendor ?: reading.header.vendor
+        // The same names, read the same way a message's are — see CapturedNames. A shop this device
+        // has listed outranks the header's guess, because being named is stronger than being first
+        // on the page; the bank has no other deterministic source at all, and without this a scan
+        // gave none unless somebody asked a model.
+        val named = CapturedNames.of(
+            proved.plainText,
+            FieldVocabularies.vocabularies(context.applicationContext, settings)
+        )
+        val vendor = head?.vendor ?: named.vendor ?: reading.header.vendor
         val dateTime = DateTimeRegexParser.parse(proved.plainText)
+        val provedDate = reading.header.date ?: dateTime.date
 
         val record = ExpenseParseResultParser.Parsed(
             title = head?.title ?: composeTitle(vendor, category?.name),
@@ -186,13 +208,15 @@ class ExpenseScanFlow(
                 settings.knownCurrencies(accountCurrencies)
             ) ?: head?.currency ?: settings.defaultCurrency,
             vendor = vendor,
-            bank = head?.bank,
+            bank = head?.bank ?: named.bank,
             // A printed address is a reading of the page; with no model there is none, and the
             // location fill falls through to whatever the settings allow, as it does for voice.
             location = head?.location,
             category = head?.category ?: category?.name,
-            date = head?.date ?: reading.header.date ?: dateTime.date,
-            time = head?.time ?: dateTime.time,
+            // Same order for the day and the hour: the page states them in characters, and a
+            // reading of characters is not improved by being asked about.
+            date = provedDate ?: head?.date,
+            time = dateTime.time ?: head?.time,
             items = items ?: provedItems.map {
                 ExpenseParseResultParser.ParsedItem(
                     name = it.name,
@@ -224,11 +248,11 @@ class ExpenseScanFlow(
             if (head?.location != null) add(ExpenseOrigins.FIELD_LOCATION)
             if (head?.category != null) add(ExpenseOrigins.FIELD_CATEGORY)
             if (head?.currency != null && record.currency == head.currency) add(ExpenseOrigins.FIELD_CURRENCY)
-            if (head?.date != null) add(ExpenseOrigins.FIELD_DATE)
+            if (head?.date != null && provedDate == null) add(ExpenseOrigins.FIELD_DATE)
             if (items != null) add(ExpenseOrigins.FIELD_ITEMS)
         }
         val provedFields = buildSet {
-            add(ExpenseOrigins.FIELD_AMOUNT)
+            if (provedTotal != null) add(ExpenseOrigins.FIELD_AMOUNT)
             if (ExpenseOrigins.FIELD_CURRENCY !in answered) add(ExpenseOrigins.FIELD_CURRENCY)
             if (ExpenseOrigins.FIELD_VENDOR !in answered && vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
             if (ExpenseOrigins.FIELD_DATE !in answered && record.date != null) add(ExpenseOrigins.FIELD_DATE)
@@ -261,6 +285,9 @@ class ExpenseScanFlow(
                 )
             }
         }
+        // A page names shops and banks as surely as a message does, so what it named is kept the
+        // same way — under this route's own switch.
+        container.expensesStateManager.learnNamesFrom(record.vendor, record.bank, fromScan = true)
         return newId
     }
 
@@ -340,6 +367,7 @@ class ExpenseScanFlow(
             )
         )
         Logger.d(TAG, "Wrote a reply-backed record $newId (head applied=$headApplied)")
+        container.expensesStateManager.learnNamesFrom(record.vendor, record.bank, fromScan = true)
         offerWhatWasNotWritten(newId, parsed, applies)
         return newId.takeIf { it > 0 }
     }

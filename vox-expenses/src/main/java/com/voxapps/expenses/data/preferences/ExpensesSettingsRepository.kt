@@ -51,6 +51,9 @@ interface ExpensesSettingsRepository {
     suspend fun setCaptureAmountlessPayments(enabled: Boolean)
     suspend fun setAutoCreateAccountsFromScans(enabled: Boolean)
     suspend fun setAutoCreateAccountsFromNotifications(enabled: Boolean)
+    suspend fun setLearnNamesFromNotifications(enabled: Boolean)
+    suspend fun setLearnNamesFromScans(enabled: Boolean)
+    suspend fun setLearnVendorsFromCaptures(enabled: Boolean)
     suspend fun setDefaultAccountCurrency(code: String)
     /** Adds or removes a term of this device's own; see [ExpensesSettings.customBanks]. */
     suspend fun setWidgetBudgetMode(mode: String)

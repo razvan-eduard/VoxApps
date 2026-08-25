@@ -543,7 +543,9 @@ fun NotificationCaptureSettingsTab(
             }
         )
 
-        // First of the three, because it is the one that decides whether the others ever run.
+        // The one vocabulary that stays here: a refusal is a thing a notification says, and this
+        // list is what stops one becoming an expense. The names — banks, shops, designators — moved
+        // to the data they belong to; see NamesSettingsTab.
         VocabularySettingsCard(
             provided = provided.stopWords,
             custom = settings.customStopWords,
@@ -551,36 +553,6 @@ fun NotificationCaptureSettingsTab(
             vocabulary = FieldVocabularies.VOCAB_STOP,
             title = languageManager.getString("vocabulary_stop_title"),
             description = languageManager.getString("vocabulary_stop_desc"),
-            stateManager = stateManager,
-            languageManager = languageManager
-        )
-        VocabularySettingsCard(
-            provided = provided.banks,
-            custom = settings.customBanks,
-            disabledKeys = settings.disabledBanks,
-            vocabulary = FieldVocabularies.VOCAB_BANK,
-            title = languageManager.getString("vocabulary_banks_title"),
-            description = languageManager.getString("vocabulary_banks_desc"),
-            stateManager = stateManager,
-            languageManager = languageManager
-        )
-        VocabularySettingsCard(
-            provided = emptyList(),
-            custom = settings.customVendors,
-            disabledKeys = settings.disabledVendors,
-            vocabulary = FieldVocabularies.VOCAB_VENDOR,
-            title = languageManager.getString("vocabulary_vendors_title"),
-            description = languageManager.getString("vocabulary_vendors_desc"),
-            stateManager = stateManager,
-            languageManager = languageManager
-        )
-        VocabularySettingsCard(
-            provided = provided.legalForms,
-            custom = settings.customLegalForms,
-            disabledKeys = settings.disabledLegalForms,
-            vocabulary = FieldVocabularies.VOCAB_LEGAL_FORM,
-            title = languageManager.getString("vocabulary_legal_title"),
-            description = languageManager.getString("vocabulary_legal_desc"),
             stateManager = stateManager,
             languageManager = languageManager
         )
