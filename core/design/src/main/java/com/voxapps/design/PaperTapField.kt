@@ -36,7 +36,11 @@ fun PaperTapField(
     enabled: Boolean = true,
     trailingIcon: @Composable () -> Unit = {},
     /** An offer to fill this field — "the scan says Tesco, use it?" — beside the current value. */
-    suggestion: (@Composable () -> Unit)? = null
+    suggestion: (@Composable () -> Unit)? = null,
+    /** Whether [value] stands in for a value rather than being one — "Multiple values", "Leave
+     *  unchanged". Drawn in the muted colour captions use, so a glance separates what the field
+     *  says from what it is only reporting about itself. */
+    placeholder: Boolean = false
 ) {
     Column(modifier = modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick)) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -47,8 +51,11 @@ fun PaperTapField(
             Text(
                 value,
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (enabled) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                color = when {
+                    !enabled -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    placeholder -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> MaterialTheme.colorScheme.primary
+                },
                 modifier = Modifier.weight(1f)
             )
             suggestion?.invoke()
