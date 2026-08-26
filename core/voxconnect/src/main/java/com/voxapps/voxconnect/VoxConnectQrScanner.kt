@@ -41,14 +41,30 @@ class VoxConnectQrScanner(private val onDecoded: (String) -> Unit) {
     private val decoded = AtomicBoolean(false)
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysisExecutor: ExecutorService? = null
+    // The provider arrives through an async listener; a stop() (or a fresh start()) that lands
+    // before it must win — this generation counter is how a stale listener notices it lost.
+    private var generation = 0
 
     fun start(context: Context, lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
-        decoded.set(false)
-        val executor = Executors.newSingleThreadExecutor().also { analysisExecutor = it }
+        val myGeneration: Int
+        val executor: ExecutorService
+        synchronized(this) {
+            stopLocked()
+            decoded.set(false)
+            myGeneration = ++generation
+            executor = Executors.newSingleThreadExecutor().also { analysisExecutor = it }
+        }
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
             val provider = providerFuture.get()
-            cameraProvider = provider
+            synchronized(this) {
+                if (generation != myGeneration) {
+                    // A stop or a newer start got here first — this binding must not happen.
+                    provider.unbindAll()
+                    return@addListener
+                }
+                cameraProvider = provider
+            }
 
             val preview = Preview.Builder().build().also {
                 it.surfaceProvider = previewView.surfaceProvider
@@ -67,7 +83,12 @@ class VoxConnectQrScanner(private val onDecoded: (String) -> Unit) {
         }, ContextCompat.getMainExecutor(context))
     }
 
-    fun stop() {
+    fun stop() = synchronized(this) {
+        generation++
+        stopLocked()
+    }
+
+    private fun stopLocked() {
         cameraProvider?.unbindAll()
         cameraProvider = null
         analysisExecutor?.shutdown()

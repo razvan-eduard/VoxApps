@@ -7,6 +7,7 @@ import android.util.Log
 import android.widget.Toast
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 
 /** Legacy 4-state shorthand for [LoggingFlags], kept for callers (Commander) that persist it as a
  *  single string setting. */
@@ -149,10 +150,11 @@ object Logger {
     }
 
     private fun addEntry(tag: String, message: String) {
-        val current = _verboseLogs.value.toMutableList()
-        current.add(0, LogEntry(message, tag, System.currentTimeMillis()))
-        if (current.size > MAX_LOG_ENTRIES) current.removeAt(current.size - 1)
-        _verboseLogs.value = current
+        // update {} retries on contention — two threads logging at once must not overwrite each
+        // other's entry the way separate read-modify-write on .value did.
+        _verboseLogs.update { logs ->
+            (listOf(LogEntry(message, tag, System.currentTimeMillis())) + logs).take(MAX_LOG_ENTRIES)
+        }
     }
 
     private fun showToast(message: String) {
