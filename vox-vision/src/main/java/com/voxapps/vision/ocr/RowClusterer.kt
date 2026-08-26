@@ -37,6 +37,10 @@ object RowClusterer {
             row.sortedBy { it.xLeft }.joinToString(" ") { it.text }
         }
 
+    /** The same clustering, kept as rows of cells — for a caller that needs each printed row's
+     *  geometry alongside its text rather than the joined string. */
+    fun rowsOfCells(cells: List<Cell>): List<List<Cell>> = cluster(cells)
+
     class Cell(val text: String, val xLeft: Float, val yTop: Float, val yBottom: Float, val xRight: Float = xLeft) {
         internal val height get() = yBottom - yTop
     }
