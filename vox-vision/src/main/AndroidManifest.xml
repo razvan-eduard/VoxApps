@@ -1,9 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- LiveView's target-app pickers offer every installed app — a chat partner may be Signal,
+         Viber, or anything else the person actually uses, which no closed intent query can
+         enumerate. Same declaration, and the same reason, as vox-expenses' notification-source
+         picker and vox-commander's app registry. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!--
+        LiveView lets the person pick which app receives each kind of recognised text. These are
+        the exact five ways such text can leave — dial, mail, map, browse/search, share — declared
+        narrowly instead of QUERY_ALL_PACKAGES: this app has no reason to see anything but the
+        handlers of these intents.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.WEB_SEARCH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <!-- Two named apps with schemes of their own: the WhatsApp chip hides when WhatsApp is
+             absent, and Waze is one of navigate's carriers. -->
+        <package android:name="com.whatsapp" />
+        <package android:name="com.waze" />
+    </queries>
 
     <!--
         The COMMAND/OCR_RESULT signature permissions guarding the receiver below, and letting
@@ -41,6 +88,25 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!--
+            The second launcher icon, and the whole difference between the two modes: the alias
+            carries no code and adds no extras — VisionActivity reads which component it was
+            launched through and shows LiveView instead of the scan flow. A satellite's OCR_REQUEST
+            always targets .VisionActivity directly, so it can never land here.
+        -->
+        <activity-alias
+            android:name=".LiveView"
+            android:targetActivity=".VisionActivity"
+            android:exported="true"
+            android:label="@string/liveview_name"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!--
             Discovery handshake only for now — Vision doesn't consume commands yet (it's a producer

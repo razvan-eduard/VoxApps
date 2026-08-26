@@ -11,6 +11,7 @@ import com.voxapps.vision.ui.screens.splash.SplashLoadingScreen
 @Composable
 fun VisionRoot(
     container: VisionContainer,
+    liveView: Boolean,
     pendingRequest: PendingScanRequest?,
     hasCameraPermission: () -> Boolean,
     requestCameraPermission: ((Boolean) -> Unit) -> Unit,
@@ -23,6 +24,13 @@ fun VisionRoot(
         SplashLoadingScreen(onFinished = { showSplash = false })
     } else if (showSettings) {
         SettingsScreen(container = container, onBack = { showSettings = false })
+    } else if (liveView) {
+        LiveViewScreen(
+            container = container,
+            hasCameraPermission = hasCameraPermission,
+            requestCameraPermission = requestCameraPermission,
+            onOpenSettings = { showSettings = true }
+        )
     } else {
         VisionScreen(
             container = container,
