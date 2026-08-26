@@ -582,7 +582,7 @@
   "recurring_reminder_channel_name": "Recurring payment reminders",
   "recurring_proposals_setting": "When to propose one",
   "recurring_reminders_section": "Reminders",
-  "recurring_missed_cycle_one": "A due date passed with no payment",
+  "recurring_missed_cycles_one": "A due date passed with no payment",
   "dismiss_on_capture_label": "Clear the notification",
   "dismiss_on_capture_desc": "Remove a payment notification from the shade once it has been captured — filed or waiting for approval. A message the app read and discarded is always left alone. Off by default: this cannot be undone.",
   "vocabulary_banks_title": "Words that name a bank or card scheme",

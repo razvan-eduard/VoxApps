@@ -87,7 +87,6 @@ object VoxHintKeys {
     const val BANK_ACCOUNTS = "bank_accounts"
     const val RECURRING = "recurring"
     const val BACKUP = "backup"
-    const val THEME = "theme"
     const val TODO_LISTS = "todo_lists"
     const val LAYERS = "layers"
     const val ICS = "ics"

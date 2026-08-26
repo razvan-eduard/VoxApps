@@ -1,40 +1,7 @@
 package com.voxapps.vision.domain.localization
 
-import android.content.Context
-import com.voxapps.logging.Logger
-import com.voxapps.vision.utils.Strings
-import org.json.JSONObject
-
 /**
- * Ports vox-notes'/vox-commander's LanguageManager into Vox Vision: loads a flat key->text JSON from
- * `assets/translations/{lang}.json`, exposed via [com.voxapps.vision.ui.LocalLanguageManager].
+ * The implementation lives in :core:i18n — one loader, one plural convention, six apps. The alias
+ * keeps this app's historical import path alive so call sites did not have to move.
  */
-class LanguageManager(private val context: Context) {
-
-    private var translations: Map<String, String> = emptyMap()
-
-    fun loadLanguage(langCode: String) {
-        try {
-            val fileName = "${Strings.Translations.DIR}$langCode${Strings.Translations.JSON_EXTENSION}"
-            val json = context.assets.open(fileName).bufferedReader().use { it.readText() }
-            val obj = JSONObject(json)
-            translations = obj.keys().asSequence().associateWith { obj.optString(it) }
-        } catch (e: Exception) {
-            Logger.w("LanguageManager", "Language load failed for '$langCode': ${e.message}")
-            if (langCode != Strings.Languages.DEFAULT) {
-                loadLanguage(Strings.Languages.DEFAULT)
-            }
-        }
-    }
-
-    fun getString(key: String): String = translations[key] ?: key
-
-    fun getAvailableLanguages(): List<String> = try {
-        context.assets.list(Strings.Translations.DIR_LIST)
-            ?.filter { it.endsWith(Strings.Translations.JSON_EXTENSION) }
-            ?.map { it.replace(Strings.Translations.JSON_EXTENSION, "") }
-            ?.sorted() ?: listOf(Strings.Languages.DEFAULT)
-    } catch (e: Exception) {
-        listOf(Strings.Languages.DEFAULT)
-    }
-}
+typealias LanguageManager = com.voxapps.i18n.LanguageManager

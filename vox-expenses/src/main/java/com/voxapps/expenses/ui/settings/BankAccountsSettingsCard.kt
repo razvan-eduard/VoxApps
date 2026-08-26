@@ -71,6 +71,14 @@ fun BankAccountsSettingsCard(
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
+    com.voxapps.onboarding.VoxHintDialog(
+        store = (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.voxapps.expenses.ExpensesApplication).container.hintStore,
+        hintKey = com.voxapps.onboarding.VoxHintKeys.BANK_ACCOUNTS,
+        title = languageManager.getString("hint_bank_accounts_title"),
+        body = languageManager.getString("hint_bank_accounts_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     var editing by remember { mutableStateOf<BankAccount?>(null) }
     var pendingDelete by remember { mutableStateOf<BankAccount?>(null) }
     var adding by remember { mutableStateOf(false) }

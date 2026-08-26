@@ -73,6 +73,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.color.VoxSwatchShapes
+import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarLayerKind
 import com.voxapps.calendarapp.data.CalendarRepository.LayerDeleteMode
@@ -98,6 +99,14 @@ fun Sidebar(
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
+    com.voxapps.onboarding.VoxHintDialog(
+        store = (androidx.compose.ui.platform.LocalContext.current.applicationContext as CalendarApplication).container.hintStore,
+        hintKey = com.voxapps.onboarding.VoxHintKeys.LAYERS,
+        title = languageManager.getString("hint_layers_title"),
+        body = languageManager.getString("hint_layers_body"),
+        okLabel = languageManager.getString("hint_ok"),
+        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+    )
     var showAddLayerDialog by remember { mutableStateOf(false) }
     var showSubscribeDialog by remember { mutableStateOf(false) }
     var addMenuExpanded by remember { mutableStateOf(false) }

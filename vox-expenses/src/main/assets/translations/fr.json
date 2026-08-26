@@ -582,7 +582,7 @@
   "recurring_reminder_channel_name": "Rappels de paiements récurrents",
   "recurring_proposals_setting": "Quand en proposer un",
   "recurring_reminders_section": "Rappels",
-  "recurring_missed_cycle_one": "Une échéance est passée sans paiement",
+  "recurring_missed_cycles_one": "Une échéance est passée sans paiement",
   "dismiss_on_capture_label": "Effacer la notification",
   "dismiss_on_capture_desc": "Retire une notification de paiement du volet une fois capturée — enregistrée ou en attente d'approbation. Un message lu puis écarté est toujours laissé en place. Désactivé par défaut : c'est irréversible.",
   "vocabulary_banks_title": "Mots qui nomment une banque ou une carte",
