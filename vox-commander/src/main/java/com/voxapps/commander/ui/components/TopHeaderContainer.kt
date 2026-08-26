@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.voxapps.commander.data.local.dao.FastMapDao
 import com.voxapps.commander.data.preferences.SettingsRepository
 import com.voxapps.commander.domain.localization.LanguageManager
@@ -117,6 +118,22 @@ fun TopHeaderContainer(
         dragHandle = null,
         modifier = Modifier.fillMaxSize()
     ) {
+        // Transient outcome line for the model-management actions hosted in this sheet — the
+        // view-model publishes it for five seconds, and this is the one place it is shown.
+        Column {
+        androidx.compose.animation.AnimatedVisibility(visible = selectionSuccessMessage != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = selectionSuccessMessage.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
         key(mode) {
             when (mode) {
                 TopHeaderMode.SETTINGS -> {
@@ -153,6 +170,7 @@ fun TopHeaderContainer(
                 }
                 else -> {}
             }
+        }
         }
     }
 }

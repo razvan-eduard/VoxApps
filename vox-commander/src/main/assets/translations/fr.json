@@ -274,6 +274,8 @@
   "engine_runtime_diagnostics": "Diagnostics d'exécution du moteur",
   "time_rtf_format": "Temps : %sms | RTF : %sx",
   "error_format": "Erreur : %s",
+  "error_download_failed": "Échec du téléchargement",
+  "notif_llm_processing": "Traitement de la demande IA",
   "system_maintenance": "Maintenance système",
   "maintenance_warning": "Les actions de maintenance sont globales et affectent tous les moteurs IA.",
   "model_repository_url": "URL du dépôt de modèles",

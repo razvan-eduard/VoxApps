@@ -46,8 +46,9 @@ class MainViewModel(
             val cleanText = text.trim()
             _transcription.value = cleanText
             
-            val errorPrefix = languageManager.getString("error_prefix")
-            if (cleanText.isBlank() || cleanText.startsWith(errorPrefix)) {
+            // The engines report failure as an "Error: …" transcript — the shared predicate is
+            // the one place that convention is read, so an error never gets parsed as a command.
+            if (!VoiceManager.isUsableTranscript(cleanText)) {
                 _isProcessing.value = false
                 appStateManager.setVoiceState(VoiceState.IDLE)
                 return@startListening
@@ -72,8 +73,7 @@ class MainViewModel(
         Logger.log("Queuing voice command — recording while processing", TAG)
         VoiceManager.startListening(modelFilterLang, userPreference) { text ->
             val cleanText = text.trim()
-            val errorPrefix = languageManager.getString("error_prefix")
-            if (cleanText.isNotBlank() && !cleanText.startsWith(errorPrefix)) {
+            if (VoiceManager.isUsableTranscript(cleanText)) {
                 synchronized(queueLock) {
                     commandQueue.add(Pair(cleanText, modelFilterLang))
                     Logger.log("Command queued: '$cleanText' (queue size: ${commandQueue.size})", TAG)
