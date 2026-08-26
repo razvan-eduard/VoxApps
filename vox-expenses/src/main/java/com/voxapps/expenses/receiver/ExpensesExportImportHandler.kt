@@ -169,12 +169,12 @@ class ExpensesExportImportHandler(
      */
     private fun buildReceiptsZip(names: List<String>): Uri? =
         VoxAttachmentZipUtil.build(
-            context, "receipts", names, ExpensesAttachments.FILE_PROVIDER_AUTHORITY,
+            context, ExpensesAttachments.RECEIPTS_DIR, names, ExpensesAttachments.FILE_PROVIDER_AUTHORITY,
             sidecarSuffix = ".txt", zipFilePrefix = "export_receipts"
         )
 
     private fun extractReceiptsZip(uri: Uri) =
-        VoxAttachmentZipUtil.extract(context, "receipts", uri)
+        VoxAttachmentZipUtil.extract(context, ExpensesAttachments.RECEIPTS_DIR, uri)
 
     suspend fun import(payloadJson: String, importMode: VoxImportMode = VoxImportMode.MERGE): VoxResult {
         val settings = settingsRepo.getSnapshot()
@@ -223,14 +223,14 @@ class ExpensesExportImportHandler(
             existing = expensesRepo.categories.first(),
             nameOf = { it.name },
             idOf = { it.id },
-            importedNameOf = { it.optString("name") },
+            importedNameOf = { it.optStringOrNull("name") ?: "" },
             create = { c, name ->
                 expensesRepo.addCategory(
                     name,
                     c.optLong("colorArgb"),
                     c.optInt("position"),
                     c.optLong("createdAt", System.currentTimeMillis()),
-                    c.optString("icon").takeIf { it.isNotBlank() }
+                    c.optStringOrNull("icon")?.takeIf { it.isNotBlank() }
                 )
             }
         )
@@ -265,24 +265,24 @@ class ExpensesExportImportHandler(
         val importedRemapRules = root.optJSONArray("remapRules") ?: JSONArray()
         for (i in 0 until importedRemapRules.length()) {
             val r = importedRemapRules.getJSONObject(i)
-            val matchJson = r.optString("matchJson").takeIf { it.isNotBlank() } ?: continue
-            val setJson = remapSetCategoryIds(r.optString("setJson")) ?: continue
+            val matchJson = r.optStringOrNull("matchJson")?.takeIf { it.isNotBlank() } ?: continue
+            val setJson = r.optStringOrNull("setJson")?.let(::remapSetCategoryIds) ?: continue
             // A backup from the auto-learning era carries LEARNED rows with a streak count: ones
             // that had reached activation convert to plain USER rules (the v21→v22 migration's
             // conversion); the rest never answered anything and are skipped.
-            val origin = r.optString("origin", RemapRuleEntity.ORIGIN_USER)
+            val origin = r.optStringOrNull("origin") ?: RemapRuleEntity.ORIGIN_USER
             if (origin == "LEARNED" && r.optInt("consecutiveCount", 0) < 3) continue
             expensesRepo.mergeRemapRule(
                 RemapRuleEntity(
-                    name = r.optString("name"),
+                    name = r.optStringOrNull("name") ?: "",
                     matchJson = matchJson,
                     setJson = setJson,
                     origin = if (origin == "LEARNED") RemapRuleEntity.ORIGIN_USER else origin,
                     enabled = r.optBoolean("enabled", true),
                     sortOrder = r.optInt("sortOrder", 0),
                     updatedAt = r.optLong("updatedAt", System.currentTimeMillis()),
-                    fuzzJson = r.optString("fuzzJson", "{}"),
-                    suggestJson = r.optString("suggestJson", "{}"),
+                    fuzzJson = r.optStringOrNull("fuzzJson") ?: "{}",
+                    suggestJson = r.optStringOrNull("suggestJson") ?: "{}",
                     alertEnabled = r.optBoolean("alertEnabled", false)
                 )
             )
@@ -292,7 +292,7 @@ class ExpensesExportImportHandler(
         val importedMerchantMemory = root.optJSONArray("merchantCategoryMemory") ?: JSONArray()
         for (i in 0 until importedMerchantMemory.length()) {
             val m = importedMerchantMemory.getJSONObject(i)
-            val vendorKey = m.optString("vendorKey").takeIf { it.isNotBlank() } ?: continue
+            val vendorKey = m.optStringOrNull("vendorKey")?.takeIf { it.isNotBlank() } ?: continue
             val localCategoryId = importedIdToLocalId[m.optLong("categoryId")] ?: continue
             if (m.optInt("consecutiveCount", 0) < 3) continue
             expensesRepo.mergeRemapRule(
@@ -311,8 +311,8 @@ class ExpensesExportImportHandler(
         val importedCorrections = root.optJSONArray("learnedFieldCorrections") ?: JSONArray()
         for (i in 0 until importedCorrections.length()) {
             val c = importedCorrections.getJSONObject(i)
-            val key = c.optString("garbageKey").takeIf { it.isNotBlank() } ?: continue
-            val fix = c.optString("fix").takeIf { it.isNotBlank() } ?: continue
+            val key = c.optStringOrNull("garbageKey")?.takeIf { it.isNotBlank() } ?: continue
+            val fix = c.optStringOrNull("fix")?.takeIf { it.isNotBlank() } ?: continue
             expensesRepo.restoreLearnedFieldCorrection(
                 com.voxapps.fieldmemory.LearnedFieldCorrection(
                     garbageKey = key,
@@ -334,7 +334,7 @@ class ExpensesExportImportHandler(
         var rulesCreated = 0
         for (i in 0 until importedRules.length()) {
             val r = importedRules.getJSONObject(i)
-            val name = r.optString("name").trim()
+            val name = (r.optStringOrNull("name") ?: "").trim()
             if (name.isEmpty()) continue
             val fieldIdsArray = r.optJSONArray("fieldIds") ?: JSONArray()
             val fieldIds = (0 until fieldIdsArray.length()).map { fieldIdsArray.optString(it) }
@@ -343,7 +343,7 @@ class ExpensesExportImportHandler(
                 duplicateRuleDao.update(
                     existing.copy(
                         fieldIds = fieldIds,
-                        combinator = r.optString("combinator", existing.combinator),
+                        combinator = r.optStringOrNull("combinator") ?: existing.combinator,
                         enabled = r.optBoolean("enabled", existing.enabled),
                         sortOrder = r.optInt("sortOrder", existing.sortOrder),
                         appliesAutomatically = r.optBoolean("appliesAutomatically", existing.appliesAutomatically),
@@ -355,7 +355,7 @@ class ExpensesExportImportHandler(
                     DuplicateRuleEntity(
                         name = name,
                         fieldIds = fieldIds,
-                        combinator = r.optString("combinator", "AND"),
+                        combinator = r.optStringOrNull("combinator") ?: "AND",
                         enabled = r.optBoolean("enabled", true),
                         sortOrder = r.optInt("sortOrder", 0),
                         appliesAutomatically = r.optBoolean("appliesAutomatically", true),
@@ -383,7 +383,7 @@ class ExpensesExportImportHandler(
                     val importedCategoryId = if (l.has("categoryId") && !l.isNull("categoryId")) l.optLong("categoryId") else null
                     val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
                     expensesRepo.addSpendingLimit(
-                        categoryId, l.optDouble("amountHomeCurrency"), l.optString("period"),
+                        categoryId, l.optDouble("amountHomeCurrency"), (l.optStringOrNull("period") ?: ""),
                         createdAt = l.optLong("createdAt", System.currentTimeMillis())
                     )
                 },
@@ -402,7 +402,7 @@ class ExpensesExportImportHandler(
             val existing = expensesRepo.bankAccountsSnapshot().associateBy { it.digits.orEmpty().lowercase() }
             val entries = (0 until imported.length()).map { imported.getJSONObject(it) }
             for (a in entries) {
-                val digits = a.optString("digits").takeIf { it.isNotBlank() } ?: continue
+                val digits = a.optStringOrNull("digits")?.takeIf { it.isNotBlank() } ?: continue
                 val local = existing[digits.lowercase()]?.id
                     ?: expensesRepo.addBankAccount(a.toBankAccount(parentId = null)).takeIf { it > 0 }
                     ?: continue
@@ -457,7 +457,7 @@ class ExpensesExportImportHandler(
                             val it = arr.getJSONObject(idx)
                             ExpenseLineItem(
                                 expenseId = 0,
-                                name = it.optString("name"),
+                                name = it.optStringOrNull("name") ?: "",
                                 quantity = it.optDouble("quantity", 1.0),
                                 unitPrice = it.optDouble("unitPrice", 0.0),
                                 position = it.optInt("position", idx),
@@ -470,7 +470,7 @@ class ExpensesExportImportHandler(
                     val newExpenseId = expensesRepo.addExpense(
                         title = e.optStringOrNull("title"),
                         totalAmount = e.optDouble("totalAmount"),
-                        currencyCode = e.optString("currencyCode"),
+                        currencyCode = e.optStringOrNull("currencyCode") ?: "",
                         vendor = e.optStringOrNull("vendor"),
                         // Through the same map the account rows were merged by, so a record restored
                         // onto a device that already knew the card points at the row it already has.
@@ -564,11 +564,11 @@ private fun BankAccount.toJson(): JSONObject = JSONObject().apply {
 /** [parentId] is supplied by the caller after the id map exists — a card may be listed before the
  *  account it belongs to. */
 private fun JSONObject.toBankAccount(parentId: Long?): BankAccount = BankAccount(
-    digits = optString("digits"),
-    kind = optString("kind"),
+    digits = optStringOrNull("digits") ?: "",
+    kind = optStringOrNull("kind") ?: "",
     parentId = parentId,
     label = optStringOrNull("label"),
-    currencyCode = optString("currencyCode"),
+    currencyCode = optStringOrNull("currencyCode") ?: "",
     bankName = optStringOrNull("bankName"),
     icon = optStringOrNull("icon"),
     createdAt = optLong("createdAt", System.currentTimeMillis()),
@@ -607,14 +607,14 @@ private fun RecurringPayment.toJson(): JSONObject = JSONObject().apply {
 /** Rebuilds an arrangement from backup. [localCategoryId] is resolved by the caller, since category
  *  ids are reassigned on import and a stale one would colour the row after somebody else's category. */
 private fun JSONObject.toRecurringPayment(localCategoryId: Long?): RecurringPayment = RecurringPayment(
-    vendorKey = optString("vendorKey"),
-    vendorLabel = optString("vendorLabel"),
-    frequency = runCatching { RecurrenceFrequency.valueOf(optString("frequency")) }
+    vendorKey = optStringOrNull("vendorKey") ?: "",
+    vendorLabel = optStringOrNull("vendorLabel") ?: "",
+    frequency = runCatching { RecurrenceFrequency.valueOf(optStringOrNull("frequency") ?: "") }
         .getOrDefault(RecurrenceFrequency.MONTHLY),
     interval = optInt("interval", 1).coerceAtLeast(1),
     dueDayOfMonth = optInt("dueDayOfMonth", 1),
     expectedAmount = if (isNull("expectedAmount")) null else optDouble("expectedAmount"),
-    currency = if (isNull("currency")) null else optString("currency"),
+    currency = optStringOrNull("currency"),
     categoryId = localCategoryId,
     lastSeenAt = optLong("lastSeenAt"),
     occurrences = optInt("occurrences", 1),

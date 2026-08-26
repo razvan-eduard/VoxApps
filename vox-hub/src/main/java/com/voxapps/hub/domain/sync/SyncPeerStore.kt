@@ -1,5 +1,6 @@
 package com.voxapps.hub.domain.sync
 
+import com.voxapps.backup.optStringOrNull
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -91,10 +92,10 @@ private fun JSONObject.toPairedPeer(): PairedPeer {
     }
 
     return PairedPeer(
-        peerId = optString("peerId"),
-        label = optString("label"),
+        peerId = optStringOrNull("peerId") ?: "",
+        label = optStringOrNull("label") ?: "",
         isServerRole = optBoolean("isServerRole"),
-        sharedKeyBase64 = optString("sharedKeyBase64"),
+        sharedKeyBase64 = optStringOrNull("sharedKeyBase64") ?: "",
         bluetoothMac = if (has("bluetoothMac") && !isNull("bluetoothMac")) optString("bluetoothMac") else null,
         pairedAt = optLong("pairedAt"),
         autoSyncEnabled = optBoolean("autoSyncEnabled", false),

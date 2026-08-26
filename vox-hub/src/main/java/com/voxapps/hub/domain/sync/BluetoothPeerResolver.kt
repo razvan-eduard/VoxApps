@@ -110,8 +110,9 @@ object BluetoothPeerResolver {
             override fun onReceive(receiverContext: Context, intent: Intent) {
                 when (intent.action) {
                     BluetoothDevice.ACTION_FOUND -> {
-                        val device = intent.parcelableExtraCompat(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                            ?: return
+                        val device = androidx.core.content.IntentCompat.getParcelableExtra(
+                            intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java
+                        ) ?: return
                         try {
                             if (device.name == targetName) finish(device.address)
                         } catch (e: SecurityException) {
@@ -138,6 +139,3 @@ object BluetoothPeerResolver {
     }
 }
 
-@Suppress("DEPRECATION")
-private fun <T> Intent.parcelableExtraCompat(name: String, clazz: Class<T>): T? =
-    if (Build.VERSION.SDK_INT >= 33) getParcelableExtra(name, clazz) else getParcelableExtra(name)

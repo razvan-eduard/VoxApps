@@ -591,6 +591,7 @@ dependencies {
     implementation(project(":core:backup"))
     implementation(project(":core:ipc"))
     implementation(project(":core:identity"))
+    implementation(project(":core:i18n"))
     implementation(project(":core:logging"))
     implementation(project(":core:nativelibs"))
     implementation(project(":core:services"))

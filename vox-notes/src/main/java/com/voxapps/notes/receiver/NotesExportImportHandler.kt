@@ -80,7 +80,7 @@ class NotesExportImportHandler(
             existing = notesRepo.categories.first(),
             nameOf = { it.name },
             idOf = { it.id },
-            importedNameOf = { it.optString("name") },
+            importedNameOf = { it.optStringOrNull("name") ?: "" },
             create = { c, name ->
                 notesRepo.addCategory(
                     name,
@@ -119,7 +119,7 @@ class NotesExportImportHandler(
                 exportedAt = exportedAt,
                 createdAtOf = { it.createdAt },
                 insert = insert@{ n ->
-                    val text = n.optString("text")
+                    val text = n.optStringOrNull("text") ?: ""
                     val title = n.optStringOrNull("title")
                     if (text.isBlank() && title.isNullOrBlank()) return@insert 0L
                     val importedCategoryId = if (n.has("categoryId") && !n.isNull("categoryId")) n.optLong("categoryId") else null

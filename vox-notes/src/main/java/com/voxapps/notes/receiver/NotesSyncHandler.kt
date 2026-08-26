@@ -1,5 +1,6 @@
 package com.voxapps.notes.receiver
 
+import com.voxapps.backup.optStringOrNull
 import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
 import com.voxapps.datahygiene.planMerge
@@ -123,9 +124,9 @@ private fun Note.toSyncJson(categoryName: String?): JSONObject = JSONObject().ap
 }
 
 private fun JSONObject.toNote(categoryId: Long?): Note = Note(
-    uid = optString(SyncDeltaKeys.UID),
+    uid = optStringOrNull(SyncDeltaKeys.UID) ?: "",
     title = optNullableString("title"),
-    text = optString("text"),
+    text = optStringOrNull("text") ?: "",
     textHtml = optNullableString("textHtml"),
     categoryId = categoryId,
     createdAt = optLong("createdAt"),

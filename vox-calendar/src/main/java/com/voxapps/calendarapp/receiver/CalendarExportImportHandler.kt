@@ -105,7 +105,7 @@ class CalendarExportImportHandler(
             existing = existingLayers,
             nameOf = { it.name },
             idOf = { it.id },
-            importedNameOf = { it.optString("name") },
+            importedNameOf = { it.optStringOrNull("name") ?: "" },
             create = { l, name ->
                 calendarRepo.addLayerFromBackup(
                     name = name,
@@ -115,7 +115,7 @@ class CalendarExportImportHandler(
                     subscriptionUrl = l.optStringOrNull("subscriptionUrl"),
                     lastSyncedAt = if (l.has("lastSyncedAt") && !l.isNull("lastSyncedAt")) l.optLong("lastSyncedAt") else null,
                     lastSyncError = l.optStringOrNull("lastSyncError"),
-                    reminderOffsetsMinutes = l.optString("reminderOffsetsMinutes", "")
+                    reminderOffsetsMinutes = l.optStringOrNull("reminderOffsetsMinutes") ?: ""
                 )
             }
         )
@@ -130,7 +130,7 @@ class CalendarExportImportHandler(
             existing = toDoListDao.getAll(),
             nameOf = { it.title },
             idOf = { it.id },
-            importedNameOf = { it.optString("title") },
+            importedNameOf = { it.optStringOrNull("title") ?: "" },
             create = { l, title ->
                 val now = System.currentTimeMillis()
                 toDoListDao.insert(
@@ -163,7 +163,7 @@ class CalendarExportImportHandler(
                 uid = e.optStringOrNull("uid") ?: UUID.randomUUID().toString(),
                 type = e.optStringOrNull("type").toEnumOrNull<CalendarEntryType>()
                     ?: CalendarEntryType.EVENT,
-                title = e.optString("title"),
+                title = e.optStringOrNull("title") ?: "",
                 description = e.optStringOrNull("description"),
                 location = e.optStringOrNull("location"),
                 startMillis = if (e.has("startMillis") && !e.isNull("startMillis")) e.optLong("startMillis") else null,

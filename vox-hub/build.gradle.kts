@@ -78,6 +78,7 @@ dependencies {
     // For SyncDeltaKeys only: the Hub builds sync deltas itself, so it's a participant in the same
     // wire contract as the satellites' *SyncHandlers and must share their key definitions.
     implementation(project(":core:datahygiene"))
+    implementation(project(":core:i18n"))
     implementation(project(":core:logging"))
     implementation(project(":core:preferences"))
     implementation(project(":core:voxconnect"))
