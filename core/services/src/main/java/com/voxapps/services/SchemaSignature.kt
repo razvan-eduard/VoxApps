@@ -190,7 +190,9 @@ object SchemaSignature {
     private fun parseSerial(manifest: String): Long =
         Regex("\"serial\"\\s*:\\s*(\\d+)").find(manifest)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
 
-    private fun read(url: String): String? = runCatching { URL(url).readText() }.getOrNull()
+    private fun read(url: String): String? = runCatching { URL(url).readText() }
+        .onFailure { Logger.log("Fetch failed for $url: ${it.message}", TAG) }
+        .getOrNull()
 
     private fun verify(manifest: String, signatureB64: String): Boolean = runCatching {
         val keyBytes = Base64.decode(PUBLIC_KEY_B64, Base64.DEFAULT)
