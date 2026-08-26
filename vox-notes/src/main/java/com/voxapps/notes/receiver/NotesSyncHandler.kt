@@ -116,6 +116,7 @@ private fun Note.toSyncJson(categoryName: String?): JSONObject = JSONObject().ap
     put(SyncDeltaKeys.UID, uid)
     put("title", title)
     put("text", text)
+    put("textHtml", textHtml)
     put("categoryName", categoryName)
     put("createdAt", createdAt)
     put(SyncDeltaKeys.UPDATED_AT, updatedAt)
@@ -125,6 +126,7 @@ private fun JSONObject.toNote(categoryId: Long?): Note = Note(
     uid = optString(SyncDeltaKeys.UID),
     title = optNullableString("title"),
     text = optString("text"),
+    textHtml = optNullableString("textHtml"),
     categoryId = categoryId,
     createdAt = optLong("createdAt"),
     updatedAt = optLong(SyncDeltaKeys.UPDATED_AT)

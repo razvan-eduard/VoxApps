@@ -62,6 +62,7 @@ class NotesExportImportHandler(
                         put("id", note.id)
                         put("title", note.title)
                         put("text", note.text)
+                        put("textHtml", note.textHtml)
                         put("createdAt", note.createdAt)
                         put("categoryId", note.categoryId)
                         put("attachments", JSONArray(attachments.map { it.toBackupJson() }))
@@ -126,6 +127,7 @@ class NotesExportImportHandler(
                     val newNoteId = notesRepo.addNote(
                         title = title,
                         text = text,
+                        textHtml = n.optStringOrNull("textHtml"),
                         categoryId = categoryId,
                         // Preserved from the source device, never re-stamped to "now" — see the
                         // exportedAt comment above for why that would silently undo this fix.

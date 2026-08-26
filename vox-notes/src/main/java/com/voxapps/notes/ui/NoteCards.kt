@@ -12,6 +12,8 @@ import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,7 +27,35 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.FormatStrikethrough
+import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.TextFormat
+import androidx.compose.material.icons.filled.FormatColorReset
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.unit.sp
+import com.mohamedrejeb.richeditor.model.RichTextState
+import com.mohamedrejeb.richeditor.model.rememberRichTextState
+import com.mohamedrejeb.richeditor.ui.BasicRichTextEditor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
@@ -64,6 +94,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -167,18 +199,23 @@ fun NoteEditorCard(
     stateManager: NotesStateManager,
     title: String,
     text: String,
+    textHtml: String?,
     categoryId: Long?,
     categories: List<Category>,
     pendingAttachments: List<String>,
     onTitleChange: (String) -> Unit,
-    onTextChange: (String) -> Unit,
+    onContentChange: (plain: String, html: String) -> Unit,
     onCategoryChange: (Long?) -> Unit,
     onAddCategory: (name: String, colorArgb: Long, onResult: (Long) -> Unit) -> Unit,
     onPendingAttachmentsChange: (List<String>) -> Unit,
     onDone: () -> Unit,
+    onDismiss: () -> Unit,
     onDelete: (() -> Unit)?
 ) {
     val languageManager = LocalLanguageManager.current
+    var editorExtraHeightPx by remember(noteId) { mutableStateOf(0f) }
+    var editorMaxed by remember(noteId) { mutableStateOf(false) }
+    var isFullscreen by remember(noteId) { mutableStateOf(false) }
     val selectedCategory = categories.firstOrNull { it.id == categoryId }
     // Nothing otherwise visually sets the open-for-editing note apart from the flat collapsed cards
     // below it in the same list — a border in a darker shade of its own category color reads as
@@ -188,6 +225,80 @@ fun NoteEditorCard(
         ?.let { CategoryColors.fromStored(it.colorArgb) }
         ?.darker()
         ?: MaterialTheme.colorScheme.outline
+    // One editor body for both homes: the inline card and the fullscreen dialog. A ColumnScope
+    // receiver so the fullscreen branch can weight the writing area to fill; exactly one instance
+    // composes at a time, so the rich state never has a twin fighting it over the buffer.
+    val editorFields: @Composable ColumnScope.(fullscreen: Boolean) -> Unit = { fullscreen ->
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(horizontal = 4.dp, vertical = 6.dp)
+                ) {
+                    BasicTextField(
+                        value = title,
+                        onValueChange = onTitleChange,
+                        textStyle = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { inner ->
+                            if (title.isEmpty()) Text(
+                                languageManager.getString("note_title_optional"),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            inner()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // The note's text is rich from here on: the state owns the spans, the bar
+                // above the field toggles them, and every change leaves as the pair the
+                // buffer stores — the plain text everything else reads, and the HTML that
+                // preserves what was styled.
+                val richState = rememberRichTextState()
+                LaunchedEffect(noteId) {
+                    richState.setHtml(textHtml ?: plainTextAsHtml(text))
+                }
+                LaunchedEffect(richState) {
+                    snapshotFlow { richState.annotatedString }
+                        .collect { onContentChange(it.text, richState.toHtml()) }
+                }
+                RichFormatBar(richState)
+                // The writing room the handle at the card's foot controls: dragged, it grows
+                // by exactly the drag; tapped, it jumps to most of the screen and back to
+                // whatever size it had. A minimum only — content taller than the room still
+                // grows the card the way it always did.
+                val editorMinHeight = if (editorMaxed) {
+                    (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+                } else {
+                    DEFAULT_EDITOR_MIN_HEIGHT + with(LocalDensity.current) { editorExtraHeightPx.toDp() }
+                }
+                Box(
+                    modifier = if (fullscreen) {
+                        Modifier.fillMaxWidth().weight(1f).padding(top = 4.dp)
+                    } else {
+                        Modifier.fillMaxWidth().heightIn(min = editorMinHeight).padding(top = 4.dp)
+                    }
+                ) {
+                    if (richState.annotatedString.text.isEmpty()) {
+                        Text(
+                            languageManager.getString("note_text"),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    BasicRichTextEditor(
+                        state = richState,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = if (fullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
+                    )
+                }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -198,78 +309,22 @@ fun NoteEditorCard(
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Top row: the collapse pill stays centered; Delete/Save move up here (previously at
-            // the bottom of the text column) so they read as this card's primary actions at a
-            // glance, with Attachments now occupying the bottom instead (see below).
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                Surface(
-                    onClick = onDone,
-                    shape = CircleShape,
-                    shadowElevation = 4.dp,
-                    tonalElevation = 2.dp
-                ) {
-                    Icon(
-                        Icons.Filled.ExpandLess,
-                        contentDescription = languageManager.getString("collapse_note"),
-                        modifier = Modifier.padding(6.dp)
-                    )
-                }
-                Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                    if (onDelete != null) {
-                        IconButton(onClick = onDelete) {
-                            Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
-                        }
-                    }
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
-                    }
-                }
-            }
+            // Top row. Delete sits alone on the left, where destroying something should not
+            // neighbour saving it; the centered pill is the fullscreen switch (its inverse twin
+            // inside the fullscreen dialog is the way back); the right side closes — X leaves
+            // without writing, the check saves, both exactly what they do everywhere else.
+            EditorTopRow(
+                fullscreen = false,
+                onToggleFullscreen = { isFullscreen = true },
+                onDismiss = onDismiss,
+                onDone = onDone,
+                onDelete = onDelete,
+                languageManager = languageManager
+            )
 
-            Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            if (!isFullscreen) Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                            .padding(horizontal = 4.dp, vertical = 6.dp)
-                    ) {
-                        BasicTextField(
-                            value = title,
-                            onValueChange = onTitleChange,
-                            textStyle = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            decorationBox = { inner ->
-                                if (title.isEmpty()) Text(
-                                    languageManager.getString("note_title_optional"),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                inner()
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    BasicTextField(
-                        value = text,
-                        onValueChange = onTextChange,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        decorationBox = { inner ->
-                            if (text.isEmpty()) Text(
-                                languageManager.getString("note_text"),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            inner()
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(top = 8.dp)
-                    )
+                    editorFields(false)
                 }
 
                 // Vertical coverflow category picker on the right edge.
@@ -285,12 +340,272 @@ fun NoteEditorCard(
             // id yet to scope real AttachmentEntity rows against, so it stages files locally instead
             // (PendingNoteAttachmentsHost) — NotesScreen links them to the real note once it's saved,
             // or deletes the staged files if the draft is discarded instead.
+            if (!isFullscreen) {
             if (noteId != null) {
                 NoteAttachmentsHost(noteId, stateManager)
             } else {
                 PendingNoteAttachmentsHost(pendingAttachments, onPendingAttachmentsChange)
             }
+
+            // The resize handle: a grip on the card's bottom edge. Dragging takes manual control
+            // of the writing room above; tapping toggles between most of the screen and the size
+            // the drag (or the default) had set — the manual size is remembered, not reset.
+            val maxExtraPx = with(LocalDensity.current) { MAX_EDITOR_EXTRA_HEIGHT.toPx() }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(22.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures { editorMaxed = !editorMaxed }
+                    }
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { _, dragAmount ->
+                            editorMaxed = false
+                            editorExtraHeightPx = (editorExtraHeightPx + dragAmount).coerceIn(0f, maxExtraPx)
+                        }
+                    }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(5.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f))
+                )
+            }
+            }
         }
+    }
+
+    // Fullscreen: the same fields, the whole screen, and deliberately fewer ways out — the
+    // inverse arrow returns to the card, X leaves without writing, the check saves; deleting a
+    // note is not a thing done from the room you write it in. The system back key is the arrow.
+    if (isFullscreen) {
+        Dialog(
+            onDismissRequest = { isFullscreen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    EditorTopRow(
+                        fullscreen = true,
+                        onToggleFullscreen = { isFullscreen = false },
+                        onDismiss = onDismiss,
+                        onDone = onDone,
+                        onDelete = null,
+                        languageManager = languageManager
+                    )
+                    Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        editorFields(true)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The editor's action strip, both modes. Delete alone at the left (absent in fullscreen — and for
+ * drafts, which have nothing to delete), the fullscreen switch centered — up-arrow to enter,
+ * inverse arrow to leave — and leaving at the right: X without writing, check saving.
+ */
+@Composable
+private fun EditorTopRow(
+    fullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
+    onDismiss: () -> Unit,
+    onDone: () -> Unit,
+    onDelete: (() -> Unit)?,
+    languageManager: com.voxapps.notes.domain.localization.LanguageManager
+) {
+    Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = 4.dp, end = 4.dp)) {
+        if (onDelete != null) {
+            IconButton(onClick = onDelete, modifier = Modifier.align(Alignment.CenterStart)) {
+                Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
+            }
+        }
+        Surface(
+            onClick = onToggleFullscreen,
+            shape = CircleShape,
+            shadowElevation = 4.dp,
+            tonalElevation = 2.dp,
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            Icon(
+                if (fullscreen) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                contentDescription = languageManager.getString(
+                    if (fullscreen) "editor_exit_fullscreen" else "editor_fullscreen"
+                ),
+                modifier = Modifier.padding(6.dp)
+            )
+        }
+        Row(modifier = Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = languageManager.getString("editor_dismiss"))
+            }
+            IconButton(onClick = onDone) {
+                Icon(Icons.Filled.Check, contentDescription = languageManager.getString("save"))
+            }
+        }
+    }
+}
+
+/** The writing room a fresh editor opens with — the size a tap on the handle shrinks back to
+ *  when nothing was dragged. */
+private val DEFAULT_EDITOR_MIN_HEIGHT = 80.dp
+
+/** How much room dragging can add. A ceiling, not a target — past this the tap-to-max is the
+ *  honest gesture, and an unbounded drag can push the card's own controls off screen. */
+private val MAX_EDITOR_EXTRA_HEIGHT = 600.dp
+
+/** Plain text carried into the rich editor: escaped, line breaks kept. The inverse direction is
+ *  the editor's own — its HTML is stored beside the plain text it exports. */
+private fun plainTextAsHtml(text: String): String =
+    text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+
+/** The sizes the bar cycles through — named steps rather than a number field, because a note is
+ *  styled by eye, not typeset. */
+private val RICH_TEXT_SIZES = listOf(14.sp, 18.sp, 24.sp, 32.sp)
+
+/** The families the bar cycles through: the generic names every renderer knows. */
+private val RICH_TEXT_FONTS = listOf(FontFamily.SansSerif, FontFamily.Serif, FontFamily.Monospace)
+
+/** The ink choices. Not themed colors on purpose: a color put on words is content, and content
+ *  keeps its color whatever theme the note is later read under. */
+private val RICH_TEXT_COLORS = listOf(
+    Color(0xFFD32F2F), Color(0xFFF57C00), Color(0xFF388E3C),
+    Color(0xFF1976D2), Color(0xFF7B1FA2)
+)
+
+/**
+ * The small format bar the editor carries: bold, italic, underline, strikethrough as toggles that
+ * read their pressed state off the cursor's own style, then size, font and ink. Size and font
+ * cycle through fixed steps; ink is one dot per color plus a reset. Everything acts through
+ * [RichTextState.toggleSpanStyle]-family calls, on the selection when there is one and on what is
+ * typed next when there is not.
+ */
+@Composable
+private fun RichFormatBar(state: RichTextState) {
+    val languageManager = LocalLanguageManager.current
+    val current = state.currentSpanStyle
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(top = 4.dp)
+    ) {
+        FormatToggle(
+            icon = Icons.Filled.FormatBold,
+            active = current.fontWeight == FontWeight.Bold,
+            description = languageManager.getString("rich_bold")
+        ) { state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) }
+        FormatToggle(
+            icon = Icons.Filled.FormatItalic,
+            active = current.fontStyle == FontStyle.Italic,
+            description = languageManager.getString("rich_italic")
+        ) { state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) }
+        FormatToggle(
+            icon = Icons.Filled.FormatUnderlined,
+            active = current.textDecoration?.contains(TextDecoration.Underline) == true,
+            description = languageManager.getString("rich_underline")
+        ) { state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) }
+        FormatToggle(
+            icon = Icons.Filled.FormatStrikethrough,
+            active = current.textDecoration?.contains(TextDecoration.LineThrough) == true,
+            description = languageManager.getString("rich_strikethrough")
+        ) { state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Lists are paragraph-level: the toggle takes the section the cursor sits in (or the
+        // selected paragraphs) in and out of bullets or numbering, and the two exclude each other
+        // — the library moves a numbered paragraph straight to bullets rather than stacking them.
+        FormatToggle(
+            icon = Icons.Filled.FormatListBulleted,
+            active = state.isUnorderedList,
+            description = languageManager.getString("rich_bullets")
+        ) { state.toggleUnorderedList() }
+        FormatToggle(
+            icon = Icons.Filled.FormatListNumbered,
+            active = state.isOrderedList,
+            description = languageManager.getString("rich_numbering")
+        ) { state.toggleOrderedList() }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Size: the next step up from wherever the cursor sits, wrapping back to small.
+        FormatToggle(
+            icon = Icons.Filled.FormatSize,
+            active = RICH_TEXT_SIZES.drop(1).any { it == current.fontSize },
+            description = languageManager.getString("rich_size")
+        ) {
+            val index = RICH_TEXT_SIZES.indexOfFirst { it == current.fontSize }
+            val next = RICH_TEXT_SIZES[(index + 1).mod(RICH_TEXT_SIZES.size)]
+            state.addSpanStyle(SpanStyle(fontSize = next))
+        }
+        // Font: sans → serif → mono, the three names every renderer knows.
+        FormatToggle(
+            icon = Icons.Filled.TextFormat,
+            active = current.fontFamily != null && current.fontFamily != FontFamily.SansSerif,
+            description = languageManager.getString("rich_font")
+        ) {
+            val index = RICH_TEXT_FONTS.indexOfFirst { it == current.fontFamily }
+            val next = RICH_TEXT_FONTS[(index + 1).mod(RICH_TEXT_FONTS.size)]
+            state.addSpanStyle(SpanStyle(fontFamily = next))
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        RICH_TEXT_COLORS.forEach { color ->
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .padding(3.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(
+                        width = if (current.color == color) 2.dp else 0.dp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        shape = CircleShape
+                    )
+                    .clickable { state.addSpanStyle(SpanStyle(color = color)) }
+            )
+        }
+        IconButton(
+            onClick = { state.removeSpanStyle(SpanStyle(color = current.color)) },
+            modifier = Modifier.size(28.dp)
+        ) {
+            Icon(
+                Icons.Filled.FormatColorReset,
+                contentDescription = languageManager.getString("rich_color_reset"),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+/** One small toggle in the bar: pressed reads as filled. */
+@Composable
+private fun FormatToggle(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    active: Boolean,
+    description: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            modifier = Modifier.padding(5.dp).size(18.dp),
+            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

@@ -220,5 +220,17 @@
   "notes_fill_head": "Fill in the title and category automatically",
   "flow_cannot_suggest": "This app has nowhere to hold a suggestion, so an answer is written.",
   "default_category_suffix": "main",
-  "set_default_category": "Make this the main category"
+  "set_default_category": "Make this the main category",
+  "rich_bold": "Bold",
+  "rich_italic": "Italic",
+  "rich_underline": "Underline",
+  "rich_strikethrough": "Strikethrough",
+  "rich_size": "Text size",
+  "rich_font": "Font",
+  "rich_color_reset": "Default color",
+  "rich_bullets": "Bullet list",
+  "rich_numbering": "Numbered list",
+  "editor_fullscreen": "Edit fullscreen",
+  "editor_exit_fullscreen": "Exit fullscreen",
+  "editor_dismiss": "Close without saving"
 }

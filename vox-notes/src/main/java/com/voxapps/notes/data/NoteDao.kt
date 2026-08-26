@@ -46,8 +46,8 @@ interface NoteDao {
     suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long)
 
     /** Partial update from the inline editor — preserves createdAt. */
-    @Query("UPDATE notes SET title = :title, text = :text, categoryId = :categoryId, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun updateFields(id: Long, title: String?, text: String, categoryId: Long?, updatedAt: Long)
+    @Query("UPDATE notes SET title = :title, text = :text, textHtml = :textHtml, categoryId = :categoryId, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateFields(id: Long, title: String?, text: String, textHtml: String?, categoryId: Long?, updatedAt: Long)
 
     @Query("DELETE FROM notes WHERE id = :id")
     suspend fun deleteById(id: Long)

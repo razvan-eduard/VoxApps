@@ -15,7 +15,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [Note::class, Category::class, NoteTombstone::class, PendingLlmRequestEntity::class, AttachmentEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class NotesDatabase : RoomDatabase() {
@@ -112,6 +112,12 @@ abstract class NotesDatabase : RoomDatabase() {
          * Seeded rather than assumed: there was no fallback here at all, so a deleted category left
          * its notes with none — filed nowhere, and reachable only by scrolling everything.
          */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN textHtml TEXT")
+            }
+        }
+
         private val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE categories ADD COLUMN isDefault INTEGER NOT NULL DEFAULT 0")
@@ -139,7 +145,7 @@ abstract class NotesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, NotesDatabase::class.java, "vox-notes.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 // A brand-new install never runs a Migration — Room creates the current schema
                 // straight from the entities — so the fallback is seeded for that path too. A first
                 // note with nothing to file it under should land somewhere that says so.

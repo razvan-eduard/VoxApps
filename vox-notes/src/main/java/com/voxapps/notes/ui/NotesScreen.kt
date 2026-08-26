@@ -136,7 +136,7 @@ fun NotesScreen(
         if (editNoteTrigger > 0 && editNoteId >= 0) {
             state.notes.firstOrNull { it.note.id == editNoteId }?.let { nwc ->
                 commitEdit(editing, stateManager, context)
-                editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
+                editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId, textHtml = nwc.note.textHtml)
             }
         }
     }
@@ -146,10 +146,11 @@ fun NotesScreen(
     // Compose's internal back-callback ordering. This never saves (matches the pre-existing behavior
     // here, unrelated to this change) — a new note's staged-but-unlinked attachment files would
     // otherwise leak, so discard them along with the rest of the draft.
-    BackHandler(enabled = editing != null) {
+    val dismissEditor: () -> Unit = {
         editing?.let { if (it.id == null) discardPendingAttachments(it.pendingAttachments, context) }
         editing = null
     }
+    BackHandler(enabled = editing != null, onBack = dismissEditor)
     DoubleBackToExitHandler(
         message = languageManager.getString("press_back_again_to_exit"),
         enabled = editing == null
@@ -284,7 +285,8 @@ fun NotesScreen(
                                         calItem.nwc.note.id,
                                         calItem.nwc.note.title.orEmpty(),
                                         calItem.nwc.note.text,
-                                        calItem.nwc.note.categoryId
+                                        calItem.nwc.note.categoryId,
+                                        textHtml = calItem.nwc.note.textHtml
                                     )
                                 }
                             )
@@ -310,14 +312,16 @@ fun NotesScreen(
                                     stateManager = stateManager,
                                     title = draft.title,
                                     text = draft.text,
+                                    textHtml = draft.textHtml,
                                     categoryId = draft.categoryId,
                                     categories = state.categories,
                                     pendingAttachments = draft.pendingAttachments,
                                     onTitleChange = { editing = editing?.copy(title = it) },
-                                    onTextChange = { editing = editing?.copy(text = it) },
+                                    onContentChange = { plain, html -> editing = editing?.copy(text = plain, textHtml = html) },
                                     onCategoryChange = { editing = editing?.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
                                     onPendingAttachmentsChange = { editing = editing?.copy(pendingAttachments = it) },
+                                    onDismiss = dismissEditor,
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
@@ -338,14 +342,16 @@ fun NotesScreen(
                                     stateManager = stateManager,
                                     title = current.title,
                                     text = current.text,
+                                    textHtml = current.textHtml,
                                     categoryId = current.categoryId,
                                     categories = state.categories,
                                     pendingAttachments = current.pendingAttachments,
                                     onTitleChange = { editing = editing?.copy(title = it) },
-                                    onTextChange = { editing = editing?.copy(text = it) },
+                                    onContentChange = { plain, html -> editing = editing?.copy(text = plain, textHtml = html) },
                                     onCategoryChange = { editing = editing?.copy(categoryId = it) },
                                     onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
                                     onPendingAttachmentsChange = { editing = editing?.copy(pendingAttachments = it) },
+                                    onDismiss = dismissEditor,
                                     onDone = {
                                         val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                                         if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
@@ -357,7 +363,7 @@ fun NotesScreen(
                                     item = nwc,
                                     onClick = {
                                         commitEdit(editing, stateManager, context)
-                                        editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId)
+                                        editing = EditBuffer(nwc.note.id, nwc.note.title.orEmpty(), nwc.note.text, nwc.note.categoryId, textHtml = nwc.note.textHtml)
                                     }
                                 )
                             }
@@ -383,14 +389,16 @@ fun NotesScreen(
                 stateManager = stateManager,
                 title = current.title,
                 text = current.text,
+                textHtml = current.textHtml,
                 categoryId = current.categoryId,
                 categories = state.categories,
                 pendingAttachments = current.pendingAttachments,
                 onTitleChange = { editing = current.copy(title = it) },
-                onTextChange = { editing = current.copy(text = it) },
+                onContentChange = { plain, html -> editing = current.copy(text = plain, textHtml = html) },
                 onCategoryChange = { editing = current.copy(categoryId = it) },
                 onAddCategory = { name, color, onResult -> stateManager.addCategory(name, color, onResult) },
                 onPendingAttachmentsChange = { editing = current.copy(pendingAttachments = it) },
+                onDismiss = dismissEditor,
                 onDone = {
                     val cleanup = commitEdit(editing, stateManager, context, confirmCleanup = true)
                     if (cleanup != null) pendingNoteCleanup = cleanup else editing = null
@@ -500,7 +508,9 @@ private data class EditBuffer(
     val title: String,
     val text: String,
     val categoryId: Long?,
-    val pendingAttachments: List<String> = emptyList()
+    val pendingAttachments: List<String> = emptyList(),
+    /** The styled twin of [text], kept in step by the editor — see [Note.textHtml]. */
+    val textHtml: String? = null
 )
 
 /** A dirty save the user needs to accept auto-clean or cancel to fix manually. */
@@ -552,7 +562,14 @@ private fun commitEdit(
         }
         return null
     }
-    val candidate = Note(id = buf.id ?: 0, title = title, text = text, createdAt = System.currentTimeMillis(), categoryId = buf.categoryId)
+    val candidate = Note(
+        id = buf.id ?: 0,
+        title = title,
+        text = text,
+        createdAt = System.currentTimeMillis(),
+        categoryId = buf.categoryId,
+        textHtml = buf.textHtml
+    )
     if (!confirmCleanup) {
         saveNote(buf.id, NoteSanitizer.sanitize(candidate), buf.pendingAttachments, stateManager)
         return null
@@ -571,11 +588,11 @@ private fun commitEdit(
  *  already DB-linked directly, never staged locally), so the link step is a no-op there. */
 private fun saveNote(id: Long?, note: Note, pendingAttachments: List<String>, stateManager: NotesStateManager) {
     if (id == null) {
-        stateManager.addNote(note.title, note.text, note.categoryId) { newId ->
+        stateManager.addNote(note.title, note.text, note.categoryId, textHtml = note.textHtml) { newId ->
             pendingAttachments.forEach { fileName -> stateManager.addManualAttachment(newId, fileName) }
         }
     } else {
-        stateManager.updateNoteFields(id, note.title, note.text, note.categoryId)
+        stateManager.updateNoteFields(id, note.title, note.text, note.categoryId, textHtml = note.textHtml)
     }
 }
 

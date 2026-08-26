@@ -220,5 +220,17 @@
   "notes_fill_head": "Titel und Kategorie automatisch ausfüllen",
   "flow_cannot_suggest": "Diese App hat keinen Ort für Vorschläge, daher wird die Antwort geschrieben.",
   "default_category_suffix": "Haupt",
-  "set_default_category": "Zur Hauptkategorie machen"
+  "set_default_category": "Zur Hauptkategorie machen",
+  "rich_bold": "Fett",
+  "rich_italic": "Kursiv",
+  "rich_underline": "Unterstrichen",
+  "rich_strikethrough": "Durchgestrichen",
+  "rich_size": "Textgröße",
+  "rich_font": "Schriftart",
+  "rich_color_reset": "Standardfarbe",
+  "rich_bullets": "Aufzählung",
+  "rich_numbering": "Nummerierte Liste",
+  "editor_fullscreen": "Im Vollbild bearbeiten",
+  "editor_exit_fullscreen": "Vollbild verlassen",
+  "editor_dismiss": "Ohne Speichern schließen"
 }
