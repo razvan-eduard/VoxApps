@@ -9,6 +9,10 @@ import java.io.File
 
 class DownloadCompleteReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Exported (the downloads provider must reach it), so an explicit intent can arrive with
+        // any action — only the real one proceeds. The id below is additionally harmless to forge:
+        // DownloadManager.query() only ever returns this app's own downloads.
+        if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
         Logger.log("DownloadCompleteReceiver onReceive called", TAG)
         val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
         if (id == -1L) {
