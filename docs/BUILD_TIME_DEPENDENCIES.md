@@ -6,7 +6,7 @@
 > *build-time mechanism* — what gets fetched, built, or patched before compilation, and how it stays
 > in sync with upstream — as its own cross-cutting topic.
 
-VoxApps depends on ten native/ML libraries that aren't simple Maven artifacts. Each falls into one of
+VoxApps depends on eleven native/ML libraries that aren't simple Maven artifacts. Each falls into one of
 two patterns:
 
 | Pattern | Meaning | Used by |
@@ -459,7 +459,7 @@ to `dlopen` on modern Android (missing Bionic libc symbol `__sfp_handle_exceptio
 
 | Path | Role |
 |---|---|
-| `vendor/paddleocr-upstream` | Git submodule — pristine upstream source, pinned to commit `211989f046cc1878460f9e65574690c00a127a1a`. **Sparse-checked-out** to just `deploy/ppocr-android/ppocr-sdk` — PaddleOCR itself is a ~2GB monorepo we otherwise have no use for; a blobless partial clone (`--filter=blob:none --sparse`) plus a shallow fetch of just the pinned commit keeps this to ~22MB instead. Reference only, never compiled directly. |
+| `vendor/paddleocr-upstream` | Git submodule — pristine upstream source at whatever commit the gitlink records; `sync-ppocr-sdk.yml` advances it weekly so the drift report compares against current upstream, while the vendored copy's own origin commit stays recorded in `vendor/ppocr-sdk/NOTICE`. **Sparse-checked-out** to just `deploy/ppocr-android/ppocr-sdk` — PaddleOCR itself is a ~2GB monorepo we otherwise have no use for; a blobless partial clone (`--filter=blob:none --sparse`) plus a shallow fetch of just the pinned commit keeps this to ~22MB instead. Reference only, never compiled directly. |
 | `vendor/ppocr-sdk/src/...` | Local Gradle module — vendored + patched copy, compiled into `vox-vision`. |
 | `vendor/ppocr-sdk/patches/*.patch` | The four patches as real unified diffs — regenerate with `./scripts/vox patches regen ppocr-sdk`. |
 | `vendor/ppocr-sdk/NOTICE` | Apache-2.0 attribution + provenance, and what each patch is for. |
@@ -786,7 +786,7 @@ and a workflow.
 
 ### The automation has tests
 
-Thirty scripts and twenty workflows gate every release, and the contracts between them break
+The scripts under `scripts/` and the workflows they feed gate every release, and the contracts between them break
 silently: a script that stops emitting its report, a workflow that stops reading it, a vendored fork
 that drifts from its patches. Nothing about that surfaces in an Android build.
 

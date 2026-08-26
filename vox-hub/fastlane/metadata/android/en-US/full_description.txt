@@ -10,3 +10,4 @@ Key Features:
 - App Wake-up: Intelligent IPC handling that wakes up "stopped" companion apps to ensure they respond to backup and sync requests.
 - Privacy First: Operates without a central cloud. Your data moves directly between your devices or to your chosen local storage.
 - Lightweight: A minimal utility that stays out of the way until you need to secure your data.
+- Multi-language UI: Available in English, Romanian, German, and French.

@@ -168,8 +168,8 @@ data class RemoteModelItem(
      * signature's authority, so "point anywhere" and "the bytes are what the provider intended"
      * stop being in tension.
      *
-     * Absent means unverified, and stays supported: 97 URLs cannot be hashed in one go, and a
-     * download that worked yesterday must keep working today.
+     * Absent means unverified, and stays supported: a third-party schema has no obligation to
+     * carry hashes, and a download that worked yesterday must keep working today.
      */
     val sha256: String? = null
 ) : AppModel {

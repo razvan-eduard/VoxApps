@@ -9,5 +9,5 @@ Key Features:
 - Local OCR: High-speed text recognition via an on-device PaddleOCR SDK. Models are downloaded once and integrity-checked against pinned checksums. No network round-trips required.
 - Ecosystem Integration: Forwards cleaned and titled text directly to VoxNotes as a new record or to VoxExpenses as a financial entry.
 - Multimodal AI (opt-in): Optionally attach high-detail photos when sending scans to a cloud AI engine for advanced document analysis — off by default.
-- Total Privacy: Zero cloud dependencies. All image processing and text extraction happen locally on your hardware.
+- Total Privacy: All image processing and text extraction happen locally on your hardware. The one cloud path is the opt-in above, and it stays off until you turn it on.
 - Multi-language UI: Available in English, Romanian, German, and French.

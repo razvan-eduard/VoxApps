@@ -23,3 +23,4 @@ Key Features:
 - Archive Instead of Regret: Records can be archived in bulk with a warning, kept out of every budget and report, then restored, deleted selectively, or swept by a scheduled retention. Permanent deletion takes a red confirmation whose Yes only arms after a five-second countdown.
 - Budgets Per Account and Currency: A budget lives on the account, one per currency it holds, computed from the records rather than kept as a counter — a period that resets or a pot you top up. The budget screen carries the same filter control as the list and reports.
 - The Currency Is Read, Not Defaulted: A captured payment takes its currency from the message itself; an ambiguous spelling that could mean two currencies names neither. Declined payments are recognized and never become records.
+- Multi-language UI: Available in English, Romanian, German, and French.

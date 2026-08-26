@@ -36,10 +36,9 @@ dependencies {
     // via merged_native_libs output — see vox-commander/build.gradle.kts's pickFirst comment). This
     // version must match whatever OrtGetApiBase version *that* winning binary actually exports
     // (currently VERS_1.27.0, confirmed via readelf against sherpa-onnx v1.13.4's bundled copy), not
-    // vox-vision's own onnxruntime-android pin — those are two independent constraints that happen
-    // to currently disagree (vox-vision is pinned to 1.21.1 because upstream's own 1.27.0/1.28.0
-    // builds are broken; sherpa-onnx bundles its own separately-built 1.27.0-tagged binary that is
-    // not the same artifact).
+    // vox-vision's own onnxruntime-android pin — those are two independent constraints (vision
+    // rides the shared catalog entry, where runtime and bridge come from the same artifact and no
+    // pairing applies; this one is locked to whatever sherpa's AAR bundles).
     // Determined by sherpa-onnx, not chosen here. vox-commander pulls in sherpa-onnx for Piper TTS,
     // whose AAR carries its own build of ONNX Runtime at the same packaged path; that copy is the one
     // AGP keeps, because libsherpa-onnx-jni.so is linked against it. So this artifact is present for
