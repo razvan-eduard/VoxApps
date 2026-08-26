@@ -29,4 +29,8 @@
     <permission android:name="com.voxapps.vox.permission.CAPABILITY_QUERY" android:protectionLevel="signature" />
     <uses-permission android:name="com.voxapps.vox.permission.CAPABILITY_QUERY" />
 
+    <!-- Commander declares (and owns) this one — see VoxIpc.SPEAK_PERMISSION. Held here so every
+         Vox app can use the TTS hook the contract describes without a per-app manifest edit. -->
+    <uses-permission android:name="com.voxapps.commander.permission.SPEAK" />
+
 </manifest>

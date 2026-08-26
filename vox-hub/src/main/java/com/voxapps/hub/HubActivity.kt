@@ -52,7 +52,7 @@ class HubActivity : ComponentActivity() {
                             voxConnectDeviceStore = container.voxConnectDeviceStore,
                             onBack = { showSettings = false },
                             onRestoreBackup = { file ->
-                                restoreFileUri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", file)
+                                restoreFileUri = FileProvider.getUriForFile(context, com.voxapps.hub.data.preferences.HubSettings.FILE_PROVIDER_AUTHORITY, file)
                                 showSettings = false
                             }
                         )

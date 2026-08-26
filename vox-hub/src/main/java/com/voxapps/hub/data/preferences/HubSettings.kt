@@ -84,6 +84,8 @@ data class HubSettings(
 
         const val VOXCONNECT_DEFAULT_PORT = 8787
 
+        const val FILE_PROVIDER_AUTHORITY = "com.voxapps.hub.fileprovider"
+
         // Mirror com.voxapps.ipc.VoxIpc.IMPORT_MODE_* — kept as plain strings here rather than a
         // dependency on :core:ipc from this settings snapshot class, same reasoning as VoxIpc's own
         // doc comment for that constant.
