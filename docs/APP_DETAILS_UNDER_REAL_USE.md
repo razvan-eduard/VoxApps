@@ -129,6 +129,27 @@ becomes "when the OS feels like it", which for a phone in a pocket abroad can be
 > that is correct, since nothing about a sentence is certain before it is read — but the person can
 > now see that it is being worked on rather than wonder whether they were heard.
 
+## 6. Reading in place — LiveView on a moving hand
+
+**The happy path.** The phone hovers over a label; within a second of holding still, chips appear on
+the recognized lines. The hand drifts, the chips drift with it — the affine map of the document
+rectangle, not a re-read. The person taps WhatsApp on the phone-number line and the chat opens with
+the full international number, because the label's own `.ro` domain named the prefix.
+
+**The sad path.** The detector loses the rectangle for a second — a shadow, a tilt. Nothing happens:
+chips clear only on *sustained* absence, at an eagerness the person chose, and the default demands
+seven-plus seconds of genuinely empty detection. A read that lands on a blur returns nothing and
+retries on its own a few seconds later. If recognition misreads a line, every chip is an offer and
+not an act — a wrong number opens a prefilled dialer, it never places a call.
+
+**What the user knows.** The frame pulses while the OCR pass holds the camera thread — deliberate
+motion over the frozen rectangle, so a second of stillness reads as thinking rather than hanging.
+The frozen style makes the whole exchange explicit: the frame stops, the fields line up as a table,
+and nothing moves until retry or close.
+
+> **Verdict.** The mode never writes anything anywhere — no records, no queue, no IPC. The worst a
+> bad read can cost is a tap that opens the wrong draft.
+
 ## What I would fix first, in order
 
 1. ~~**Per-field origin** on a record~~ — done: stored at capture, shown beside the field, replaced

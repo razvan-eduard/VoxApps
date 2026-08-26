@@ -1,6 +1,8 @@
 VoxVision turns your smartphone into a privacy-first, high-precision document scanner. It operates entirely on-device, ensuring your sensitive documents never leave your hands.
 
 Key Features:
+- Vox LiveView: A second launcher icon that turns the camera into a live reader. Point it at a card, a flyer or a label: recognized text gets chips anchored to it — a phone number offers a call, an email opens a draft, a web address opens, a street address searches the map, and anything else can be searched or copied. Each category has one built-in action on the system default plus any apps you add, each shown with its own icon. Your own categories are a name and a regex, sent to the apps you pick.
+- LiveView, Your Way: Three result styles — chips over the live text, boxes filled with the recognized text, or a frozen frame with the fields laid out as a table. Chips stay for as long as the document stays in frame and follow panning and zooming; detector pace and rescan eagerness are yours to set. Multi-line addresses are folded into one, and national phone numbers are completed with the country prefix read from the document's own web domain — shown in green, so apps like WhatsApp get the full international number.
 - Smart Auto-Capture: ML-based document corner detection finds a document's edges even against cluttered or dim backgrounds, and the camera automatically triggers a capture once it's stable and aligned.
 - OpenCV Precision: Professional-grade edge cropping and perspective correction powered by a custom-built OpenCV engine.
 - Unified Scan Control: Single photo, multi-page stitching, or batch scanning are all one tap away from the same button, instead of separate modes.

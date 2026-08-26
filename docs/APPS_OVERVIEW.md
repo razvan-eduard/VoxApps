@@ -85,7 +85,7 @@ ecosystem plugs into, though it works completely on its own with no companion ap
     its real name (e.g. saying "youtube" launches a YouTube-frontend app like LibreTube instead). An
     alias is resolved *before* category defaults, so it always wins over whatever's starred.
 
-  <img width="388" height="850" alt="App Manager: default apps and App Aliases" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/23_app_manager_aliases.png" />
+  <img width="388" height="850" alt="App Manager: default apps and App Aliases" src="../vox-commander/fastlane/metadata/android/en-US/images/phoneScreenshots/36_app_manager_page.png" />
 
   The same tab also has a Media Session permission switch (needed to control playback in apps like
   Spotify), a "Return to previous app after action" app list, and the External Trigger toggle mentioned
@@ -214,8 +214,11 @@ through Commander (`create`/`read`) or used entirely on its own.
 
 ## Vox Vision
 
-Standalone document scanner (`com.voxapps.vision`, `com.voxapps.vision.VisionActivity`) — no voice
-commands in, only OCR text out.
+Standalone document scanner and live text reader (`com.voxapps.vision`,
+`com.voxapps.vision.VisionActivity`) — no voice commands in, only OCR text out. Two launcher icons,
+one activity: **Vox Vision** is the scan flow below, **Vox LiveView** is an activity-alias on the
+same activity whose component name selects a separate reading mode; a satellite's OCR request always
+lands in the scan flow whichever icon was used last.
 
 - **Camera capture** (CameraX) with a live overlay of the detected document bounds
 - **Auto-capture** — a throttled `ImageAnalysis` pass runs Otsu-threshold brightness-blob detection
@@ -234,6 +237,24 @@ commands in, only OCR text out.
   long document as you go), or **Batch** (keep shooting pages, OCR runs on all of them only once the
   session ends).
 
+- **Vox LiveView** — the camera as a reader rather than a capturer. Once the framing holds still,
+  the frame is OCR'd once and each recognized row is classified from shape alone
+  (`:core:textmatch`'s `LineEntities`: account by checksum, email, web address, phone by evidence
+  rungs, street address, generic — plus the user's own regex categories, which outrank the
+  built-ins). Every row gets a float of chips anchored to its text: one **built-in action** through
+  the system default (dial / write / open / map search / web search / copy) followed by **any apps
+  the person added** in settings, each drawn with its own icon and reached by its most specific
+  carrier (`EntityActions.*ToApp`). Chips persist for as long as the document stays in frame —
+  invalidation demands sustained evidence at a chosen eagerness — and ride panning and zooming
+  through the affine map of the document rectangle. Multi-line addresses fold the city-and-postal
+  line into the street's entity; national phone numbers are completed to international form with
+  the prefix derived from the document's own ccTLD (site first, email second, a fixed table —
+  `CountryDialing`), shown green in the frozen view. Three result styles: chips over the live text,
+  boxes filled with the recognized text, or a frozen washed-out frame with the fields as a table
+  (specific kinds first, search rows last, retry and close beneath). Detector pace, rescan
+  eagerness, per-kind strictness (the duplicate rules' exact/fuzzy switch), float apps and custom
+  categories all live in a LiveView settings page; a first-open explainer owns the camera
+  permission ask.
 - **Table mode** — a scan request can declare its document tabular (Vox Expenses does, for
   invoices); an additive reconstruction pass rebuilds the printed rows and columns behind a marker in
   the OCR output, and the plain text follows printed row order, so downstream parsing sees the table
@@ -257,6 +278,9 @@ commands in, only OCR text out.
   titled cards.
 
   <img width="388" height="850" alt="Settings labeled sections" src="../vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/3_settings_sections.png" />
+  <img width="388" height="850" alt="LiveView: chips anchored to the recognized text" src="../vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/4_liveview_live_chips.png" />
+  <img width="388" height="850" alt="LiveView: recognized text painted into the boxes" src="../vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/5_liveview_filled_text.png" />
+  <img width="388" height="850" alt="LiveView: frozen frame with the fields as a table" src="../vox-vision/fastlane/metadata/android/en-US/images/phoneScreenshots/6_liveview_frozen_table.png" />
 
 - Multi-language UI (English, Romanian, German, French)
 
@@ -296,6 +320,18 @@ bank/payment notifications, or entered by hand.
   (Settings, off by default) triggers this automatically the moment a stub expense gets its first photo.
 
   <img width="388" height="850" alt="Rescan suggestions, applied field by field" src="../vox-expenses/fastlane/metadata/android/en-US/images/phoneScreenshots/22_rescan_field_suggestions.png" />
+
+- **Many records at once** — long-press starts a selection; a checklist button in the bar flips
+  between select-all and select-none, and the pencil opens the same edit layout over every selected
+  record: fields that differ across the selection read "Multiple values" and only what you touch is
+  written. The other two bar actions are archive — records leave every list, total and budget until
+  restored, with a retention picklist and a red, five-second-armed permanent delete on the archive
+  screen — and delete, behind the same countdown confirmation. The filter chip the list carries sits
+  on Reports and the budget screen too, reading the same state.
+
+  <img width="388" height="850" alt="Selection bar with select-all, edit, archive, delete" src="../vox-expenses/fastlane/metadata/android/en-US/images/phoneScreenshots/32_multi_select.png" />
+  <img width="388" height="850" alt="One edit over three records — untouched fields stay per-record" src="../vox-expenses/fastlane/metadata/android/en-US/images/phoneScreenshots/33_bulk_edit.png" />
+  <img width="388" height="850" alt="The archive: retention picklist and restore" src="../vox-expenses/fastlane/metadata/android/en-US/images/phoneScreenshots/34_archive.png" />
 
 - **Notification capture** — an opt-in `NotificationListenerService` inspects notifications only from
   apps the user explicitly allowlists (Settings → Notification capture); a matched notification is a
@@ -822,7 +858,6 @@ own doc comment). Voice-created through Commander (`create`/`read`) or used enti
   <img width="388" height="850" alt="ToDo items on the home-screen widget" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/23_todo_widgets.png" />
   <img width="388" height="850" alt="Scan-to-checklist-item" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/9_todo_scan_button.png" />
   <img width="388" height="850" alt="Due-date/time quick-picker" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/10_todo_due_date_picker.png" />
-  <img width="388" height="850" alt="Per-list/per-item color picker" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/11_todo_color_picker.png" />
   <img width="388" height="850" alt="Inline task editor" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/20_todo_inline_editor.png" />
   <img width="388" height="850" alt="Weekly recurrence on chosen weekdays" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/21_weekday_recurrence.png" />
   <img width="388" height="850" alt="Routine list: unchecks at midnight on the chosen days" src="../vox-calendar/fastlane/metadata/android/en-US/images/phoneScreenshots/22_routine_list.png" />

@@ -1,1 +1,1 @@
-Privacy-focused document scanner with on-device OCR.
+Privacy-focused document scanner and live text reader, all on-device.

@@ -70,7 +70,7 @@ apps."
 |-----|--------------|
 | 🎙️ [**Vox Commander**](#-vox-commander) | On-device voice assistant — wake word, Whisper STT, a 3-layer AI pipeline, and instant FastMap voice-shortcut rules you define yourself. |
 | 📝 [**Vox Notes**](#-vox-notes) | Encrypted on-device notes, created by voice or by hand, with AI-assisted category/duplicate cleanup. |
-| 📷 [**Vox Vision**](#-vox-vision) | Privacy-first document scanner — on-device OCR, no cloud round-trip, forwards clean text to Notes/Expenses. |
+| 📷 [**Vox Vision**](#-vox-vision) | Privacy-first document scanner and live text reader — on-device OCR, no cloud round-trip, forwards clean text to Notes/Expenses; Vox LiveView turns recognized text into tappable actions. |
 | 💸 [**Vox Expenses**](#-vox-expenses) | Encrypted on-device expense tracker — voice, receipt scan, or automatic bank-notification capture. |
 | 📅 [**Vox Calendar**](#-vox-calendar) | Encrypted on-device calendar with natural-language scheduling and a built-in ToDo Lists system. |
 | 🗂️ [**Vox Hub**](#-vox-hub) | Backup, restore, and cloud-free peer-to-peer sync across the whole family of apps. |
@@ -200,10 +200,18 @@ phone via Vox Hub, plus its own Backup & Restore screen.
 
 ### 📷 Vox Vision
 
-Document scanner. Camera capture with auto-detected document bounds and auto-capture, on-device OCR (no
-network round-trip), edge-cropping, then forwards the cleaned text to Vox Notes or Vox Expenses as a new
-record. A table mode reconstructs tabular documents (invoices) row by row when the requesting app declares
-the scan tabular, so the extracted text follows the printed rows.
+Document scanner and live reader. Camera capture with auto-detected document bounds and auto-capture,
+on-device OCR (no network round-trip), edge-cropping, then forwards the cleaned text to Vox Notes or Vox
+Expenses as a new record. A table mode reconstructs tabular documents (invoices) row by row when the
+requesting app declares the scan tabular, so the extracted text follows the printed rows.
+
+A second launcher icon, **Vox LiveView**, turns the same camera into a reader: hold it over a card, a
+flyer or a label and the recognized lines get chips anchored to them — a phone number offers a call, an
+email a draft, an address a map search; every category has one built-in action on the system default
+plus any apps you add, and your own categories are a name and a regex. Chips persist while the document
+stays in frame and track panning and zooming; results can also render as filled text boxes or a frozen
+frame with the fields as a table. Multi-line addresses fold into one, and national phone numbers are
+completed with the country prefix read from the document's own web domain.
 
 → [Full feature list](docs/APPS_OVERVIEW.md#vox-vision)
 

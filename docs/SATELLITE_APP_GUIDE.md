@@ -422,6 +422,9 @@ You never write a `<permission>` tag yourself for any of these.
 ```kotlin
 VoxIpc.VISION_PACKAGE          // "com.voxapps.vision"
 VoxIpc.VISION_ACTIVITY_CLASS   // "com.voxapps.vision.VisionActivity"
+// Always launch Vision by this class name. Vision also exposes a second launcher entry (the
+// "Vox LiveView" activity-alias) for its own reading mode — it is not part of the IPC contract,
+// and an OCR request always lands in the scan flow regardless of which icon a person used last.
 VoxIpc.HUB_PACKAGE             // "com.voxapps.hub"
 VoxIpc.NOTES_PACKAGE           // "com.voxapps.notes"
 VoxIpc.EXPENSES_PACKAGE        // "com.voxapps.expenses"
