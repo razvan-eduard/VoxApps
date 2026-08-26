@@ -49,6 +49,36 @@ class AesGcmCipherTest {
     }
 
     @Test
+    fun `byte-level encrypt then decrypt recovers the original bytes`() {
+        val key = AesGcmCipher.generateKey()
+        val plaintext = ByteArray(300) { (it * 7).toByte() }
+
+        val payload = AesGcmCipher.encryptBytes(key, plaintext)
+        val decrypted = AesGcmCipher.decryptBytes(key, payload)
+
+        assertEquals(plaintext.toList(), decrypted.toList())
+    }
+
+    @Test(expected = Exception::class)
+    fun `byte-level decrypt of a tampered payload throws`() {
+        val key = AesGcmCipher.generateKey()
+        val payload = AesGcmCipher.encryptBytes(key, "frame".toByteArray())
+
+        payload[payload.size - 1] = (payload[payload.size - 1].toInt() xor 1).toByte()
+        AesGcmCipher.decryptBytes(key, payload)
+    }
+
+    @Test
+    fun `the string token is the byte payload in base64 - both layers share one wire format`() {
+        val key = AesGcmCipher.generateKey()
+        val token = AesGcmCipher.encrypt(key, "shared format")
+
+        val viaBytes = AesGcmCipher.decryptBytes(key, java.util.Base64.getDecoder().decode(token))
+
+        assertEquals("shared format", String(viaBytes, Charsets.UTF_8))
+    }
+
+    @Test
     fun `key round-trips through base64 encoding`() {
         val key = AesGcmCipher.generateKey()
 
