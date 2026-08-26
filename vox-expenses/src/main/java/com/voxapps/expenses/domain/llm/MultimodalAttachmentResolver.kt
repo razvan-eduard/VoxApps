@@ -9,7 +9,7 @@ import com.voxapps.logging.Logger
 import java.io.File
 
 private const val TAG = "MultimodalAttachmentResolver"
-private const val EXPENSES_FILE_PROVIDER_AUTHORITY = "com.voxapps.expenses.fileprovider"
+private const val EXPENSES_FILE_PROVIDER_AUTHORITY = com.voxapps.expenses.data.ExpensesAttachments.FILE_PROVIDER_AUTHORITY
 
 /**
  * Resolves the staged AI-attachment copy of a receipt image (`filesDir/receipts/<name>_ai.jpg` —
