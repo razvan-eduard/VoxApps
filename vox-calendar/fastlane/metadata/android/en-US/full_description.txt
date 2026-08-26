@@ -1,7 +1,7 @@
 VoxCalendar is a standalone, encrypted on-device calendar that combines professional organization with the simplicity of natural language.
 
 Key Features:
-- Natural Language Scheduling: Create complex events and tasks just by speaking (e.g., "dentist in a week"). Dates and times are resolved locally via AI.
+- Natural Language Scheduling: Create complex events and tasks just by speaking (e.g., "dentist in a week"). Dates and times are resolved by your chosen AI engine — the on-device model by default; a cloud engine only if you selected one in VoxCommander.
 - Reworked To-Do Lists: Give a task a due date and it shows up on the calendar and home screen widget; star important tasks, see a "now" line and "Up next" label, and a Done toggle. Add items by voice or by scanning a photo. Tasks are edited inline on their own node, weekly recurrence picks exactly which days, and a list can be a routine that resets at midnight.
 - Layered Organization: Use colored, named layers (e.g., "Personal", "Work", "Project X") instead of a rigid category tree. Each layer is independently toggleable.
 - Cross-App Day Linking: A unique day-summary sheet that shows your VoxNotes and VoxExpenses alongside your calendar events for a complete view of your day.
@@ -13,3 +13,4 @@ Key Features:
 - SQLCipher Protected: Your schedule is your business. All data is encrypted with high-grade security.
 - Finished Items Read as Finished: A done to-do is flat grey behind a black outline, not a faded copy of itself — so a list of completed items doesn't read as a list of dimmed ones.
 - Months Land Somewhere Sensible: Switching month selects the first of that month; coming back to this month selects today, instead of keeping a day-of-month you never chose.
+- Multi-language UI: Available in English, Romanian, German, and French.

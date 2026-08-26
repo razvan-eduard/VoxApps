@@ -14,32 +14,33 @@ expenses side stages the file(s) before any model is involved; when a record id 
 are linked to it as ordinary attachment rows — win or lose
 (`LlmResultReceiver.linkPendingScanAttachments`, "never lose the photo"). A parse that fails
 outright still produces a record: a **stub** titled *manual review required*, with the photo attached,
-`isStub = true`, and the figures the page itself proved (`LlmResultReceiver:735`).
+`isStub = true`, and the figures the page itself proved (`LlmResultReceiver.createStubExpense`).
 
 **The request.** `VoxLlmRequestQueue.enqueueAndSend` writes a row into `pending_llm_requests`
 (Room, SQLCipher) *before* broadcasting, with an attempt count and a last-attempt stamp
 (`core/ipc/VoxLlmRequestQueue.kt`). `PendingLlmRequestRetryWorker` runs every fifteen minutes and
 re-dispatches anything unanswered (`core/ipc/PendingLlmRequestRetry.kt`), scheduled at process start
-(`ExpensesApplication:53`). The UI being dead is irrelevant — the queue is not in the UI.
+(`PendingLlmRequestScheduler.ensureScheduled`, called from `ExpensesApplication.onCreate`). The UI being dead is irrelevant — the queue is not in the UI.
 
 **What the user sees afterwards.** The expense simply appears in the list. A stub carries a red
-error mark on its card (`ExpenseCards.kt:121`), so "this one needs you" is visible without opening it.
+error mark on its card (the `isStub` branch in `ExpenseCard`), so "this one needs you" is visible without opening it.
 
 > **Verdict.** Nothing is lost: not the photo, not the request, not the reading. The recovery path is
 > the same one a Commander that was briefly uninstalled goes through.
 >
-> **The gap.** There is no *in-flight* state. Between the shutter and the reply the app shows
-> nothing at all, and the finished record arrives with no mark saying it is new. A person who was
-> interrupted has no way to ask "did that one go through?" other than scanning the list for it.
+> **The gap.** The pending strip (§5) says *that* something is between the shutter and the reply,
+> but not *which* record it will become, and the finished record arrives with no mark saying it is
+> new. A person who was interrupted can see something is in flight, but still finds the result by
+> scanning the list for it.
 
 ## 2. Autopilot — three ticks before coffee
 
 **Taps.** One per node. The node's tap target ticks the item directly and does nothing else while
-the row is not being edited (`ToDoNodeTimeline.kt:343`), so three items are three taps, plus one
+the row is not being edited (the node's `onToggleDone` tap target in `ToDoNodeTimeline`), so three items are three taps, plus one
 back. No confirmation, no menu, no undo prompt in the way.
 
 **Is the feedback instant?** No — it is a round trip. `toggleDone` reads the row, writes it back
-(`ToDoRepository.kt:172`), and the list redraws when Room's Flow emits (`observeForList`). On a
+(`ToDoRepository.toggleDone`), and the list redraws when Room's Flow emits (`observeForList`). On a
 device this is a frame or two, but it is not optimistic by construction: the colour and the solid
 outline follow the database, not the finger.
 
@@ -68,8 +69,8 @@ AUTO rung cannot tell, in the editor, what came from arithmetic and what came fr
 
 **Does correcting the name teach?** Eventually, and without ticking anything. `FieldCorrectionMemory`
 records the correction and only counts it as active once it has been seen `fieldCorrectionThreshold`
-times (`core/fieldmemory/FieldCorrectionMemory.kt:45`); the default is **MEDIUM**, not instant
-(`ExpensesSettings.kt:319`), and the speed is a four-way setting. The same discipline governs re-map
+times (`FieldCorrectionMemory.activeCorrections`); the default is **MEDIUM**, not instant
+(`ExpensesSettings.fieldCorrectionThreshold`), and the speed is a four-way setting. The same discipline governs re-map
 rules: a repeated edit drafts a rule that is **disabled** until a person enables it.
 
 > **Verdict.** Nothing is silently learned from a single correction, and nothing is silently applied
@@ -93,7 +94,7 @@ is only sometimes wrong.
 **The list under ten thousand rows.** Here the honest answer is that it will degrade.
 `expensesWithDetails` observes **every** row with its items and attachments, and `ExpenseFilter.apply`
 filters and sorts that list in Kotlin on every emission and every filter change
-(`ExpensesStateManager.kt:111`). The table carries indices on `categoryId` and `uid` only — nothing
+(the `combine` over `expensesWithDetails` in `ExpensesStateManager`). The table carries indices on `categoryId` and `uid` only — nothing
 on `dateTime` — and no filter reaches SQL at all.
 
 > **Verdict.** Rules age well. The list does not.

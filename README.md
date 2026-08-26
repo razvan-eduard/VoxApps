@@ -132,6 +132,7 @@ built locally, so those two need their vendored upstreams before they will build
 ```bash
 git submodule update --init --depth 1 vox-commander/src/main/cpp/whisper.cpp   # Commander
 git submodule update --init --depth 1 vox-commander/src/main/cpp/llama.cpp     # Commander
+git submodule update --init --depth 1 vendor/OpenCL-Headers                    # Commander (GPU shim)
 git submodule update --init --depth 1 vendor/opencv                            # Vision
 ```
 

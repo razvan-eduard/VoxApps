@@ -3,7 +3,7 @@ VoxCommander is a privacy-first, on-device voice assistant for Android. It serve
 Key Features:
 - Wake Word Detection: Always-on listening using Vosk, Picovoice Porcupine, or the fully open-source OpenWakeWord (ONNX-based).
 - On-Device Whisper STT: High-accuracy speech-to-text powered by Whisper.cpp, running locally with multilingual support.
-- Smart Command Pipeline: Instant, offline FastMap rule matching (plain pattern matching, not AI) handles common phrases with zero latency; anything more complex goes to your choice of AI engine (a fully local llama.cpp model running on your device, or a cloud LLM), with a separate offline fallback model if that's ever unavailable.
+- Smart Command Pipeline: Instant, offline FastMap rule matching (plain pattern matching, not AI) handles common phrases with zero latency; anything more complex goes to your choice of AI engine (a fully local llama.cpp model running on your device, a LiteRT-LM model behind the Google-services opt-in, or a cloud LLM), with a separate offline fallback model if that's ever unavailable.
 - Bring Your Own Models: import as many of your own model files as you like — GGUF for the LLM, Whisper/Vosk/OpenWakeWord for speech — each listed by name beside the catalog models, individually selectable and deletable.
 - Experimental GPU Acceleration: opt-in OpenCL GPU inference for speech recognition and the local LLM, verified on your device by a safe compatibility test before use — no driver simply means CPU, never a dead engine.
 - Intelligent Intent Routing: Automatically maps spoken commands to system controls, media playback (Spotify/YouTube), navigation (Waze/Google Maps), or companion Vox apps.
@@ -12,5 +12,6 @@ Key Features:
 - External Voice Trigger: Integration with automation tools like MacroDroid or Tasker to trigger the assistant via hardware buttons or schedules.
 - Private by Design: Core processing is done locally, ensuring data sovereignty. Anything that isn't stays off until you say otherwise — dedicated toggles for cloud AI engines (OpenAI) and for Google system services (system speech recognition) both default to off, so nothing cloud- or Google-operated runs without an explicit opt-in.
 - Material 3 Overlay: A sleek, floating voice UI that provides real-time transcription and status updates over any app.
+- Multi-language UI: Available in English, Romanian, German, and French.
 - Backup & Restore: Save and restore your settings and FastMap rules to a file you choose, with Full override, Merge, or Additive restore modes.
 - App Lists Open Where You Left Off: Any app picker puts the apps you starred first, then the ones you chose, then the rest — each alphabetical — instead of one long installed-order list.

@@ -235,7 +235,7 @@ owning the source.
 - **Models**: Downloaded on-demand from HuggingFace (`ggml-tiny.bin`, `ggml-base.bin`, `ggml-small.bin`)
 - **Release builds**: the two whisper libs are excluded from the APK via variant-scoped
   `jniLibs.excludes` (`androidComponents.onVariants`) and downloaded as real, user-facing DLC
-  (~88 MB for libwhisper.so + libomp.so on arm64, fetched by `WhisperEngineManager` when the user
+  (~29 MB for libwhisper.so + libomp.so on arm64, fetched by `WhisperEngineManager` when the user
   enables Whisper, verified against
   digests recorded in the APK as `assets/whisper-libs.sha256`) — the model download above is the
   user-visible part of the same mechanism, The llama.cpp runtime is packaged by `voxDlc` mode: in `minimal` (the
@@ -1111,7 +1111,7 @@ The green "on-device" indicator is a persisted `downloadedModelIds` flag, not re
 ### Whisper Native Libraries
 
 - Debug builds: `libwhisper.so` and `libomp.so` bundled in APK
-- Release builds: Excluded from APK, downloaded as DLC at runtime (~88 MB for the two arm64 libs,
+- Release builds: Excluded from APK, downloaded as DLC at runtime (~29 MB for the two arm64 libs,
   digest-checked against `assets/whisper-libs.sha256`)
 - GPU (OpenCL) use is a per-engine opt-in toggle, proven per device by a sandboxed compatibility
   probe — see [§4 GPU Acceleration](#gpu-acceleration-opencl)
@@ -1340,7 +1340,7 @@ without touching the apps.
 
 These files are fetched and adopted **unattended at every launch** (`useRemoteSchemas` defaults to
 `true`), and they declare engine endpoints — where the app sends speech and the user's own API keys —
-and 102 model download URLs. Whoever can serve that path could redirect all of it at the next launch,
+and 109 model download URLs. Whoever can serve that path could redirect all of it at the next launch,
 with no app update and nothing for a user to accept. The SHA-256 that `RemoteSchema` already used
 compares a download against the *previous download*: it answers "did this change?", never "is this
 genuine?".
@@ -1381,7 +1381,7 @@ which — because the schema itself is signed — inherits that signature's auth
 
 `ModelDownloader` checks it at the one choke point every download passes through, before the artefact
 reaches a native parser, and deletes what does not match. **Absent means unverified and stays
-supported** — a download that worked yesterday must work today — though all 102 model URLs carry the
+supported** — a download that worked yesterday must work today — though all 109 model URLs carry the
 field. `./scripts/vox schemas hash-models [engine]` fills it in by fetching each model once.
 
 `RemoteSchema` fetches each file from `<repo>/main/remote-schemas/<folder>/<file>` and compares it by
@@ -1399,7 +1399,7 @@ schema tests read the generated assets)
 **Parsed by**: `RemoteModelRegistry` (`data/remote/RemoteModelRegistry.kt`)
 
 **Contents**:
-- `schema_version` — Integer, used to detect newer versions for hot-reload
+- `schema_version` — Integer marking the file format generation (adoption itself is decided by content hash — see `RemoteSchema`)
 - `prompts.standard_nlu` — The NLU system prompt sent to LLM interpreters (OpenAI, Local LLM). Contains sentence anatomy rules, domain/action taxonomy, and JSON output format
 - `engines` — Map of engine key → engine definition. Each engine has `type`, `is_multilingual`, `extension`, a `capabilities` list, and a `models` array:
   - `stt_whisper` — Whisper.cpp models (tiny, base, small) with download URLs and sizes
@@ -1407,11 +1407,14 @@ schema tests read the generated assets)
   - `wake_openwakeword` — OpenWakeWord ONNX models (bundled); capability `builtin_models`
   - `wake_porcupine` — Porcupine built-in keywords (virtual, no file); capabilities `builtin_keywords`, `builtin_models`, `requires_api_key`
   - `nlu_llm` — Local LLM (GGUF) models
+  - `nlu_llm_litertlm` / `nlu_llm_task` — the opt-in second local engine (LiteRT-LM, behind the
+    Google-services consent toggle), in its two file formats: `.litertlm` bundles and `.task`
+    bundles. Each engine's `backend` field is what routes its keys to that interpreter
   - `piper_tts` — Piper TTS voice models (language, speaker, download URL)
 
   Every model entry carries the same key set (`id, label, path, size_mb, size_label, lang_code, engine_type, is_remote`) — `null` where unused — for a uniform structure.
 
-**Hot-reload**: At startup, `RemoteModelRegistry` checks `modelRepoBaseUrl` setting for a newer `models.json`. If the remote schema version is higher, it downloads and caches it (never downgrades below the bundled asset version).
+**Hot-reload**: At startup, `RemoteModelRegistry` fetches `models.json` from `modelRepoBaseUrl` through `RemoteSchema` — adoption is by content hash against the copy in force, gated on the signed manifest and its anti-rollback serial, exactly as for every other schema.
 
 ### search_definitions.json
 
@@ -1420,7 +1423,7 @@ schema tests read the generated assets)
 **Parsed by**: `SearchProviderRegistry` (`domain/search/SearchProviderRegistry.kt`)
 
 **Contents**:
-- `schema_version` — Integer, for hot-reload detection
+- `schema_version` — Integer marking the file format generation (adoption is by content hash)
 - `categories` — Array of category definitions:
   - `category` — "general", "news", "knowledge", "weather"
   - `providers` — Array of provider definitions:
@@ -1443,7 +1446,7 @@ schema tests read the generated assets)
 **Purpose**: The catalog of standard Android intents probed per installed app. See §7 — `AppRegistry.probeSupported()`/`probeMetadata()` iterate this catalog.
 
 **Contents**:
-- `schema_version` — Integer, for hot-reload detection
+- `schema_version` — Integer marking the file format generation (adoption is by content hash)
 - `template_action_domains` — Map of `templateAction` → domain (`navigate`→`maps`, `search`→`audio`, `send`→`messaging`)
 - `taxonomy` — The NLU vocabulary (added in schema v2): `domains` (list), `actions` (flat list), and `actions_by_domain` (map). This is the domain/action list fed to the NLU prompt and the Rules UI. `IntentTaxonomy` keeps the domain/action *constants* (handlers dispatch on them) but reads these *lists* from here via `IntentCatalog`, with a single seed fallback in `IntentCatalog`. Adding a vertical (e.g. `notes`) to the LLM's vocabulary is a JSON edit; it routes via `GenericLaunchHandler` unless it needs a bespoke handler.
 - `intents` — Array of intent definitions: `action` (the literal Android action string, e.g. `android.intent.action.VIEW`), `probe_uri`, `uri_template` (with `{query}`/`{destination}`/`{contact}` placeholders), `label`, `template_action`, `requires_query`, `mime_type`
@@ -1556,7 +1559,7 @@ by `-PvoxSkipNativePrep`, for verification builds that only need the Kotlin to c
 | llama.cpp | (submodule, CMake) | On-device LLM inference (GGUF, GBNF grammar sampling) |
 | Picovoice Porcupine | 4.0.2 | Wake word engine |
 | OpenWakeWord | v0.1.5 (rementia, vendored fork — `:core:wakeword`) | Wake word engine, RMS silence-gate patched |
-| ONNX Runtime | 1.28.0 | ML inference for OpenWakeWord |
+| ONNX Runtime | 1.27.0 (locked to the copy sherpa-onnx bundles — see BUILD_TIME_DEPENDENCIES.md) | ML inference for OpenWakeWord |
 | Spotify App Remote | (local AAR) | Spotify media control |
 | NewPipe Extractor | v0.26.4 (JitPack) | YouTube search/parsing |
 | OkHttp | (via libs.versions) | HTTP client |
@@ -1591,7 +1594,7 @@ on-demand only — upstream movement is a maintenance fact delivered by the sche
 - **Google Maven** — AndroidX, Compose
 - **Maven Central** — OkHttp, Retrofit, Gson, Apache Commons, ONNX Runtime
 - **JitPack** — Vosk, sherpa-onnx, NewPipe Extractor
-- **Picovoice Maven** — Porcupine
+- **Maven Central** — Porcupine (`ai.picovoice:porcupine-android`)
 
 OpenWakeWord is vendored as source (`:core:wakeword`, patched) rather than resolved from JitPack, with
 its pristine upstream tracked via a git submodule. See [§2 OpenWakeWord Fork & Sync](#openwakeword-fork--sync).
@@ -3092,6 +3095,9 @@ so a correction is not shadowed by the version it corrects.
 
 ### The parts
 
+- `ScanItemsReader` — the one deterministic entry for a scan's line items: each reading in turn
+  (geometric reconstruction, then the pattern battery), all held to the same bar — rows whose own
+  arithmetic holds and whose sum is a figure the document prints. Items or nothing, never a guess.
 - `ScanReading.of` — the entry point; iterates footer candidates × item patterns.
 - `LineItemBattery` — the patterns, strictest first, and the arithmetic that accepts one. Order is the
   whole priority mechanism.
