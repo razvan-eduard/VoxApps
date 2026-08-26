@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,7 +53,7 @@ import com.voxapps.vision.di.VisionContainer
 import com.voxapps.vision.data.preferences.VisionSettingsRepository
 import kotlinx.coroutines.launch
 
-private enum class SettingsPage { MENU, GENERAL, THEME, LOGS }
+private enum class SettingsPage { MENU, GENERAL, LIVEVIEW, THEME, LOGS }
 
 private val SENSITIVITY_LEVELS = listOf("low", "medium", "high")
 private val PHOTO_DETAIL_LEVELS = listOf("low", "medium", "high")
@@ -101,6 +102,7 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
     val title = when (page) {
         SettingsPage.MENU -> languageManager.getString("settings")
         SettingsPage.GENERAL -> languageManager.getString("general")
+        SettingsPage.LIVEVIEW -> languageManager.getString("liveview_settings_title")
         SettingsPage.THEME -> languageManager.getString("theme_section")
         SettingsPage.LOGS -> languageManager.getString("logs_settings_title")
     }
@@ -126,6 +128,12 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                     leadingContent = { Icon(Icons.Filled.Tune, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.GENERAL }
                 )
+                ListItem(
+                    headlineContent = { Text(languageManager.getString("liveview_settings_title")) },
+                    supportingContent = { SettingsMenuDescription(languageManager.getString("liveview_menu_desc")) },
+                    leadingContent = { Icon(Icons.Filled.Visibility, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LIVEVIEW }
+                )
                 SettingsSectionHeader(languageManager.getString("settings_section_appearance"))
                 ListItem(
                     headlineContent = { Text(languageManager.getString("theme_section")) },
@@ -141,6 +149,11 @@ fun SettingsScreen(container: VisionContainer, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().clickable { page = SettingsPage.LOGS }
                 )
             }
+            return@Scaffold
+        }
+
+        if (page == SettingsPage.LIVEVIEW) {
+            LiveViewSettingsPage(container = container, modifier = Modifier.fillMaxSize().padding(padding))
             return@Scaffold
         }
 

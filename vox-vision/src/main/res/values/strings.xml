@@ -3,4 +3,6 @@
     <!-- Only the Android-required app label lives here — all other UI text lives in
          assets/translations/*.json, loaded via LanguageManager (see utils/Strings.kt). -->
     <string name="app_name">Vox Vision</string>
+    <!-- The LiveView launcher alias's label — a product name, deliberately untranslated. -->
+    <string name="liveview_name">Vox LiveView</string>
 </resources>

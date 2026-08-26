@@ -34,6 +34,15 @@ class VisionActivity : ComponentActivity() {
     private val container by lazy { (application as VisionApplication).container }
     private var pendingState by mutableStateOf<PendingScanRequest?>(null)
 
+    /**
+     * Whether this launch came through the Vox LiveView alias (see the manifest's activity-alias) —
+     * the component name is the only thing an alias can vary, and it is enough. A pending OCR
+     * request always wins over it: a satellite has a caller waiting for a result, and it launches
+     * the activity by its real name anyway. singleTask means both launcher icons share one task,
+     * so onNewIntent re-reads this and the last icon tapped decides what is showing.
+     */
+    private var liveView by mutableStateOf(false)
+
     private var onPermissionResult: ((Boolean) -> Unit)? = null
     private val requestCameraPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -43,7 +52,8 @@ class VisionActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         pendingState = parsePendingRequest(intent)
-        Logger.d("VisionActivity", "onCreate: pendingState=$pendingState")
+        liveView = pendingState == null && isLiveViewLaunch(intent)
+        Logger.d("VisionActivity", "onCreate: pendingState=$pendingState liveView=$liveView")
 
         setContent {
             val themeDarkMode by container.settingsRepository.themeDarkModeFlow.collectAsStateWithLifecycle(
@@ -58,6 +68,7 @@ class VisionActivity : ComponentActivity() {
                 ) {
                     VisionRoot(
                         container = container,
+                        liveView = liveView,
                         pendingRequest = pendingState,
                         hasCameraPermission = ::hasCameraPermission,
                         requestCameraPermission = ::requestCameraPermission,
@@ -75,8 +86,12 @@ class VisionActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingState = parsePendingRequest(intent)
-        Logger.d("VisionActivity", "onNewIntent: pendingState=$pendingState")
+        liveView = pendingState == null && isLiveViewLaunch(intent)
+        Logger.d("VisionActivity", "onNewIntent: pendingState=$pendingState liveView=$liveView")
     }
+
+    private fun isLiveViewLaunch(intent: Intent): Boolean =
+        intent.component?.className?.endsWith(".LiveView") == true
 
     private fun parsePendingRequest(intent: Intent): PendingScanRequest? =
         VoxOcrRequest.fromJson(intent.getStringExtra(VoxIpc.EXTRA_OCR_PAYLOAD))?.let { request ->
