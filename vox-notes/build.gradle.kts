@@ -79,6 +79,8 @@ dependencies {
     implementation(project(":core:ipc"))
     implementation(project(":core:backup"))
     implementation(project(":core:attachments"))
+    implementation(project(":core:applock"))
+    implementation(project(":core:i18n"))
     implementation(project(":core:logging"))
     implementation(project(":core:widget"))
     implementation(project(":core:preferences"))

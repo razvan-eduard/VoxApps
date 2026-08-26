@@ -25,6 +25,7 @@ android {
 dependencies {
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.core.ktx)
+    api(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
 }
