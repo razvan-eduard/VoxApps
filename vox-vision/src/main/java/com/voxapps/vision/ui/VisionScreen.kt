@@ -110,6 +110,8 @@ private data class StitchCandidate(val text: String, val imageUri: String, val a
  *  [VoxOcrRequest.CAPTURE_MODE_BATCH]'s doc comment); STITCH always does, regardless of the request's
  *  own [VoxOcrRequest.produceOCR], since the continuity check needs text after every shot. SINGLE
  *  keeps [VoxOcrRequest.produceOCR]'s own meaning unchanged. */
+
+private const val VISION_FILE_PROVIDER_AUTHORITY = "com.voxapps.vision.fileprovider"
 private fun effectiveProduceOCR(captureMode: String, requestedProduceOCR: Boolean): Boolean = when (captureMode) {
     VoxOcrRequest.CAPTURE_MODE_BATCH -> false
     VoxOcrRequest.CAPTURE_MODE_STITCH -> true
@@ -1237,7 +1239,7 @@ private suspend fun finishRecognition(
             java.io.FileOutputStream(file).use { out ->
                 cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
             }
-            FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
+            FileProvider.getUriForFile(context, VISION_FILE_PROVIDER_AUTHORITY, file).toString()
         } catch (e: Exception) {
             Logger.e("VisionScreen", "Failed to save image", e)
             null
@@ -1262,7 +1264,7 @@ private suspend fun finishRecognition(
                 scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
             }
             if (scaled !== cropped) scaled.recycle()
-            FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
+            FileProvider.getUriForFile(context, VISION_FILE_PROVIDER_AUTHORITY, file).toString()
         } catch (e: Exception) {
             Logger.e("VisionScreen", "Failed to prepare AI-attachment image", e)
             null

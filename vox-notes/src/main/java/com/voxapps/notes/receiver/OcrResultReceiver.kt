@@ -32,7 +32,7 @@ import java.io.FileOutputStream
 import java.util.UUID
 
 private const val TAG = "OcrResultReceiver"
-private const val NOTES_FILE_PROVIDER_AUTHORITY = "com.voxapps.notes.fileprovider"
+private const val NOTES_FILE_PROVIDER_AUTHORITY = com.voxapps.notes.data.NotesAttachments.FILE_PROVIDER_AUTHORITY
 
 /**
  * Notes' end of Vision's generic OCR hook — two distinct task families, dispatched by prefix (not

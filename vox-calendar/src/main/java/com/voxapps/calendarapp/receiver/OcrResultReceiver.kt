@@ -36,7 +36,7 @@ import java.util.UUID
 
 private const val TITLE_LIMIT = 80
 private const val TAG = "OcrResultReceiver"
-private const val CALENDAR_FILE_PROVIDER_AUTHORITY = "com.voxapps.calendar.fileprovider"
+private const val CALENDAR_FILE_PROVIDER_AUTHORITY = com.voxapps.calendarapp.data.CalendarAttachments.FILE_PROVIDER_AUTHORITY
 
 /**
  * Calendar's end of Vision's generic OCR hook — two distinct task families, dispatched by prefix
