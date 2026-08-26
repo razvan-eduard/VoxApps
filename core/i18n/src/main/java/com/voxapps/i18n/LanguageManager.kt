@@ -28,14 +28,20 @@ class LanguageManager(private val context: Context) {
         try {
             val fileName = "${Translations.DIR}$langCode${Translations.JSON_EXTENSION}"
             val json = context.assets.open(fileName).bufferedReader().use { it.readText() }
-            val obj = JSONObject(json)
-            translations = obj.keys().asSequence().associateWith { obj.optString(it) }
+            loadFromJson(json, langCode)
         } catch (e: Exception) {
             Logger.w("LanguageManager", "Language load failed for '$langCode': ${e.message}")
             if (langCode != Translations.DEFAULT_LANGUAGE) {
                 loadLanguage(Translations.DEFAULT_LANGUAGE)
             }
         }
+    }
+
+    /** The parse step of [loadLanguage], separated so tests can feed JSON without an asset dir. */
+    internal fun loadFromJson(json: String, langCode: String) {
+        language = langCode
+        val obj = JSONObject(json)
+        translations = obj.keys().asSequence().associateWith { obj.optString(it) }
     }
 
     fun getString(key: String): String = translations[key] ?: key
@@ -52,16 +58,21 @@ class LanguageManager(private val context: Context) {
      * dialog that is about to destroy their records, of all places.
      */
     fun counted(key: String, count: Int): String {
-        val suffixed = when {
-            count == 1 -> "${key}_one"
-            usesLargeNumberForm && (count == 0 || count >= 20) -> "${key}_many"
-            else -> key
-        }
+        val suffixed = countedKey(key, count, usesLargeNumberForm)
         return String.format(translations[suffixed] ?: translations[key] ?: key, count)
     }
 
     /** Languages whose larger numbers take a form of their own — Romanian's "20 de înregistrări". */
     private val usesLargeNumberForm: Boolean get() = language.take(2) == "ro"
+
+    companion object {
+        /** [counted]'s form selection, pure so the plural rules are testable on their own. */
+        internal fun countedKey(key: String, count: Int, usesLargeNumberForm: Boolean): String = when {
+            count == 1 -> "${key}_one"
+            usesLargeNumberForm && (count == 0 || count >= 20) -> "${key}_many"
+            else -> key
+        }
+    }
 
     fun getAvailableLanguages(): List<String> = try {
         context.assets.list(Translations.DIR_LIST)
