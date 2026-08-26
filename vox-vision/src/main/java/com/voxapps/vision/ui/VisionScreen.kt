@@ -112,6 +112,10 @@ private data class StitchCandidate(val text: String, val imageUri: String, val a
  *  keeps [VoxOcrRequest.produceOCR]'s own meaning unchanged. */
 
 private const val VISION_FILE_PROVIDER_AUTHORITY = "com.voxapps.vision.fileprovider"
+
+/** The cache dir scan images are staged in for FileProvider sharing — vision's own store, no
+ *  relation to expenses' filesDir dir of the same historical name. */
+private const val SHARE_CACHE_DIR = "receipts"
 private fun effectiveProduceOCR(captureMode: String, requestedProduceOCR: Boolean): Boolean = when (captureMode) {
     VoxOcrRequest.CAPTURE_MODE_BATCH -> false
     VoxOcrRequest.CAPTURE_MODE_STITCH -> true
@@ -311,7 +315,7 @@ fun VisionScreen(
             imageAnalysisResolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
                 .setResolutionStrategy(
                     androidx.camera.core.resolutionselector.ResolutionStrategy(
-                        android.util.Size(1280, 960),
+                        ANALYSIS_RESOLUTION,
                         androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
                     )
                 )
@@ -1234,7 +1238,7 @@ private suspend fun finishRecognition(
     // Save image synchronously to internal cache for sharing via FileProvider
     val imageUri = withContext(Dispatchers.IO) {
         try {
-            val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
+            val cacheDir = File(context.cacheDir, SHARE_CACHE_DIR).apply { mkdirs() }
             val file = File(cacheDir, "rec_${java.util.UUID.randomUUID()}.jpg")
             java.io.FileOutputStream(file).use { out ->
                 cropped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
@@ -1258,7 +1262,7 @@ private suspend fun finishRecognition(
             val detail = container.settingsRepository.photoDetailForAiFlow.first()
             val targetLongEdge = VisionSettingsRepository.targetLongEdgePx(detail)
             val scaled = downscaleToLongEdge(cropped, targetLongEdge)
-            val cacheDir = File(context.cacheDir, "receipts").apply { mkdirs() }
+            val cacheDir = File(context.cacheDir, SHARE_CACHE_DIR).apply { mkdirs() }
             val file = File(cacheDir, "ai_${java.util.UUID.randomUUID()}.jpg")
             java.io.FileOutputStream(file).use { out ->
                 scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)

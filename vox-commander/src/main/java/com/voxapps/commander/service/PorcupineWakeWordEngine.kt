@@ -52,7 +52,7 @@ class PorcupineWakeWordEngine(
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
 
-    private val sampleRate = 16000
+    private val sampleRate = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ
     private val frameLength = 512 // Porcupine requires 512-sample frames at 16kHz
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
 

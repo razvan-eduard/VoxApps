@@ -18,6 +18,7 @@ import com.voxapps.expenses.domain.rules.RuleAlert
 import com.voxapps.datahygiene.RuleBasedDuplicateChecker
 import com.voxapps.datahygiene.RuleCombinator
 import com.voxapps.datahygiene.findDuplicate
+import com.voxapps.expenses.data.ExpensesAttachments
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.SecondNotice
 import com.voxapps.expenses.domain.llm.DuplicateGroup
@@ -945,7 +946,7 @@ class ExpensesRepository(
         for (row in rows) {
             try {
                 if (attachmentDao.countByFileName(ExpensesAttachments.RECORD_TYPE, row.fileName) == 0) {
-                    val dir = if (row.source == AttachmentSource.SCANNED) "receipts" else ExpensesAttachments.DIR
+                    val dir = if (row.source == AttachmentSource.SCANNED) ExpensesAttachments.RECEIPTS_DIR else ExpensesAttachments.DIR
                     AttachmentFileStore.delete(appContext, dir, row.fileName)
                 }
             } catch (e: Exception) {
@@ -959,7 +960,7 @@ class ExpensesRepository(
         for (row in rows) {
             try {
                 if (attachmentDao.countByFileName(ExpensesAttachments.RECORD_TYPE, row.fileName) == 0) {
-                    val dir = if (row.source == AttachmentSource.SCANNED) "receipts" else ExpensesAttachments.DIR
+                    val dir = if (row.source == AttachmentSource.SCANNED) ExpensesAttachments.RECEIPTS_DIR else ExpensesAttachments.DIR
                     AttachmentFileStore.delete(appContext, dir, row.fileName)
                 }
             } catch (e: Exception) {
@@ -975,7 +976,7 @@ class ExpensesRepository(
      *  [deleteAttachmentsFor]'s guarded, table-backed cleanup instead. */
     private fun deleteReceiptFileRaw(name: String) {
         try {
-            AttachmentFileStore.delete(appContext, "receipts", name)
+            AttachmentFileStore.delete(appContext, ExpensesAttachments.RECEIPTS_DIR, name)
         } catch (e: Exception) {
             Logger.w("ExpensesRepository", "Failed to delete receipt file(s) for $name", e)
         }

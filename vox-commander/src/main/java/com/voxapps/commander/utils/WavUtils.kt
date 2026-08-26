@@ -9,7 +9,7 @@ import java.nio.ByteOrder
  */
 object WavUtils {
 
-    fun wrapPcmToWav(pcmData: ByteArray, sampleRate: Int = 16000): ByteArray {
+    fun wrapPcmToWav(pcmData: ByteArray, sampleRate: Int = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ): ByteArray {
         val bitsPerSample = 16
         val channels = 1
         val byteRate = sampleRate * channels * bitsPerSample / 8

@@ -1,5 +1,6 @@
 package com.voxapps.expenses.domain.llm
 
+import com.voxapps.expenses.data.ExpensesAttachments
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
@@ -32,7 +33,7 @@ object MultimodalAttachmentResolver {
 
     suspend fun resolve(context: Context, imageName: String?, attachEnabled: Boolean): String? {
         if (!attachEnabled || imageName == null) return null
-        val file = File(File(context.filesDir, "receipts"), aiCopyFileName(imageName))
+        val file = File(File(context.filesDir, ExpensesAttachments.RECEIPTS_DIR), aiCopyFileName(imageName))
         if (!file.exists()) return null // no AI copy was ever staged (Vision's own toggle was off)
         return grantToCommander(context, file)
     }

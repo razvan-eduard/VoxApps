@@ -84,7 +84,7 @@ class GpuProbeService : Service() {
             }
 
             // Generate 1 second of dummy audio (silence) - enough to trigger GPU ops
-            val sampleRate = 16000
+            val sampleRate = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ
             val durationSec = 1
             val audioData = FloatArray(sampleRate * durationSec) { 0f }
 

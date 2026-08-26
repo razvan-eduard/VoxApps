@@ -53,8 +53,19 @@ def entries(value, path: str = "") -> dict[str, list]:
     return found
 
 
+# Core modules that ship their own copy of an app's schema, and which remote-schemas folder that
+# copy is published under. core/docread's battery templates are byte-for-byte expenses' file — this
+# mapping is what keeps a drift between the two copies from going unnoticed.
+CORE_SCHEMA_FOLDERS = {
+    "core/docread/src/main/assets/schemas": "expenses",
+}
+
+
 def app_name(app_dir: Path) -> str:
     """`vox-expenses/src/main/assets/schemas` -> `expenses`, the folder name used under remote-schemas."""
+    rel = app_dir.relative_to(ROOT).as_posix() if app_dir.is_absolute() else app_dir.as_posix()
+    if rel in CORE_SCHEMA_FOLDERS:
+        return CORE_SCHEMA_FOLDERS[rel]
     for parent in app_dir.parents:
         if parent.name.startswith("vox-"):
             return parent.name[len("vox-"):]
@@ -81,7 +92,9 @@ def check(app_dir: Path) -> None:
 
 
 def main() -> int:
-    app_dirs = sorted(ROOT.glob("vox-*/src/main/assets/schemas"))
+    app_dirs = sorted(ROOT.glob("vox-*/src/main/assets/schemas")) + [
+        ROOT / folder for folder in CORE_SCHEMA_FOLDERS if (ROOT / folder).is_dir()
+    ]
     if not app_dirs:
         print("No shipped schema folders found — nothing to check.")
         return 0

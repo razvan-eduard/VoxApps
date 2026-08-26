@@ -103,9 +103,8 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
 
     companion object {
         /** Separates the always-present plain text from the appended table reconstruction —
-         *  mirrored literally by consumers (see expenses' TableItemsPreParse) without a shared
-         *  module, same convention as the stitch-seam marker. */
-        const val TABLE_SECTION_MARKER = "--- [table reconstruction] ---"
+         *  the marker itself lives with its reader in :core:docread. */
+        const val TABLE_SECTION_MARKER = com.voxapps.docread.TableItemsPreParse.TABLE_SECTION_MARKER
 
         suspend fun create(context: Context, downloader: VisionModelDownloader): OcrEngine {
             // No OpenCVUtils.init()/System.loadLibrary() call here deliberately: vox-vision's release

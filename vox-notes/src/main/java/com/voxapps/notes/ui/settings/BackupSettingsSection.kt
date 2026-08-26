@@ -122,7 +122,7 @@ fun BackupSettingsSection(settingsRepo: NotesSettingsRepository, settings: Notes
         onIncludeAttachmentsChange = { scope.launch { settingsRepo.setBackupIncludeAttachments(it) } },
         onImportModeChange = { scope.launch { settingsRepo.setBackupImportMode(it.wireValue) } },
         onBackupNowClick = {
-            val fileName = "vox-notes-backup-${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())}.zip"
+            val fileName = com.voxapps.backup.VoxBackupNames.timestampedZip("vox-notes")
             createDocumentLauncher.launch(fileName)
         },
         onRestoreClick = { openDocumentLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }
