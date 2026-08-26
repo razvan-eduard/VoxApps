@@ -119,9 +119,8 @@ fun RecurringPaymentsSection(
                                 // Numberless on purpose: this line is reachable at any count, and a
                                 // "%d due dates" template cannot agree in every language it is shown in.
                                 goneQuiet -> languageManager.getString("recurring_gone_quiet")
-                                payment.missedCycles == 1 -> languageManager.getString("recurring_missed_cycle_one")
-                                payment.missedCycles > 1 -> languageManager.getString("recurring_missed_cycles")
-                                    .format(payment.missedCycles)
+                                payment.missedCycles >= 1 ->
+                                    languageManager.counted("recurring_missed_cycles", payment.missedCycles)
                                 else -> languageManager.getString("recurring_due_day")
                                     .format(payment.dueDayOfMonth)
                             },

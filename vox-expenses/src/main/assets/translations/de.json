@@ -582,7 +582,7 @@
   "recurring_reminder_channel_name": "Erinnerungen an wiederkehrende Zahlungen",
   "recurring_proposals_setting": "Wann vorgeschlagen wird",
   "recurring_reminders_section": "Erinnerungen",
-  "recurring_missed_cycle_one": "Ein Termin verstrich ohne Zahlung",
+  "recurring_missed_cycles_one": "Ein Termin verstrich ohne Zahlung",
   "dismiss_on_capture_label": "Benachrichtigung entfernen",
   "dismiss_on_capture_desc": "Entfernt eine Zahlungsbenachrichtigung aus der Leiste, sobald sie erfasst ist — gebucht oder zur Bestätigung vorgemerkt. Eine gelesene und verworfene Nachricht bleibt immer stehen. Standardmäßig aus: nicht rückgängig zu machen.",
   "vocabulary_banks_title": "Wörter, die eine Bank oder Karte benennen",
