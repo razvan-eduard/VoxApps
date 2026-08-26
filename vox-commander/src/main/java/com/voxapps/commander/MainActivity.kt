@@ -474,7 +474,11 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         Logger.log("MainActivity: onDestroy called")
-        VoiceManager.release() // Release all native memory and resources
+        // Only when the activity is going away for real — a configuration change destroys and
+        // recreates it, and dropping every loaded model on rotation would mean a full reload.
+        if (isFinishing) {
+            VoiceManager.release() // Release all native memory and resources
+        }
     }
 
     private fun checkPermissions() {

@@ -30,6 +30,9 @@ abstract class BaseVoxEngine : VoxEngine {
     /** Guards against unloading underneath a running inference — see [withModel]. */
     private var inUse = 0
     private val useLock = Any()
+    // A release that arrived while an inference was inside [withModel] — honored by the last
+    // call out, so native state is never freed under a running inference.
+    private var releasePending = false
 
     final override suspend fun load(spec: ModelSpec): Boolean = loadMutex.withLock {
         val current = _state.value
@@ -77,6 +80,8 @@ abstract class BaseVoxEngine : VoxEngine {
     protected open fun failureReason(): String? = null
 
     final override fun unload() {
+        // The whole check-and-teardown holds the lock: releasing it between the inUse check and
+        // doUnload() would let an inference begin exactly where the old gap was.
         synchronized(useLock) {
             if (inUse > 0) {
                 // Tearing down native state under a running inference fails in the native layer
@@ -85,15 +90,23 @@ abstract class BaseVoxEngine : VoxEngine {
                 Logger.log("$engineKey: unload skipped, engine is in use", TAG)
                 return
             }
+            if (_state.value is EngineState.Idle) return
+            doUnload()
+            _state.value = EngineState.Idle
         }
-        if (_state.value is EngineState.Idle) return
-        doUnload()
-        _state.value = EngineState.Idle
     }
 
     final override fun release() {
-        doUnload()
-        _state.value = EngineState.Idle
+        synchronized(useLock) {
+            if (inUse > 0) {
+                Logger.log("$engineKey: release deferred, engine is in use", TAG)
+                releasePending = true
+                return
+            }
+            releasePending = false
+            doUnload()
+            _state.value = EngineState.Idle
+        }
         onRelease()
     }
 
@@ -130,7 +143,11 @@ abstract class BaseVoxEngine : VoxEngine {
         try {
             return block()
         } finally {
-            synchronized(useLock) { inUse-- }
+            val runDeferredRelease = synchronized(useLock) {
+                inUse--
+                releasePending && inUse == 0
+            }
+            if (runDeferredRelease) release()
         }
     }
 

@@ -75,6 +75,7 @@ class WhisperContext private constructor(@Volatile private var ptr: Long) {
  */
 class WhisperLib {
     companion object {
+        @Volatile
         private var isLoaded = false
 
         /**
