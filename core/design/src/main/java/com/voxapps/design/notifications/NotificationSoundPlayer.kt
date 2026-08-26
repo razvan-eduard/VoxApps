@@ -33,12 +33,17 @@ object NotificationSoundPlayer {
     }
 
     fun play(context: Context, soundUri: String?, volume: Int, length: String, vibrationEnabled: Boolean, soundOnly: Boolean = false) {
-        // Stop any current preview playback
-        activeMediaPlayer?.let {
-            if (it.isPlaying) it.stop()
-            it.release()
+        // Stop any current preview playback. Taken under the lock so exactly one caller — this
+        // play() or the finished player's own completion listener — releases any given instance.
+        val previous = synchronized(this) {
+            val p = activeMediaPlayer
+            activeMediaPlayer = null
+            p
         }
-        activeMediaPlayer = null
+        previous?.let {
+            runCatching { if (it.isPlaying) it.stop() }
+            runCatching { it.release() }
+        }
 
         // 1. Play Sound
         val uri = soundUri?.let { Uri.parse(it) } ?: Uri.parse("content://settings/system/notification_sound")
@@ -55,7 +60,7 @@ object NotificationSoundPlayer {
                 setVolume(volume / 100f, volume / 100f)
                 prepare()
             }
-            activeMediaPlayer = mediaPlayer
+            synchronized(this) { activeMediaPlayer = mediaPlayer }
 
             val repeatCount = repeatCountFor(length)
 
@@ -63,10 +68,13 @@ object NotificationSoundPlayer {
             mediaPlayer.setOnCompletionListener {
                 currentPlay++
                 if (currentPlay < repeatCount) {
-                    it.start()
+                    // A newer play() may have taken and released this instance between repeats.
+                    runCatching { it.start() }
                 } else {
-                    if (activeMediaPlayer == it) activeMediaPlayer = null
-                    it.release()
+                    val stillMine = synchronized(this) {
+                        (activeMediaPlayer == it).also { mine -> if (mine) activeMediaPlayer = null }
+                    }
+                    if (stillMine) it.release()
                 }
             }
             mediaPlayer.start()
