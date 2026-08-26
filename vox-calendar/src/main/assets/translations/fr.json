@@ -91,6 +91,7 @@
   "save": "Enregistrer",
   "close": "Fermer",
   "cancel": "Annuler",
+  "clear": "Effacer",
   "selection_mode_count": "%d sélectionné(s)",
   "selection_delete": "Supprimer",
   "selection_move_existing": "Déplacer vers un calendrier",
