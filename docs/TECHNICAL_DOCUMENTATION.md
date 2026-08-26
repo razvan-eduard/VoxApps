@@ -2058,6 +2058,36 @@ receives voice commands (its `VisionCommandReceiver` only answers the discovery 
   reading order, not detector order.
 - **Stitch capture**: multi-shot stitching joins accepted shots' text with
   `ContinuityMatcher.STITCH_SEAM_MARKER` (`--- [photo stitch seam …] ---`) at each join.
+- **Vox LiveView** — a second launcher entry on the same activity. The manifest declares an
+  `activity-alias` (`.LiveView`, its own `MAIN`/`LAUNCHER` filter, label `Vox LiveView`);
+  `VisionActivity` reads `intent.component.className` in `onCreate`/`onNewIntent` and shows
+  `LiveViewScreen` instead of the scan flow — an alias can add no extras, so the component name *is*
+  the mode. A pending OCR request always wins: satellites launch `.VisionActivity` by name and the
+  payload check runs first, so the scan contract is unreachable from — and untouched by — LiveView.
+  The two screens share only the camera floor (`ui/CameraFrames.kt`: analysis-interval floors,
+  stability tolerances, the FIT_CENTER `remapForPreviewCrop`, frame conversions, the fixed sensor
+  orientation, and the single `nativeCvLock` that serializes every native OpenCV entry point in the
+  process). LiveView runs **stable-frame reads**: the document-bounds detector is the stability
+  gate; once the framing holds, the upright color analysis frame goes through
+  `OcrEngine.read(bitmap)` — the geometry-preserving sibling of `recognize()`, returning
+  `RowClusterer`'s printed rows with their boxes — on the analysis thread under `nativeCvLock`.
+  Rows are classified by `:core:textmatch`'s `LineEntities` (custom regex categories first, then
+  checksum-gated account, email, URL, phone by evidence rungs, labeled street address; per-kind
+  opt-in fuzzy tiers; generic otherwise), a generic line under an address folds in via
+  `looksLikeAddressContinuation`, and national phone numbers are completed by `CountryDialing`
+  (ccTLD → E.164 prefix, trunk-zero rules; site's domain first, email's second; stated
+  international numbers never rewritten). Each row renders a float of chips anchored to its box:
+  the kind's baked-in action through the system default, then the user's added apps (full
+  installed-app list via `QUERY_ALL_PACKAGES`, same declaration and reason as Expenses/Commander),
+  fired by `:core:design`'s `EntityActions` — `dial`/`composeEmail`/`openUrl`/`openMaps`/
+  `searchWeb` plus the `*ToApp` family that tries an app's most specific carrier before falling
+  back to shared text. Between reads the chips ride the document rectangle's affine map (pan
+  translates, zoom scales); a finished reading is cleared only on sustained evidence — a miss-grace
+  of detection-less ticks or a streak of foreign rectangles — at a user-chosen rescan eagerness.
+  Three result styles (live chips / recognized text painted into filled boxes / a frozen frame with
+  the fields as a table, specific kinds first), detector pace, per-kind exact-fuzzy strictness,
+  float apps and custom categories are all settings; LiveView state lives in
+  `VisionSettingsRepository` keys prefixed `liveview_`.
 - **Multimodal photo attachment** (Settings → "Send photo to AI" + "Photo detail for AI") — off by
   default. When on, capture also produces a downscaled JPEG (`downscaleToLongEdge`, 768/1024/1536px
   by detail level) alongside the existing full-resolution one, handed back to the caller as

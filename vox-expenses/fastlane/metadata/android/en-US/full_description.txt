@@ -19,3 +19,7 @@ Key Features:
 - Recurring Payments: Payments that keep coming back are noticed and proposed rather than declared, with the next one shown as a predicted row and a reminder before it is due.
 - Editable Vocabularies: The banks, merchants and legal forms the offline reader matches on, with what the app supplies kept apart from what you added. A new spelling of a name you already use is offered as a rename, not as a second entry.
 - Category Icons: Any emoji on any category, shown in the list, the pickers and the home-screen widget.
+- Select Many, Edit Once: Long-press starts a selection, a checklist button flips between select-all and select-none, and the familiar edit screen edits every selected record at once — fields that differ read "multiple values" and only what you touch is written.
+- Archive Instead of Regret: Records can be archived in bulk with a warning, kept out of every budget and report, then restored, deleted selectively, or swept by a scheduled retention. Permanent deletion takes a red confirmation whose Yes only arms after a five-second countdown.
+- Budgets Per Account and Currency: A budget lives on the account, one per currency it holds, computed from the records rather than kept as a counter — a period that resets or a pot you top up. The budget screen carries the same filter control as the list and reports.
+- The Currency Is Read, Not Defaulted: A captured payment takes its currency from the message itself; an ambiguous spelling that could mean two currencies names neither. Declined payments are recognized and never become records.
