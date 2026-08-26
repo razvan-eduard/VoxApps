@@ -274,6 +274,8 @@
   "engine_runtime_diagnostics": "Motor-Laufzeit-Diagnose",
   "time_rtf_format": "Zeit: %sms | RTF: %sx",
   "error_format": "Fehler: %s",
+  "error_download_failed": "Download fehlgeschlagen",
+  "notif_llm_processing": "KI-Anfrage wird verarbeitet",
   "system_maintenance": "Systemwartung",
   "maintenance_warning": "Wartungsaktionen sind global und betreffen alle KI-Motoren.",
   "model_repository_url": "Modell-Repository-Basis-URL",

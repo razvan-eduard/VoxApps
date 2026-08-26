@@ -447,7 +447,7 @@ object VoiceManager {
      * recording rose above the silence threshold, so audio was captured and the engine had
      * something to work with.
      */
-    private fun isUsableTranscript(text: String): Boolean =
+    fun isUsableTranscript(text: String): Boolean =
         text.isNotBlank() && !text.trimStart().startsWith("Error:", ignoreCase = true)
 
     /**
@@ -561,7 +561,7 @@ object VoiceManager {
         if (context?.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             Logger.log("RECORD_AUDIO permission not granted", TAG)
             isListeningFlag.set(false)
-            onResult("Permission Error")
+            onResult("Error: Microphone permission not granted")
             return
         }
 
@@ -596,7 +596,7 @@ object VoiceManager {
                     if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
                         Logger.log("AudioRecord failed to initialize", TAG)
                         withContext(Dispatchers.Main) {
-                            onResult("Mic Error")
+                            onResult("Error: Microphone failed to initialize")
                             updateListeningState(false)
                         }
                         return@launch

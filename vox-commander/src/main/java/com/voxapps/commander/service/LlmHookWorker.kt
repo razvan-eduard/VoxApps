@@ -27,6 +27,8 @@ import java.io.File
  * Runs as a WorkManager job with expedited priority and foreground execution to ensure Honor's
  * background management doesn't block it.
  */
+private const val LLM_CHANNEL_ID = "llm_hook_channel"
+
 class LlmHookWorker(
     context: Context,
     params: WorkerParameters
@@ -37,7 +39,17 @@ class LlmHookWorker(
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val container = (applicationContext as VoxApplication).container
         val title = container.languageManager.getString("notif_llm_processing")
-        val notification = NotificationCompat.Builder(applicationContext, "service")
+        // A channel must exist before a notification can post on O+; this worker runs without the
+        // wake-word service, so it registers its own instead of borrowing that service's channel.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val manager = applicationContext.getSystemService(android.app.NotificationManager::class.java)
+            manager?.createNotificationChannel(
+                android.app.NotificationChannel(
+                    LLM_CHANNEL_ID, "LLM Processing", android.app.NotificationManager.IMPORTANCE_LOW
+                )
+            )
+        }
+        val notification = NotificationCompat.Builder(applicationContext, LLM_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle(title)
             .setPriority(NotificationCompat.PRIORITY_LOW)

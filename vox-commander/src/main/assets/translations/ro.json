@@ -295,6 +295,8 @@
   "engine_runtime_diagnostics": "Diagnostice Runtime Motor",
   "time_rtf_format": "Timp: %sms | RTF: %sx",
   "error_format": "Eroare: %s",
+  "error_download_failed": "Descărcarea a eșuat",
+  "notif_llm_processing": "Se procesează cererea AI",
   "system_maintenance": "Mentenanță Sistem",
   "maintenance_warning": "Acțiunile de mentenanță sunt globale și afectează toate motoarele AI.",
   "model_repository_url": "URL Depozit Modele",

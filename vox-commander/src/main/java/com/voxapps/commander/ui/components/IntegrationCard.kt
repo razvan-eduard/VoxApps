@@ -381,7 +381,7 @@ private fun ClientIdDialog(
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
-                    label = { Text(languageManager.getString("spotify_client_id_label")) },
+                    label = { Text(languageManager.getString("spotify_client_id")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

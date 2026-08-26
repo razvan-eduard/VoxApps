@@ -303,6 +303,8 @@
   "engine_runtime_diagnostics": "Engine Runtime Diagnostics",
   "time_rtf_format": "Time: %sms | RTF: %sx",
   "error_format": "Error: %s",
+  "error_download_failed": "Download failed",
+  "notif_llm_processing": "Processing AI request",
   "system_maintenance": "System Maintenance",
   "maintenance_warning": "Maintenance actions are global and affect all AI engines.",
   "model_repository_url": "Model Repository Base URL",
