@@ -91,6 +91,7 @@
   "save": "Save",
   "close": "Close",
   "cancel": "Cancel",
+  "clear": "Clear",
   "selection_mode_count": "%d selected",
   "selection_delete": "Delete",
   "selection_move_existing": "Move to calendar",

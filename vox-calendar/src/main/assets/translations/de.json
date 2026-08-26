@@ -91,6 +91,7 @@
   "save": "Speichern",
   "close": "Schließen",
   "cancel": "Abbrechen",
+  "clear": "Leeren",
   "selection_mode_count": "%d ausgewählt",
   "selection_delete": "Löschen",
   "selection_move_existing": "In Kalender verschieben",
