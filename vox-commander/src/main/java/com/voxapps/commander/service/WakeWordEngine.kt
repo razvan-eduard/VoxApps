@@ -41,7 +41,7 @@ class WakeWordEngine(
     private val TAG = Strings.Tags.WAKE_WORD_ENGINE
     private var model: Model? = null
     private var recognizer: Recognizer? = null
-    private var audioRecord: AudioRecord? = null
+    @Volatile private var audioRecord: AudioRecord? = null
     @Volatile private var isListening = false
     @Volatile private var cachedWakeWord: String = ""
 
@@ -319,21 +319,27 @@ class WakeWordEngine(
                 consecutiveSilentFrames = 0
 
                 if (useTemplateMode) {
-                    // Template mode: collect audio for DTW, skip Vosk entirely
-                    isCollectingVoice = true
-                    for (i in 0 until samplesRead) {
-                        voiceSegmentBuffer.addLast(shortBuffer[i])
-                    }
-                    while (voiceSegmentBuffer.size > SEGMENT_MAX_SAMPLES) {
-                        voiceSegmentBuffer.removeFirst()
+                    // Template mode: collect audio for DTW, skip Vosk entirely.
+                    // Same lock as start/stop's clear() calls: these deques are not thread-safe,
+                    // and a stop can otherwise empty them mid-append.
+                    synchronized(startStopLock) {
+                        isCollectingVoice = true
+                        for (i in 0 until samplesRead) {
+                            voiceSegmentBuffer.addLast(shortBuffer[i])
+                        }
+                        while (voiceSegmentBuffer.size > SEGMENT_MAX_SAMPLES) {
+                            voiceSegmentBuffer.removeFirst()
+                        }
                     }
                 } else {
-                    // Vosk mode: rolling buffer + Vosk inference
-                    for (i in 0 until samplesRead) {
-                        rollingAudioBuffer.addLast(shortBuffer[i])
-                    }
-                    while (rollingAudioBuffer.size > ROLLING_BUFFER_MAX_SAMPLES) {
-                        rollingAudioBuffer.removeFirst()
+                    // Vosk mode: rolling buffer + Vosk inference. Locked like the template branch.
+                    synchronized(startStopLock) {
+                        for (i in 0 until samplesRead) {
+                            rollingAudioBuffer.addLast(shortBuffer[i])
+                        }
+                        while (rollingAudioBuffer.size > ROLLING_BUFFER_MAX_SAMPLES) {
+                            rollingAudioBuffer.removeFirst()
+                        }
                     }
 
                     appStateManager.executeSecureVoiceAction {
@@ -412,9 +418,11 @@ class WakeWordEngine(
      */
     private fun verifyVoicePrint(): Boolean {
         val print = storedVoicePrint ?: return true // No calibration — always accept
-        if (rollingAudioBuffer.isEmpty()) return true
-
-        val samples = rollingAudioBuffer.toShortArray()
+        // Snapshot under the deque lock; the feature math runs on the copy, outside it.
+        val samples = synchronized(startStopLock) {
+            if (rollingAudioBuffer.isEmpty()) return true
+            rollingAudioBuffer.toShortArray()
+        }
         val livePrint = VoiceFeatureExtractor.extract(samples, samples.size)
         val similarity = VoiceFeatureExtractor.similarity(print, livePrint)
 
@@ -429,16 +437,20 @@ class WakeWordEngine(
      */
     private fun checkTemplateMatch() {
         val template = storedTemplate ?: return
-        if (voiceSegmentBuffer.isEmpty()) return
+        // Snapshot-and-clear under the deque lock; the DTW below runs on the copy, outside it.
+        val samples = synchronized(startStopLock) {
+            if (voiceSegmentBuffer.isEmpty()) return
 
-        // Need at least 0.3s of audio to be a valid candidate
-        if (voiceSegmentBuffer.size < 16000 * 0.3) {
+            // Need at least 0.3s of audio to be a valid candidate
+            if (voiceSegmentBuffer.size < 16000 * 0.3) {
+                voiceSegmentBuffer.clear()
+                return
+            }
+
+            val taken = voiceSegmentBuffer.toShortArray()
             voiceSegmentBuffer.clear()
-            return
+            taken
         }
-
-        val samples = voiceSegmentBuffer.toShortArray()
-        voiceSegmentBuffer.clear()
 
         val liveSeq = VoiceFeatureExtractor.extractSequence(samples, samples.size)
         val sim = VoiceFeatureExtractor.sequenceSimilarity(template, liveSeq)

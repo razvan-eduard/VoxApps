@@ -49,7 +49,8 @@ class WakeWordService : Service() {
         Logger.log("WakeWordService created", TAG)
         val repo = SettingsRepositoryImpl(this)
         settingsRepo = repo
-        appStateManager = AppStateManager.getInstance(repo, this)
+        // applicationContext, not the service: the singleton outlives this service instance.
+        appStateManager = AppStateManager.getInstance(repo, applicationContext)
         languageManager = com.voxapps.commander.domain.localization.LanguageManager(this).apply {
             loadLanguage(settingsRepo.getSettingsSnapshot().language)
         }
@@ -172,6 +173,9 @@ class WakeWordService : Service() {
         Logger.log("WakeWordService destroyed", TAG)
         serviceScope.cancel()
         stopWakeWordDetection()
+        // The overlay window is attached through this service's window token — left up, it would
+        // outlive its host and leak the view (and the service with it).
+        voiceOverlayManager.hide()
         appStateManager.setVoiceState(VoiceState.IDLE)
     }
 

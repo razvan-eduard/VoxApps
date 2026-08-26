@@ -38,7 +38,7 @@ class VoiceTriggerReceiver : BroadcastReceiver() {
             return
         }
 
-        val appStateManager = AppStateManager.getInstance(repo, context)
+        val appStateManager = AppStateManager.getInstance(repo, context.applicationContext)
 
         // Check if WakeWordService is running by checking the listening state
         val isServiceRunning = appStateManager.uiState.value.isWakeWordServiceListening
