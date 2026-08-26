@@ -1,5 +1,6 @@
 package com.voxapps.calendarapp.receiver
 
+import com.voxapps.backup.optStringOrNull
 import com.voxapps.calendarapp.data.CalendarEntry
 import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarRepository
@@ -145,10 +146,10 @@ private fun CalendarEntry.toSyncJson(layerName: String?, tags: List<String>): JS
 }
 
 private fun JSONObject.toCalendarEntry(layerId: Long): CalendarEntry = CalendarEntry(
-    uid = optString(SyncDeltaKeys.UID),
+    uid = optStringOrNull(SyncDeltaKeys.UID) ?: "",
     type = optNullableString("type").toEnumOrNull<CalendarEntryType>()
         ?: CalendarEntryType.EVENT,
-    title = optString("title"),
+    title = optStringOrNull("title") ?: "",
     description = optNullableString("description"),
     location = optNullableString("location"),
     startMillis = optLong("startMillis"),

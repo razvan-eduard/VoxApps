@@ -244,6 +244,7 @@ dependencies {
     // ReadingCascade). Reading stays where it was; only the verdict is consulted here.
     implementation(project(":core:docread"))
     implementation(project(":core:ipc"))
+    implementation(project(":core:i18n"))
     implementation(project(":core:logging"))
     implementation(project(":core:nativelibs"))
     implementation(project(":core:preferences"))
@@ -275,6 +276,8 @@ dependencies {
     implementation(libs.okhttp)
 
     testImplementation(libs.junit)
+    // org.json ships in android.jar at compile time; unit tests need the real implementation
+    testImplementation("org.json:json:20260719")
 
     // Instrumented tests — real on-device runs, needed for NativeLibManagerInstrumentedTest to
     // catch native-linking regressions (UnsatisfiedLinkError etc.) that a JVM-only unit test or a
