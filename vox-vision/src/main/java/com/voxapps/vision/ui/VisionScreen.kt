@@ -49,6 +49,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -224,6 +225,17 @@ fun VisionScreen(
     // processing spinner below — set the instant capture succeeds (see captureAndRecognize's
     // onCaptured), well before crop/OCR finish, and cleared once isRecognizing flips back off.
     var capturedFrameBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    // Each shown frame is ~5MB; hand the previous one back as soon as the state has moved on —
+    // one frame later, so no draw that composed against it can still be in flight.
+    var lastShownFrame by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(capturedFrameBitmap) {
+        val previous = lastShownFrame
+        lastShownFrame = capturedFrameBitmap
+        if (previous != null && previous !== capturedFrameBitmap) {
+            withFrameNanos { }
+            previous.recycle()
+        }
+    }
     var liveBounds by remember { mutableStateOf<DocumentCropper.LiveBounds?>(null) }
     // Pixel size of the camera preview box as actually laid out on screen — needed to correct
     // detectLiveBounds' normalized coordinates (0..1 of the *analysis* frame) for PreviewView's
@@ -1249,6 +1261,7 @@ private suspend fun finishRecognition(
             java.io.FileOutputStream(file).use { out ->
                 scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
             }
+            if (scaled !== cropped) scaled.recycle()
             FileProvider.getUriForFile(context, "com.voxapps.vision.fileprovider", file).toString()
         } catch (e: Exception) {
             Logger.e("VisionScreen", "Failed to prepare AI-attachment image", e)
@@ -1281,6 +1294,9 @@ private suspend fun finishRecognition(
         ""
     }
     Logger.d("VisionScreen", "Recognized text: $text")
+    // The caller still owns (and may still be displaying) its own bitmap; only the crop copy
+    // this function made is done working.
+    if (cropped !== bitmap) cropped.recycle()
     return Triple(text, imageUri, aiImageUri)
 }
 
@@ -1388,5 +1404,8 @@ private fun imageProxyToBitmap(image: ImageProxy, rotationDegrees: Int): android
     val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
     if (rotationDegrees == 0) return decoded
     val matrix = android.graphics.Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-    return android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+    val rotated = android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+    // The unrotated frame is several MB and dead the moment its rotated copy exists.
+    if (rotated !== decoded) decoded.recycle()
+    return rotated
 }
