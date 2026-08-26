@@ -162,6 +162,20 @@ through Commander (`create`/`read`) or used entirely on its own.
   merge this only *proposes* groups (kept note + duplicates); the user reviews and taps **Apply
   selected** before anything is deleted — nothing is ever auto-deleted
 - Both triggers are available **on-demand** and on a **schedule** (off/daily/weekly/monthly)
+- **Rich text editing** — the note editor is a rich text field (Compose Rich Editor,
+  `com.mohamedrejeb.richeditor`, stored as HTML in `Note.textHtml` beside the plain `text` that
+  search, previews, widgets, voice and IPC keep reading). A compact formatting bar offers bold /
+  italic / underline / strikethrough, bullet and numbered lists (paragraph-level, mutually
+  exclusive), stepped text sizes, three font families and ink colors. The editor card carries a
+  **drag handle** on its bottom edge — drag to grow the writing room, tap to jump to most of the
+  screen and back to the size the drag had set — and the arrow at the top switches to a
+  **fullscreen editor** (inverse arrow returns; delete is deliberately absent there — only exit,
+  close-without-saving and save). The top action strip is the same in both modes: delete alone at
+  the left, X to leave without writing, check to save.
+
+  <img width="388" height="850" alt="Rich text editor card: formatting bar and resize handle" src="../vox-notes/fastlane/metadata/android/en-US/images/phoneScreenshots/6_rich_editor.png" />
+  <img width="388" height="850" alt="Fullscreen editing mode" src="../vox-notes/fastlane/metadata/android/en-US/images/phoneScreenshots/7_fullscreen_editor.png" />
+
 - **Scan-to-note** — receives raw OCR text from Vox Vision, sends it through the LLM hook to get a
   clean title/body and a suggested category, then creates the note
 - Editor UI: tap a note's title to expand/collapse it in place (collapse via a dedicated chevron

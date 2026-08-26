@@ -5,6 +5,8 @@ Key Features:
 - Smart Organization: Categories with a coverflow-style picker. Deleting a category moves its notes to a fallback category instead of leaving them uncategorized. The built-in AI cleanup hook helps you merge similar categories (e.g., "Shopping" and "Groceries") and find duplicate notes.
 - Scan-to-Note: Seamless integration with VoxVision allows you to scan physical documents, which are then titled and categorized by AI.
 - Calendar View: An optional split grid-and-list calendar view provides a chronological perspective of your thoughts and records.
+- Rich Text Notes: A small formatting bar in the editor — bold, italic, underline, strikethrough, bullet and numbered lists, text sizes, fonts and ink colors. Formatting is stored beside the plain text, so search, widgets and voice capture keep working on plain text.
+- An Editor That Fits the Note: Drag the handle at the card's foot to grow the writing room, tap it to jump to most of the screen and back — or switch to a true fullscreen editor from the arrow at the top, with save and close-without-saving at hand and nothing else in the way.
 - Rich Attachments: Support for multi-photo attachments with a zoomable thumbnail strip, added via camera or gallery, with a paperclip indicator on any note that has one.
 - Cloud-Free Sync: Genuinely bidirectional peer-to-peer sync with another phone over NFC and Bluetooth. No cloud, no tracking, just your data on your devices.
 - Backup & Restore: Save and restore your notes and settings to a file you choose, with Full override, Merge, or Additive restore modes.

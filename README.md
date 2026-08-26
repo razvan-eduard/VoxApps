@@ -186,7 +186,9 @@ https://github.com/user-attachments/assets/ff61a5de-d59c-4bdf-aacc-55bb1034cc07
 
 ### 📝 Vox Notes
 
-Encrypted on-device notes app. Create notes by voice through Commander or by hand; AI-assisted category
+Encrypted on-device notes app with rich text. Create notes by voice through Commander or by hand; a
+formatting bar (bold/italic/underline/strikethrough, lists, sizes, fonts, colors), a drag handle that
+resizes the editor, and a fullscreen editing mode; AI-assisted category
 cleanup and duplicate-note review (nothing auto-deleted without confirmation); a shared category color
 picker (scrollable presets + a full custom-color screen) with inline "+ New category…" creation right
 from the note editor; an optional split grid-and-list calendar view instead of the plain list; photo
