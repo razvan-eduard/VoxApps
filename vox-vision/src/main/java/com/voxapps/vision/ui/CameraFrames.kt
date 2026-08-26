@@ -193,7 +193,10 @@ internal fun yuvImageProxyToColorBitmap(image: ImageProxy, rotationDegrees: Int)
     val bitmap = android.graphics.Bitmap.createBitmap(argb, width, height, android.graphics.Bitmap.Config.ARGB_8888)
     if (rotationDegrees == 0) return bitmap
     val matrix = android.graphics.Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-    return android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    val rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    // The unrotated frame is several MB and dead the moment its rotated copy exists.
+    if (rotated !== bitmap) bitmap.recycle()
+    return rotated
 }
 
 /**

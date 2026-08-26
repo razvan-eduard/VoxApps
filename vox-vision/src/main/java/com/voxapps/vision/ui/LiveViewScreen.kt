@@ -285,10 +285,21 @@ fun LiveViewScreen(
     }
 
     fun unfreeze() {
-        frozenFrame?.recycle()
         frozenFrame = null
         reading = null
         anchorNow = null
+    }
+
+    // The frozen backdrop is recycled one frame AFTER the state lets go of it — a recycle inside
+    // unfreeze() itself can pull the bitmap out from under the draw that composed against it.
+    var lastFrozen by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(frozenFrame) {
+        val previous = lastFrozen
+        lastFrozen = frozenFrame
+        if (previous != null && previous !== frozenFrame) {
+            androidx.compose.runtime.withFrameNanos { }
+            previous.recycle()
+        }
     }
 
     // While the frozen table is up, back means "back to the camera", not "leave the app" — this
@@ -433,7 +444,13 @@ fun LiveViewScreen(
             if (shouldRead) {
                 mainExecutor.execute { readInFlight = true }
                 val lines = try {
-                    runBlocking { nativeCvLock.withLock { engineState.value!!.read(colorBitmap!!) } }
+                    // Fetched per read, not the pre-warm reference: after a zone switch the
+                    // container has released that engine, and this lookup hands back the current
+                    // one (or builds it) instead of reading through a dead instance.
+                    runBlocking {
+                        val eng = container.ocrEngineForZone(currentZoneOrDefault(container))
+                        nativeCvLock.withLock { eng.read(colorBitmap!!) }
+                    }
                 } catch (t: Throwable) {
                     Logger.e(TAG, "Live read failed", t)
                     emptyList()

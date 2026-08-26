@@ -6,6 +6,8 @@ import com.paddle.ocr.EngineConfig
 import com.paddle.ocr.PaddleOCR
 import com.paddle.ocr.PaddleOCRConfig
 import com.voxapps.logging.Logger
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private const val TAG = "OcrEngine"
 
@@ -16,7 +18,17 @@ private const val TAG = "OcrEngine"
  */
 class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
 
-    suspend fun recognize(bitmap: Bitmap, tableMode: Boolean = false): String {
+    /**
+     * Serializes every native call against [release]: the vendored engine has no locking of its
+     * own, so a release racing an in-flight recognition would free native state mid-run. Under
+     * this lock a release simply waits its turn, and any call arriving after it answers empty —
+     * the caller's next [VisionContainer.ocrEngineForZone] builds a fresh engine.
+     */
+    private val opLock = Mutex()
+    private var released = false
+
+    suspend fun recognize(bitmap: Bitmap, tableMode: Boolean = false): String = opLock.withLock {
+        if (released) return@withLock ""
         val result = paddleOcr.recognize(bitmap)
         val cells = RowClusterer.cellsOf(result.results)
         // The boxes, once, in a form that can be replayed off-device. Every reconstruction decision
@@ -43,10 +55,10 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
         // for consumers that can validate it deterministically (see expenses' items sum-gate).
         if (tableMode) {
             TableReconstructor.toText(cells)?.let { table ->
-                return plain + "\n" + TABLE_SECTION_MARKER + "\n" + table
+                return@withLock plain + "\n" + TABLE_SECTION_MARKER + "\n" + table
             }
         }
-        return plain
+        plain
     }
 
     /**
@@ -68,9 +80,10 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
      * kept in the shape an overlay needs. Same engine, same models, same cost; only what survives
      * the call differs.
      */
-    suspend fun read(bitmap: Bitmap): List<OcrLine> {
+    suspend fun read(bitmap: Bitmap): List<OcrLine> = opLock.withLock {
+        if (released) return@withLock emptyList()
         val cells = RowClusterer.cellsOf(paddleOcr.recognize(bitmap).results)
-        return RowClusterer.rowsOfCells(cells).map { row ->
+        RowClusterer.rowsOfCells(cells).map { row ->
             OcrLine(
                 text = row.sortedBy { it.xLeft }.joinToString(" ") { it.text },
                 left = row.minOf { it.xLeft },
@@ -81,7 +94,12 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
         }
     }
 
-    suspend fun release() = paddleOcr.release()
+    suspend fun release() = opLock.withLock {
+        if (!released) {
+            released = true
+            paddleOcr.release()
+        }
+    }
 
     companion object {
         /** Separates the always-present plain text from the appended table reconstruction —

@@ -89,7 +89,9 @@ object DocumentCropper {
      *  whether it's worth paying for a color bitmap conversion on this tick at all. */
     fun isMlDetectorLoaded(): Boolean = docQuadRunner != null
 
-    fun init(context: Context) {
+    fun init(context: Context) = synchronized(this) {
+        // Both camera screens call this on their own dispatcher; without the lock two concurrent
+        // first calls each build a runner and one ONNX session is never closed.
         if (docQuadRunner != null) return
         try {
             docQuadRunner = DocQuadOrtRunner.create(context, DOCQUAD_MODEL_ASSET_PATH)
