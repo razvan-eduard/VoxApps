@@ -93,6 +93,6 @@ class VoskSttEngine(
         private const val TAG = "VoskSttEngine"
         private const val JSON_KEY_TEXT = Strings.Vosk.JSON_KEY_TEXT
         private const val JSON_KEY_PARTIAL = Strings.Vosk.JSON_KEY_PARTIAL
-        private const val SAMPLE_RATE = 16000.0f
+        private val SAMPLE_RATE = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ.toFloat()
     }
 }

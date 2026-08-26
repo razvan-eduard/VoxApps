@@ -118,7 +118,7 @@ object VoiceFeatureExtractor {
 
     private const val FRAME_SIZE_MS = 25f
     private const val HOP_SIZE_MS = 10f
-    private const val SAMPLE_RATE = 16000
+    private val SAMPLE_RATE = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ
 
     /**
      * Extract a sequence of 8-band feature vectors from audio (frame-by-frame).

@@ -36,7 +36,7 @@ class BenchmarkEngine(
     companion object {
         private const val TAG = "BenchmarkEngine"
         private const val DUMMY_AUDIO_DURATION_MS = 5000L
-        private const val SAMPLE_RATE = 16000
+        private val SAMPLE_RATE = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ
 
         // Standardized test command for intent engines — exercises audio category with artist/track extraction
         private const val INTENT_TEST_COMMAND = "play bohemian rhapsody by queen on youtube"

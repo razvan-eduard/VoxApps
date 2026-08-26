@@ -91,7 +91,7 @@ class BackupWorker(
                 return Result.success()
             }
 
-            val fileName = "vox-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())}.zip"
+            val fileName = com.voxapps.backup.VoxBackupNames.timestampedZip("vox-hub")
             val outFile = File(backupsDir, fileName)
             try {
                 FileOutputStream(outFile).use { out ->
@@ -126,8 +126,8 @@ class BackupWorker(
 
     companion object {
         /** [retentionCount] = [HubSettings.RETENTION_UNLIMITED] skips pruning entirely. Filenames
-         *  sort chronologically (`vox-backup-yyyyMMdd-HHmmss.zip`), so the oldest excess files are
-         *  just the first N once sorted. */
+         *  sort chronologically ([com.voxapps.backup.VoxBackupNames]), so the oldest excess files
+         *  are just the first N once sorted. */
         fun pruneOldBackups(dir: File, retentionCount: Int) {
             if (retentionCount == HubSettings.RETENTION_UNLIMITED) return
             val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".zip") }?.sortedBy { it.name } ?: return

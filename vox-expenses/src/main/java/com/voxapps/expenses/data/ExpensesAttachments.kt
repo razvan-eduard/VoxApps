@@ -9,6 +9,8 @@ package com.voxapps.expenses.data
  *  keys off of for reference-counted cleanup. See [ExpensesRepository.deleteAttachmentsFor]. */
 object ExpensesAttachments {
     const val DIR = "attachments"
+    /** The scan photo store under `filesDir` — [DIR]'s sibling, manually-added vs scanned. */
+    const val RECEIPTS_DIR = "receipts"
     const val FILE_PROVIDER_AUTHORITY = "com.voxapps.expenses.fileprovider"
     const val RECORD_TYPE = "expense"
 }

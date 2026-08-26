@@ -92,7 +92,7 @@ fun HubBackupSettingsSection(settingsRepo: HubSettingsRepository, settings: HubS
         onIncludeAttachmentsChange = {},
         onImportModeChange = {},
         onBackupNowClick = {
-            val fileName = "vox-hub-backup-${SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())}.zip"
+            val fileName = com.voxapps.backup.VoxBackupNames.timestampedZip("vox-hub")
             createDocumentLauncher.launch(fileName)
         },
         onRestoreClick = { openDocumentLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }

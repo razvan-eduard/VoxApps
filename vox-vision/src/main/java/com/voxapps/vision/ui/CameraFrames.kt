@@ -23,6 +23,13 @@ import org.opencv.core.Mat
 /** Floor for the live framing analysis on a background executor (see LaunchedEffect(cameraController)
  *  in [VisionScreen]) — a safety cap on CPU/battery use, not the target rate; actual throughput is
  *  paced by how long each frame's OpenCV processing takes on the device. */
+/**
+ * The analysis stream's requested resolution (pre-rotation). Both camera screens ask for the same
+ * frame size so geometry tuned on one (contour thresholds, text legibility) holds on the other;
+ * the default 640x480 is as much too coarse for text as it is for contours.
+ */
+internal val ANALYSIS_RESOLUTION = android.util.Size(1280, 960)
+
 internal const val ANALYSIS_INTERVAL_MS = 80L
 
 /** Floor used instead of [ANALYSIS_INTERVAL_MS] once the ML corner detector (see

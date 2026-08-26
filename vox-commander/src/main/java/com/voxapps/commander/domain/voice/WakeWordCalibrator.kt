@@ -30,7 +30,7 @@ class WakeWordCalibrator(
 ) {
     companion object {
         private const val TAG = "WakeWordCalibrator"
-        private const val SAMPLE_RATE = 16000
+        private val SAMPLE_RATE = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ
         private const val ROUNDS = 5
         private const val RECORDING_DURATION_MS = 3000L
         private const val SILENCE_RMS_DEFAULT = 0.008f

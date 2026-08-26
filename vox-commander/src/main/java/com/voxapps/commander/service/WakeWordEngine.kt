@@ -61,7 +61,7 @@ class WakeWordEngine(
     }
     private var engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
 
-    private val sampleRate = 16000
+    private val sampleRate = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 2
 
     // --- VAD: Bandpass filter (300-3400 Hz voice band) + RMS ---
@@ -77,14 +77,14 @@ class WakeWordEngine(
     private var storedVoicePrint: FloatArray? = null
     private var similarityThreshold = 0.65f
     private val rollingAudioBuffer = ArrayDeque<Short>()
-    private val ROLLING_BUFFER_MAX_SAMPLES = 16000 * 2 // ~2 seconds at 16kHz
+    private val ROLLING_BUFFER_MAX_SAMPLES = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ * 2 // ~2 seconds
 
     // --- Template matching (language-agnostic KWS) ---
     private var storedTemplate: Array<FloatArray>? = null
     private var templateThreshold = 0.45f
     private var useTemplateMode = false
     private val voiceSegmentBuffer = ArrayDeque<Short>()
-    private val SEGMENT_MAX_SAMPLES = 16000 * 3 // Max 3s segment for DTW
+    private val SEGMENT_MAX_SAMPLES = com.voxapps.audio.VOICE_SAMPLE_RATE_HZ * 3 // Max 3s segment for DTW
     private var isCollectingVoice = false
     private val SILENCE_FRAMES_TO_END_SEGMENT = 8
 
@@ -442,7 +442,7 @@ class WakeWordEngine(
             if (voiceSegmentBuffer.isEmpty()) return
 
             // Need at least 0.3s of audio to be a valid candidate
-            if (voiceSegmentBuffer.size < 16000 * 0.3) {
+            if (voiceSegmentBuffer.size < com.voxapps.audio.VOICE_SAMPLE_RATE_HZ * 0.3) {
                 voiceSegmentBuffer.clear()
                 return
             }

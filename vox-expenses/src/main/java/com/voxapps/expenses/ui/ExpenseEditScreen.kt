@@ -1286,7 +1286,7 @@ private fun StubRetryBanner(expenseId: Long, imageName: String?, stateManager: E
                 ExpenseScanRequestSender.sendHeadlessRetryOcr(context, expenseId, ExpensesAttachments.DIR, entity.fileName, uri)
             }
         } else if (imageName != null) {
-            val rawTextFile = File(File(context.filesDir, "receipts"), imageName.substringBeforeLast('.') + ".txt")
+            val rawTextFile = File(File(context.filesDir, ExpensesAttachments.RECEIPTS_DIR), imageName.substringBeforeLast('.') + ".txt")
             val rawText = rawTextFile.takeIf { it.exists() }?.readText()
             if (rawText.isNullOrBlank()) {
                 Toast.makeText(context, languageManager.getString("retry_cleanup_no_saved_text"), Toast.LENGTH_LONG).show()
@@ -1378,7 +1378,7 @@ private fun ExpenseAttachmentsSection(
                 add(
                     AttachmentUiItem(
                         id = -1L,
-                        uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, "receipts", receiptImageName),
+                        uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.RECEIPTS_DIR, receiptImageName),
                         removable = false
                     )
                 )
@@ -1431,7 +1431,7 @@ private fun ExpenseAttachmentsSection(
 
     fun rescanAttachmentForLineItems(item: AttachmentUiItem) {
         if (item.id == -1L) {
-            receiptImageName?.let { triggerRescan("receipts", listOf(it), silent = false) }
+            receiptImageName?.let { triggerRescan(ExpensesAttachments.RECEIPTS_DIR, listOf(it), silent = false) }
         } else {
             val tapped = manualEntities.firstOrNull { it.id == item.id } ?: return
             val groupFileNames = tapped.groupId?.let { gid ->
