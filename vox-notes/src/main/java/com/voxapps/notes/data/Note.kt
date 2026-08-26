@@ -37,6 +37,10 @@ data class Note(
     val uid: String = UUID.randomUUID().toString(),
     val title: String? = null,
     val text: String,
+    /** The same text with its formatting, as HTML — null for a note that never carried any. The
+     *  plain [text] stays the record everything else reads (search, previews, widgets, voice and
+     *  scan capture, IPC); this column exists only so the editor can give back what was styled. */
+    val textHtml: String? = null,
     val createdAt: Long,
     @ColumnInfo(name = "categoryId") val categoryId: Long? = null,
     val updatedAt: Long = System.currentTimeMillis(),

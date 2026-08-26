@@ -220,5 +220,17 @@
   "notes_fill_head": "Remplir automatiquement le titre et la catégorie",
   "flow_cannot_suggest": "Cette app n'a pas où garder une suggestion ; la réponse est donc écrite.",
   "default_category_suffix": "principale",
-  "set_default_category": "En faire la catégorie principale"
+  "set_default_category": "En faire la catégorie principale",
+  "rich_bold": "Gras",
+  "rich_italic": "Italique",
+  "rich_underline": "Souligné",
+  "rich_strikethrough": "Barré",
+  "rich_size": "Taille du texte",
+  "rich_font": "Police",
+  "rich_color_reset": "Couleur par défaut",
+  "rich_bullets": "Liste à puces",
+  "rich_numbering": "Liste numérotée",
+  "editor_fullscreen": "Modifier en plein écran",
+  "editor_exit_fullscreen": "Quitter le plein écran",
+  "editor_dismiss": "Fermer sans enregistrer"
 }

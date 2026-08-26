@@ -220,5 +220,17 @@
   "notes_fill_head": "Completează automat titlul și categoria",
   "flow_cannot_suggest": "Aplicația n-are unde ține o sugestie, deci răspunsul se scrie.",
   "default_category_suffix": "principală",
-  "set_default_category": "Fă-o categoria principală"
+  "set_default_category": "Fă-o categoria principală",
+  "rich_bold": "Aldin",
+  "rich_italic": "Cursiv",
+  "rich_underline": "Subliniat",
+  "rich_strikethrough": "Tăiat",
+  "rich_size": "Mărimea textului",
+  "rich_font": "Font",
+  "rich_color_reset": "Culoarea implicită",
+  "rich_bullets": "Listă cu puncte",
+  "rich_numbering": "Listă numerotată",
+  "editor_fullscreen": "Editează pe tot ecranul",
+  "editor_exit_fullscreen": "Ieși din ecran complet",
+  "editor_dismiss": "Închide fără salvare"
 }

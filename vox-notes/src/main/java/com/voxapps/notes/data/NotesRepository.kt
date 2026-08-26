@@ -61,11 +61,19 @@ class NotesRepository(
 
     // --- NOTES ---
     /** Returns the new row's id, or 0 if both [title] and [text] were blank (nothing inserted). */
-    suspend fun addNote(title: String?, text: String, categoryId: Long?, createdAt: Long): Long {
+    suspend fun addNote(
+        title: String?,
+        text: String,
+        categoryId: Long?,
+        createdAt: Long,
+        textHtml: String? = null
+    ): Long {
         val clean = text.trim()
         val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
         if (clean.isEmpty() && cleanTitle == null) return 0
-        return noteDao.insert(Note(title = cleanTitle, text = clean, createdAt = createdAt, categoryId = categoryId))
+        return noteDao.insert(
+            Note(title = cleanTitle, text = clean, createdAt = createdAt, categoryId = categoryId, textHtml = textHtml)
+        )
     }
 
     /** A note whose scan couldn't be parsed into usable text but whose photo was kept anyway (see
@@ -109,11 +117,11 @@ class NotesRepository(
     suspend fun updateNote(note: Note) = noteDao.update(note.copy(updatedAt = System.currentTimeMillis()))
 
     /** Update editable fields by id (keeps createdAt). Deletes the note if it ends up empty. */
-    suspend fun updateNoteFields(id: Long, title: String?, text: String, categoryId: Long?) {
+    suspend fun updateNoteFields(id: Long, title: String?, text: String, categoryId: Long?, textHtml: String? = null) {
         val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
         val cleanText = text.trim()
         if (cleanTitle == null && cleanText.isEmpty()) deleteNoteById(id)
-        else noteDao.updateFields(id, cleanTitle, cleanText, categoryId, System.currentTimeMillis())
+        else noteDao.updateFields(id, cleanTitle, cleanText, textHtml, categoryId, System.currentTimeMillis())
     }
 
     suspend fun deleteNote(note: Note) {
