@@ -27,7 +27,9 @@ object TableItemsPreParse {
         val vatAmount: Double? = null
     )
 
-    private const val TOLERANCE = 0.05
+    /** Slack for one comparison — the same cent-rounding allowance [LineItemBattery] uses, and
+     *  deliberately the same figure: both judge printed money against arithmetic on it. */
+    private const val TOLERANCE = 0.02
 
     /** Mirrors vox-vision's OcrEngine.TABLE_SECTION_MARKER — the reconstruction rides appended
      *  behind it; everything before is the plain reading-order text every other consumer uses. */
