@@ -17,7 +17,6 @@ import com.voxapps.design.effects.ApplyTodayEffect
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -48,13 +47,10 @@ fun DayHeader(
 ) {
     val alpha = if (isEmpty) 0.55f else 1f
     val isToday = date == today
-    // Mirrors the widget's DaySeparatorLabel format ("Today, 31 Jul") instead of the plain weekday
-    // name other days get, so today's row reads the same way in both places.
-    val secondLineText = if (isToday) {
-        "$todayLabel, ${date.format(DateTimeFormatter.ofPattern("d MMM", locale))}"
-    } else {
-        date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
-    }
+    // Today is named beside the number itself — "Today, 26" — rather than restating the whole
+    // date on a line of its own; the weekday line stays the same for every day.
+    val firstLineText = if (isToday) "$todayLabel, ${date.dayOfMonth}" else date.dayOfMonth.toString()
+    val secondLineText = date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
 
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -76,7 +72,7 @@ fun DayHeader(
                 modifier = Modifier.padding(horizontal = 12.dp)
             ) {
                 Text(
-                    text = date.dayOfMonth.toString(),
+                    text = firstLineText,
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
                     textAlign = TextAlign.Center
