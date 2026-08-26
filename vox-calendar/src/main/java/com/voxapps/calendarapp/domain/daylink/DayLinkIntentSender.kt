@@ -13,8 +13,8 @@ import com.voxapps.ipc.VoxIpc.NOTES_PACKAGE
  * (see `NotesActivity`/`ExpensesActivity`'s `onCreate`) — no restructuring of either app's filter UI.
  */
 object DayLinkIntentSender {
-    private const val NOTES_ACTIVITY_CLASS = "com.voxapps.notes.NotesActivity"
-    private const val EXPENSES_ACTIVITY_CLASS = "com.voxapps.expenses.ExpensesActivity"
+    private const val NOTES_ACTIVITY_CLASS = com.voxapps.ipc.VoxIpc.NOTES_ACTIVITY_CLASS
+    private const val EXPENSES_ACTIVITY_CLASS = com.voxapps.ipc.VoxIpc.EXPENSES_ACTIVITY_CLASS
 
     fun openNotesOnDay(context: Context, dayMillis: Long) {
         context.startActivity(

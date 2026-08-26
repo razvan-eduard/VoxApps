@@ -61,6 +61,7 @@ import com.voxapps.hub.data.preferences.HubSettingsRepository
 import com.voxapps.hub.domain.backup.BackupScheduler
 import com.voxapps.hub.domain.backup.configFor
 import com.voxapps.hub.domain.backup.wantsExport
+import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxAppInfo
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.logging.Logger
@@ -102,7 +103,7 @@ fun HubSettingsScreen(
     // is selected (mirrors the Export button's own enabled condition on the main screen).
     var exportApps by remember { mutableStateOf<List<VoxAppInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
-        exportApps = VoxAppsDiscovery.discover(context).filter { it.actions.contains("export") }
+        exportApps = VoxAppsDiscovery.discover(context).filter { it.actions.contains(VoxIpc.OP_EXPORT) }
     }
     val anyAppSelected = exportApps.any { settings.appBackupConfigs.configFor(it.packageName).wantsExport() }
 
@@ -318,7 +319,7 @@ fun HubSettingsScreen(
                                         Icon(Icons.Filled.Restore, contentDescription = languageManager.getString("backup_restore_action"))
                                     }
                                     IconButton(onClick = {
-                                        val uri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", file)
+                                        val uri = FileProvider.getUriForFile(context, com.voxapps.hub.data.preferences.HubSettings.FILE_PROVIDER_AUTHORITY, file)
                                         val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                             type = "application/zip"
                                             putExtra(Intent.EXTRA_STREAM, uri)

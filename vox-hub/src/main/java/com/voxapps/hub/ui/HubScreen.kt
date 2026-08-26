@@ -150,7 +150,7 @@ fun HubScreen(
 
     LaunchedEffect(Unit) {
         apps = VoxAppsDiscovery.discover(context).filter {
-            it.actions.contains("export") || it.actions.contains("import")
+            it.actions.contains(VoxIpc.OP_EXPORT) || it.actions.contains(VoxIpc.OP_IMPORT)
         }
     }
 
@@ -288,7 +288,7 @@ fun HubScreen(
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val targets = apps.filter { app ->
-            app.actions.contains("export") &&
+            app.actions.contains(VoxIpc.OP_EXPORT) &&
                 settings.appBackupConfigs.configFor(app.packageName).wantsExport()
         }
         isExporting = true
@@ -388,7 +388,7 @@ fun HubScreen(
                         val stagedDir = File(context.cacheDir, "imports").apply { mkdirs() }
                         val stagedFile = File(stagedDir, "import_${domain}_${UUID.randomUUID()}.zip")
                         FileOutputStream(stagedFile).use { fos -> zis.copyTo(fos) }
-                        val stagedUri = FileProvider.getUriForFile(context, "com.voxapps.hub.fileprovider", stagedFile)
+                        val stagedUri = FileProvider.getUriForFile(context, com.voxapps.hub.data.preferences.HubSettings.FILE_PROVIDER_AUTHORITY, stagedFile)
                         apps.firstOrNull { it.domain == domain }?.packageName?.let { pkg ->
                             context.grantUriPermission(pkg, stagedUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
@@ -421,7 +421,7 @@ fun HubScreen(
                     perDomain[attachment.domain]?.put(attachment.fieldName, attachment.uri.toString())
                 }
                 // Only offer domains that are both in the file AND currently installed/discovered.
-                val available = perDomain.filterKeys { domain -> apps.any { it.domain == domain && it.actions.contains("import") } }
+                val available = perDomain.filterKeys { domain -> apps.any { it.domain == domain && it.actions.contains(VoxIpc.OP_IMPORT) } }
                 if (available.isEmpty()) {
                     importError = languageManager.getString("hub_import_no_matching_apps")
                     return@launch
@@ -543,7 +543,7 @@ fun HubScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
-                val exportableApps = apps.filter { it.actions.contains("export") }
+                val exportableApps = apps.filter { it.actions.contains(VoxIpc.OP_EXPORT) }
                 val anySecretsOn = exportableApps.any { settings.appBackupConfigs.configFor(it.packageName).includeApiKeys }
                 val allFullyOn = exportableApps.isNotEmpty() && exportableApps.all { app ->
                     val c = settings.appBackupConfigs.configFor(app.packageName)
@@ -575,7 +575,7 @@ fun HubScreen(
                 LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
                     items(exportableApps, key = { it.packageName }) { app ->
                         val config = settings.appBackupConfigs.configFor(app.packageName)
-                        val hasData = app.actions.contains("create")
+                        val hasData = app.actions.contains(VoxIpc.OP_CREATE)
                         fun update(next: AppBackupConfig) {
                             scope.launch { settingsRepo.setAppBackupConfig(app.packageName, next) }
                         }
@@ -637,7 +637,7 @@ fun HubScreen(
                 Button(
                     onClick = { startExportFlow() },
                     enabled = !isExporting && apps.any { app ->
-                        app.actions.contains("export") &&
+                        app.actions.contains(VoxIpc.OP_EXPORT) &&
                             settings.appBackupConfigs.configFor(app.packageName).wantsExport()
                     },
                     modifier = Modifier.fillMaxWidth()

@@ -64,7 +64,6 @@ object VoxIpc {
 
     // --- Extras ---
     const val EXTRA_PAYLOAD = "com.voxapps.extra.PAYLOAD"
-    const val EXTRA_RESULT = "com.voxapps.extra.RESULT"
     const val EXTRA_QUERY = "com.voxapps.extra.QUERY"
     const val EXTRA_LLM_PAYLOAD = "com.voxapps.extra.LLM_PAYLOAD"
     const val EXTRA_OCR_PAYLOAD = "com.voxapps.extra.OCR_PAYLOAD"
@@ -169,8 +168,10 @@ object VoxIpc {
     const val IMPORT_MODE_MERGE = "merge"
     const val IMPORT_MODE_ADDITIVE = "additive"
 
-    // --- Domains ---
+    // --- Domains — the values the satellites' [META_DOMAIN] manifests carry, one per app. ---
     const val DOMAIN_NOTES = "notes"
+    const val DOMAIN_EXPENSES = "expenses"
+    const val DOMAIN_CALENDAR = "calendar"
     const val DOMAIN_VISION = "vision"
 
     /**
@@ -224,6 +225,8 @@ object VoxIpc {
      */
     const val VISION_PACKAGE = "com.voxapps.vision"
     const val VISION_ACTIVITY_CLASS = "com.voxapps.vision.VisionActivity"
+    const val NOTES_ACTIVITY_CLASS = "com.voxapps.notes.NotesActivity"
+    const val EXPENSES_ACTIVITY_CLASS = "com.voxapps.expenses.ExpensesActivity"
 
     /**
      * Vox Hub's package name, for satellites that need to grant it read access to an export/import

@@ -238,7 +238,7 @@ class GenericLaunchHandler : IntentHandler {
         // Vox intent contract — declared LOCALLY (no shared library); satellites define the same
         // strings on their side. Any app that declares this filter can receive Vox commands.
         private const val VOX_ACTION = "com.voxapps.action.HANDLE"
-        private const val VOX_CATEGORY = "com.voxapps.category.VOX"
+        private const val VOX_CATEGORY = com.voxapps.ipc.VoxIpc.CATEGORY_VOX
         private const val VOX_EXTRA_QUERY = "com.voxapps.extra.QUERY"
         private const val VOX_EXTRA_DOMAIN = "com.voxapps.extra.DOMAIN"
         private const val VOX_EXTRA_ACTION = "com.voxapps.extra.ACTION"

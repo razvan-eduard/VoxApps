@@ -13,10 +13,10 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!--
-        LiveView lets the person pick which app receives each kind of recognised text. These are
-        the exact five ways such text can leave — dial, mail, map, browse/search, share — declared
-        narrowly instead of QUERY_ALL_PACKAGES: this app has no reason to see anything but the
-        handlers of these intents.
+        Both declarations are load-bearing: QUERY_ALL_PACKAGES above feeds the target-app pickers
+        (which must offer everything installed), while these narrow queries are what chip-time
+        resolveActivity checks ride on — the exact five ways recognised text can leave: dial,
+        mail, map, browse/search, share.
     -->
     <queries>
         <intent>
@@ -46,9 +46,10 @@
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="text/plain" />
         </intent>
-        <!-- Two named apps with schemes of their own: the WhatsApp chip hides when WhatsApp is
-             absent, and Waze is one of navigate's carriers. -->
+        <!-- Named apps with schemes of their own: the WhatsApp chip (either flavour) hides when
+             WhatsApp is absent, and Waze is one of navigate's carriers. -->
         <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
         <package android:name="com.waze" />
     </queries>
 
@@ -80,12 +81,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <!-- Satellite scan request: launched explicitly by Expenses/Notes -->
-            <intent-filter>
-                <action android:name="com.voxapps.action.OCR_REQUEST" />
-                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
