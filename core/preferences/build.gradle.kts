@@ -18,5 +18,6 @@ android {
 
 dependencies {
     api(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.security.crypto)
     implementation(libs.kotlinx.coroutines.android)
 }
