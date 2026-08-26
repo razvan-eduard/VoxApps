@@ -49,6 +49,38 @@ class OcrEngine private constructor(private val paddleOcr: PaddleOCR) {
         return plain
     }
 
+    /**
+     * One printed row, with where it sits: text in reading order, box in the pixel coordinates of
+     * the bitmap the read was given. The row, not the detector's box, because the tap target a
+     * caller builds from this should cover "Tel: 0722 111 222" as one thing even when detection
+     * returned it as two.
+     */
+    data class OcrLine(
+        val text: String,
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float
+    )
+
+    /**
+     * The recognized rows with their geometry — the same reading [recognize] flattens to a string,
+     * kept in the shape an overlay needs. Same engine, same models, same cost; only what survives
+     * the call differs.
+     */
+    suspend fun read(bitmap: Bitmap): List<OcrLine> {
+        val cells = RowClusterer.cellsOf(paddleOcr.recognize(bitmap).results)
+        return RowClusterer.rowsOfCells(cells).map { row ->
+            OcrLine(
+                text = row.sortedBy { it.xLeft }.joinToString(" ") { it.text },
+                left = row.minOf { it.xLeft },
+                top = row.minOf { it.yTop },
+                right = row.maxOf { it.xRight },
+                bottom = row.maxOf { it.yBottom }
+            )
+        }
+    }
+
     suspend fun release() = paddleOcr.release()
 
     companion object {
