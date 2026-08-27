@@ -112,7 +112,7 @@ dependencies {
     // (androidx.activity, pulled in by the Compose stack) when requesting a runtime permission via
     // registerForActivityResult — force a current fragment version so it wins dependency resolution.
     // Mirrors vox-expenses'/vox-calendar's identical fix.
-    implementation("androidx.fragment:fragment-ktx:1.8.9")
+    implementation("androidx.fragment:fragment-ktx:1.9.0")
 
     // Room + KSP
     implementation(libs.androidx.room.runtime)
@@ -121,7 +121,7 @@ dependencies {
 
     // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
     // sqlcipher-android (new edition) ships 16 KB-page-aligned native libs (Play requirement).
-    implementation("net.zetetic:sqlcipher-android:4.17.0")
+    implementation("net.zetetic:sqlcipher-android:4.18.0")
     implementation("androidx.sqlite:sqlite:2.7.0")
     implementation(libs.androidx.security.crypto)
 

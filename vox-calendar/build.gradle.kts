@@ -119,7 +119,7 @@ dependencies {
     // See vox-expenses/vox-notes' identical comment: forces a current fragment version so the
     // biometric prompt's registerForActivityResult doesn't crash against the modern
     // ActivityResultRegistry pulled in by the Compose stack.
-    implementation("androidx.fragment:fragment-ktx:1.8.9")
+    implementation("androidx.fragment:fragment-ktx:1.9.0")
 
     // Room + KSP
     implementation(libs.androidx.room.runtime)
@@ -131,7 +131,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
-    implementation("net.zetetic:sqlcipher-android:4.17.0")
+    implementation("net.zetetic:sqlcipher-android:4.18.0")
     implementation("androidx.sqlite:sqlite:2.7.0")
     implementation(libs.androidx.security.crypto)
 
