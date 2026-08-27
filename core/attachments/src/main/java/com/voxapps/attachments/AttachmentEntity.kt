@@ -16,6 +16,13 @@ object AttachmentSource {
     // (which stays MANUAL): the UI only offers whole-group delete for a STITCHED group, never
     // per-photo — see AttachmentUiItem.groupSource and AttachmentsSection's zoom view.
     const val STITCHED = "stitched"
+
+    // Media living INSIDE a record's body rather than in its attachments strip — a photo
+    // thumbnail or a recorded voice note referenced by a marker in the record's styled text.
+    // The marker is the source of truth; rows with these sources are derived from it on save,
+    // so strip UIs must exclude them and cleanup logic must only ever touch these two.
+    const val INLINE_PHOTO = "inline_photo"
+    const val VOICE = "voice"
 }
 
 /**
