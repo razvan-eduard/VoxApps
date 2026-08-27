@@ -33,6 +33,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.contextmenu.builder.TextContextMenuBuilderScope
+import androidx.compose.foundation.text.contextmenu.builder.item
+import androidx.compose.foundation.text.contextmenu.modifier.appendTextContextMenuComponents
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatSize
@@ -54,6 +57,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.sp
+import com.voxapps.notes.domain.localization.LanguageManager
 import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.BasicRichTextEditor
@@ -70,6 +74,9 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -402,6 +409,9 @@ fun NoteEditorCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .onFocusChanged { if (it.isFocused) focusedTextKey = block.key }
+                                        .appendTextContextMenuComponents {
+                                            richStyleContextMenuItems(block.state, languageManager)
+                                        }
                                 )
                             }
                             is EditorBlock.Photo -> InlinePhotoRow(
@@ -788,15 +798,33 @@ private fun JournalBody(textHtml: String, modifier: Modifier = Modifier) {
  *  styled by eye, not typeset. */
 private val RICH_TEXT_SIZES = listOf(14.sp, 18.sp, 24.sp, 32.sp)
 
-/** The families the bar cycles through: the generic names every renderer knows. */
-private val RICH_TEXT_FONTS = listOf(FontFamily.SansSerif, FontFamily.Serif, FontFamily.Monospace)
-
-/** The ink choices. Not themed colors on purpose: a color put on words is content, and content
- *  keeps its color whatever theme the note is later read under. */
-private val RICH_TEXT_COLORS = listOf(
-    Color(0xFFD32F2F), Color(0xFFF57C00), Color(0xFF388E3C),
-    Color(0xFF1976D2), Color(0xFF7B1FA2)
-)
+/**
+ * Puts the four character styles into the platform's own text-selection menu (after its
+ * cut/copy entries), so styling stays reachable even while that floating menu covers the
+ * format bar. The bar's flat toggles remain the second, chainable path to the same calls.
+ */
+private fun TextContextMenuBuilderScope.richStyleContextMenuItems(
+    state: RichTextState,
+    languageManager: LanguageManager
+) {
+    separator()
+    item(key = "rich_bold", label = languageManager.getString("rich_bold")) {
+        state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold))
+        close()
+    }
+    item(key = "rich_italic", label = languageManager.getString("rich_italic")) {
+        state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic))
+        close()
+    }
+    item(key = "rich_underline", label = languageManager.getString("rich_underline")) {
+        state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+        close()
+    }
+    item(key = "rich_strikethrough", label = languageManager.getString("rich_strikethrough")) {
+        state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
+        close()
+    }
+}
 
 /**
  * The small format bar the editor carries: bold, italic, underline, strikethrough as toggles that
@@ -830,7 +858,7 @@ private fun RichFormatBar(
                 active = insertMenuOpen,
                 description = languageManager.getString("rich_insert_media")
             ) { insertMenuOpen = true }
-            DropdownMenu(expanded = insertMenuOpen, onDismissRequest = { insertMenuOpen = false }) {
+            DropdownMenu(expanded = insertMenuOpen, onDismissRequest = { insertMenuOpen = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
                 DropdownMenuItem(
                     text = { Text(languageManager.getString("attachment_choose_gallery")) },
                     leadingIcon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
@@ -851,94 +879,219 @@ private fun RichFormatBar(
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        FormatToggle(
-            icon = Icons.Filled.FormatBold,
-            active = current.fontWeight == FontWeight.Bold,
-            description = languageManager.getString("rich_bold")
-        ) { state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) }
-        FormatToggle(
-            icon = Icons.Filled.FormatItalic,
-            active = current.fontStyle == FontStyle.Italic,
-            description = languageManager.getString("rich_italic")
-        ) { state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) }
-        FormatToggle(
-            icon = Icons.Filled.FormatUnderlined,
-            active = current.textDecoration?.contains(TextDecoration.Underline) == true,
-            description = languageManager.getString("rich_underline")
-        ) { state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) }
-        FormatToggle(
-            icon = Icons.Filled.FormatStrikethrough,
-            active = current.textDecoration?.contains(TextDecoration.LineThrough) == true,
-            description = languageManager.getString("rich_strikethrough")
-        ) { state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) }
-
-        Spacer(modifier = Modifier.width(6.dp))
+        // Character styles under one trigger — except while text is selected: a selection means
+        // "I'm about to style this", so the four toggles lay themselves flat for one-tap use
+        // right when they're wanted (the platform's own selection menu keeps clipboard duty).
+        val hasSelection = !state.selection.collapsed
+        if (hasSelection) {
+            FormatToggle(Icons.Filled.FormatBold, current.fontWeight == FontWeight.Bold,
+                languageManager.getString("rich_bold")) {
+                state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold))
+            }
+            FormatToggle(Icons.Filled.FormatItalic, current.fontStyle == FontStyle.Italic,
+                languageManager.getString("rich_italic")) {
+                state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic))
+            }
+            FormatToggle(Icons.Filled.FormatUnderlined,
+                current.textDecoration?.contains(TextDecoration.Underline) == true,
+                languageManager.getString("rich_underline")) {
+                state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+            }
+            FormatToggle(Icons.Filled.FormatStrikethrough,
+                current.textDecoration?.contains(TextDecoration.LineThrough) == true,
+                languageManager.getString("rich_strikethrough")) {
+                state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
+            }
+        } else {
+            var styleMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                FormatToggle(
+                    icon = Icons.Filled.FormatBold,
+                    active = styleMenuOpen || current.fontWeight == FontWeight.Bold ||
+                        current.fontStyle == FontStyle.Italic || current.textDecoration != null,
+                    description = languageManager.getString("rich_text_styles")
+                ) { styleMenuOpen = true }
+                DropdownMenu(expanded = styleMenuOpen, onDismissRequest = { styleMenuOpen = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
+                    StyleMenuItem(Icons.Filled.FormatBold, languageManager.getString("rich_bold"),
+                        current.fontWeight == FontWeight.Bold) {
+                        state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold))
+                    }
+                    StyleMenuItem(Icons.Filled.FormatItalic, languageManager.getString("rich_italic"),
+                        current.fontStyle == FontStyle.Italic) {
+                        state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic))
+                    }
+                    StyleMenuItem(Icons.Filled.FormatUnderlined, languageManager.getString("rich_underline"),
+                        current.textDecoration?.contains(TextDecoration.Underline) == true) {
+                        state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+                    }
+                    StyleMenuItem(Icons.Filled.FormatStrikethrough, languageManager.getString("rich_strikethrough"),
+                        current.textDecoration?.contains(TextDecoration.LineThrough) == true) {
+                        state.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
+                    }
+                }
+            }
+        }
 
         // Lists are paragraph-level: the toggle takes the section the cursor sits in (or the
         // selected paragraphs) in and out of bullets or numbering, and the two exclude each other
         // — the library moves a numbered paragraph straight to bullets rather than stacking them.
-        FormatToggle(
-            icon = Icons.Filled.FormatListBulleted,
-            active = state.isUnorderedList,
-            description = languageManager.getString("rich_bullets")
-        ) { state.toggleUnorderedList() }
-        FormatToggle(
-            icon = Icons.Filled.FormatListNumbered,
-            active = state.isOrderedList,
-            description = languageManager.getString("rich_numbering")
-        ) { state.toggleOrderedList() }
-
-        Spacer(modifier = Modifier.width(6.dp))
-
-        // Size: the next step up from wherever the cursor sits, wrapping back to small.
-        FormatToggle(
-            icon = Icons.Filled.FormatSize,
-            active = RICH_TEXT_SIZES.drop(1).any { it == current.fontSize },
-            description = languageManager.getString("rich_size")
-        ) {
-            val index = RICH_TEXT_SIZES.indexOfFirst { it == current.fontSize }
-            val next = RICH_TEXT_SIZES[(index + 1).mod(RICH_TEXT_SIZES.size)]
-            state.addSpanStyle(SpanStyle(fontSize = next))
-        }
-        // Font: sans → serif → mono, the three names every renderer knows.
-        FormatToggle(
-            icon = Icons.Filled.TextFormat,
-            active = current.fontFamily != null && current.fontFamily != FontFamily.SansSerif,
-            description = languageManager.getString("rich_font")
-        ) {
-            val index = RICH_TEXT_FONTS.indexOfFirst { it == current.fontFamily }
-            val next = RICH_TEXT_FONTS[(index + 1).mod(RICH_TEXT_FONTS.size)]
-            state.addSpanStyle(SpanStyle(fontFamily = next))
+        var listMenuOpen by remember { mutableStateOf(false) }
+        Box {
+            FormatToggle(
+                icon = Icons.Filled.FormatListBulleted,
+                active = listMenuOpen || state.isUnorderedList || state.isOrderedList,
+                description = languageManager.getString("rich_lists")
+            ) { listMenuOpen = true }
+            DropdownMenu(expanded = listMenuOpen, onDismissRequest = { listMenuOpen = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
+                StyleMenuItem(Icons.Filled.FormatListBulleted, languageManager.getString("rich_bullets"),
+                    state.isUnorderedList) { state.toggleUnorderedList() }
+                StyleMenuItem(Icons.Filled.FormatListNumbered, languageManager.getString("rich_numbering"),
+                    state.isOrderedList) { state.toggleOrderedList() }
+            }
         }
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        RICH_TEXT_COLORS.forEach { color ->
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .padding(3.dp)
-                    .clip(CircleShape)
-                    .background(color)
-                    .border(
-                        width = if (current.color == color) 2.dp else 0.dp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        shape = CircleShape
+        // Size: a list like every other group; each row previews its own size, and the trigger's
+        // own "Aa" grows with the current step so the state is readable at a glance.
+        var sizeMenuOpen by remember { mutableStateOf(false) }
+        val sizeDescription = languageManager.getString("rich_size")
+        val currentSizeIndex = RICH_TEXT_SIZES.indexOfFirst { it == current.fontSize }.coerceAtLeast(0)
+        Box {
+            val triggerActive = sizeMenuOpen || currentSizeIndex > 0
+            Surface(
+                onClick = { sizeMenuOpen = true },
+                shape = CircleShape,
+                color = if (triggerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(28.dp)) {
+                    Text(
+                        "Aa",
+                        fontSize = listOf(12.sp, 14.sp, 16.sp, 19.sp)[currentSizeIndex],
+                        fontWeight = FontWeight.Medium,
+                        color = if (triggerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.semantics { contentDescription = sizeDescription }
                     )
-                    .clickable { state.addSpanStyle(SpanStyle(color = color)) }
-            )
+                }
+            }
+            DropdownMenu(
+                expanded = sizeMenuOpen,
+                onDismissRequest = { sizeMenuOpen = false },
+                properties = androidx.compose.ui.window.PopupProperties(focusable = false)
+            ) {
+                RICH_TEXT_SIZES.forEachIndexed { index, size ->
+                    DropdownMenuItem(
+                        text = { Text("Aa", fontSize = size) },
+                        trailingIcon = if (index == currentSizeIndex) {
+                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        onClick = {
+                            state.addSpanStyle(SpanStyle(fontSize = size))
+                            sizeMenuOpen = false
+                        }
+                    )
+                }
+            }
         }
-        IconButton(
-            onClick = { state.removeSpanStyle(SpanStyle(color = current.color)) },
-            modifier = Modifier.size(28.dp)
-        ) {
-            Icon(
-                Icons.Filled.FormatColorReset,
-                contentDescription = languageManager.getString("rich_color_reset"),
-                modifier = Modifier.size(18.dp)
-            )
+        // Font: the three families every renderer knows, each row previewing itself.
+        var fontMenuOpen by remember { mutableStateOf(false) }
+        Box {
+            FormatToggle(
+                icon = Icons.Filled.TextFormat,
+                active = fontMenuOpen || (current.fontFamily != null && current.fontFamily != FontFamily.SansSerif),
+                description = languageManager.getString("rich_font")
+            ) { fontMenuOpen = true }
+            DropdownMenu(
+                expanded = fontMenuOpen,
+                onDismissRequest = { fontMenuOpen = false },
+                properties = androidx.compose.ui.window.PopupProperties(focusable = false)
+            ) {
+                listOf(
+                    FontFamily.SansSerif to languageManager.getString("rich_font_sans"),
+                    FontFamily.Serif to languageManager.getString("rich_font_serif"),
+                    FontFamily.Monospace to languageManager.getString("rich_font_mono")
+                ).forEach { (family, label) ->
+                    val selected = current.fontFamily == family ||
+                        (family == FontFamily.SansSerif && current.fontFamily == null)
+                    DropdownMenuItem(
+                        text = { Text(label, fontFamily = family) },
+                        trailingIcon = if (selected) {
+                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        onClick = {
+                            state.addSpanStyle(SpanStyle(fontFamily = family))
+                            fontMenuOpen = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Ink under one trigger, and the picker is the same swatch component every category/layer
+        // color choice already uses (shared palette + its custom-color dialog) — one color
+        // language across the app. A color put on words stays content: it keeps its exact value
+        // whatever theme the note is later read under.
+        var colorMenuOpen by remember { mutableStateOf(false) }
+        Box {
+            FormatToggle(
+                icon = Icons.Filled.Palette,
+                active = colorMenuOpen || (current.color != Color.Unspecified && current.color != Color.Black),
+                description = languageManager.getString("rich_ink")
+            ) { colorMenuOpen = true }
+            DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
+                // Fixed on BOTH axes: the menu measures its content with intrinsics, and the
+                // picker's LazyRow (a SubcomposeLayout) cannot answer those — a fully fixed
+                // wrapper short-circuits the query before it ever reaches the list.
+                Box(modifier = Modifier.width(280.dp).height(64.dp).padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    VoxColorSwatchPicker(
+                        // The cursor without ink reads as Unspecified, which has no ARGB — the
+                        // category flow never sees this because a category always has a color.
+                        selectedColor = if (current.color == Color.Unspecified) 0L
+                        else VoxColorPalette.toStored(current.color),
+                        onColorSelected = { stored ->
+                            state.addSpanStyle(SpanStyle(color = VoxColorPalette.fromStored(stored)))
+                        },
+                        collapsible = false,
+                        swatchSize = 32.dp,
+                        customColorDialogTitle = languageManager.getString("custom_color_title"),
+                        customColorUseLabel = languageManager.getString("use_color_button"),
+                        customColorCancelLabel = languageManager.getString("cancel"),
+                        customColorHueLabel = languageManager.getString("hue_label"),
+                        customColorSaturationLabel = languageManager.getString("saturation_label"),
+                        customColorBrightnessLabel = languageManager.getString("brightness_label")
+                    )
+                }
+                StyleMenuItem(
+                    Icons.Filled.FormatColorReset,
+                    languageManager.getString("rich_color_reset"),
+                    checked = false
+                ) {
+                    state.removeSpanStyle(SpanStyle(color = current.color))
+                    colorMenuOpen = false
+                }
+            }
         }
     }
+}
+
+/** One row of a format dropdown: its own icon, its label, and a check when the style is on. */
+@Composable
+private fun StyleMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    checked: Boolean,
+    onClick: () -> Unit
+) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = { Icon(icon, contentDescription = null) },
+        trailingIcon = if (checked) {
+            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+        } else null,
+        onClick = onClick
+    )
 }
 
 /** One small toggle in the bar: pressed reads as filled. */
