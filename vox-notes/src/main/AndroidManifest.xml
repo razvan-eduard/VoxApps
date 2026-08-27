@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Taking a photo directly for an attachment, via the system camera app. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Recording inline voice notes into the note body. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!--
         The COMMAND/LLM_RESULT/OCR_RESULT/LLM_PROCESS signature permissions guarding the receivers
         below are declared once in :core:ipc's own manifest (shared across every Vox app) and folded

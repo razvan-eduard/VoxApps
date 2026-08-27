@@ -3,6 +3,7 @@ package com.voxapps.notes.state
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
+import com.voxapps.notes.domain.InlineMedia
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
 import com.voxapps.notes.data.Category
@@ -152,6 +153,38 @@ class NotesStateManager(
                     groupOrder = groupOrder
                 )
             )
+        }
+    }
+
+    /**
+     * Brings this note's inline-media rows in line with the markers its saved HTML actually
+     * carries — the markers are the source of truth, the rows are bookkeeping (what rides a
+     * backup zip). Inserts rows for new markers; a marker-less row loses its row and, unless
+     * another record still shares the file, the file itself. Strip attachments
+     * (manual/scanned/stitched) are never part of this diff.
+     */
+    fun syncInlineAttachments(noteId: Long, textHtml: String?, context: Context) {
+        scope.launch {
+            val refs = InlineMedia.mediaRefs(textHtml)
+            val rows = attachmentDao.getFor(NotesAttachments.RECORD_TYPE, noteId)
+            val (toInsert, toDelete) = InlineMedia.diff(refs, rows)
+            toInsert.forEach { ref ->
+                attachmentDao.insert(
+                    AttachmentEntity(
+                        recordType = NotesAttachments.RECORD_TYPE,
+                        recordId = noteId,
+                        fileName = ref.fileName,
+                        source = ref.source,
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
+            }
+            toDelete.forEach { row ->
+                attachmentDao.delete(row.id)
+                if (attachmentDao.countByFileName(NotesAttachments.RECORD_TYPE, row.fileName) == 0) {
+                    AttachmentFileStore.delete(context, NotesAttachments.DIR, row.fileName)
+                }
+            }
         }
     }
 

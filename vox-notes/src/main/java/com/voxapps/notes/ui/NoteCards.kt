@@ -31,6 +31,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
@@ -66,6 +67,12 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.HideImage
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -89,6 +96,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -103,6 +115,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
+import com.voxapps.attachments.VoiceNotePlayer
+import com.voxapps.attachments.ui.rememberVoiceMemoLauncher
+import com.voxapps.notes.domain.InlineMedia
+import com.voxapps.notes.domain.NoteBlock
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.attachments.ui.GroupDeleteConfig
@@ -174,7 +190,14 @@ fun CollapsedNoteCard(item: NoteWithCategory, onClick: () -> Unit) {
                     }
                 }
             }
-            if (note.text.isNotBlank()) {
+            if (InlineMedia.hasMedia(note.textHtml)) {
+                // A journal entry: the list card IS the journal, so it renders the real thing —
+                // styled runs, thumbnails, playable voice pills.
+                JournalBody(
+                    textHtml = note.textHtml!!,
+                    modifier = Modifier.padding(top = if (note.title.isNullOrBlank()) 0.dp else 4.dp)
+                )
+            } else if (note.text.isNotBlank()) {
                 Text(
                     note.text,
                     style = MaterialTheme.typography.bodyMedium,
@@ -254,19 +277,96 @@ fun NoteEditorCard(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // The note's text is rich from here on: the state owns the spans, the bar
-                // above the field toggles them, and every change leaves as the pair the
-                // buffer stores — the plain text everything else reads, and the HTML that
-                // preserves what was styled.
-                val richState = rememberRichTextState()
-                LaunchedEffect(noteId) {
-                    richState.setHtml(textHtml ?: plainTextAsHtml(text))
+                // The note's body is a journal from here on: rich-text runs interleaved with
+                // media rows, derived from the stored HTML's markers (InlineMedia). Each text
+                // run owns its own rich state; the bar acts on whichever run holds focus, and
+                // every change leaves as the pair the buffer stores — plain text (with 📷/🎤
+                // placeholders standing in for media) and the joined HTML.
+                val context = LocalContext.current
+                val blocks = remember(noteId) {
+                    mutableStateListOf<EditorBlock>().also { list ->
+                        InlineMedia.splitBlocks(textHtml ?: plainTextAsHtml(text))
+                            .forEach { list.add(it.toEditorBlock()) }
+                        if (list.none { it is EditorBlock.Text }) list.add(EditorBlock.Text(RichTextState()))
+                    }
                 }
-                LaunchedEffect(richState) {
-                    snapshotFlow { richState.annotatedString }
-                        .collect { onContentChange(it.text, richState.toHtml()) }
+                var focusedTextKey by remember(noteId) {
+                    mutableStateOf(blocks.filterIsInstance<EditorBlock.Text>().firstOrNull()?.key)
                 }
-                RichFormatBar(richState)
+                val focusedText = blocks.filterIsInstance<EditorBlock.Text>()
+                    .let { texts -> texts.firstOrNull { it.key == focusedTextKey } ?: texts.first() }
+                LaunchedEffect(blocks) {
+                    snapshotFlow {
+                        blocks.toList().map { b -> if (b is EditorBlock.Text) b.state.annotatedString else b }
+                    }.collect {
+                        onContentChange(editorPlainText(blocks), InlineMedia.joinBlocks(blocks.map { it.toNoteBlock() }))
+                    }
+                }
+
+                // Media landing at the cursor: the marker goes into the focused run, then that
+                // run's own HTML is re-split — the marker paragraph falls out as a new block.
+                fun insertMedia(marker: String) {
+                    val target = focusedText
+                    target.state.insertHtmlAfterSelection(marker)
+                    val parts = InlineMedia.splitBlocks(target.state.toHtml())
+                    val index = blocks.indexOf(target)
+                    if (index < 0) return
+                    blocks.removeAt(index)
+                    val replacements = parts.map { it.toEditorBlock() }
+                        .ifEmpty { listOf(EditorBlock.Text(RichTextState())) }
+                    replacements.forEachIndexed { i, b -> blocks.add(index + i, b) }
+                    // Typing continues after the media: if nothing follows it yet, give it a run.
+                    if (blocks.lastOrNull() !is EditorBlock.Text) blocks.add(EditorBlock.Text(RichTextState()))
+                    focusedTextKey = blocks.filterIsInstance<EditorBlock.Text>().lastOrNull()?.key
+                }
+
+                fun removeMediaBlock(block: EditorBlock) {
+                    val index = blocks.indexOf(block)
+                    if (index < 0) return
+                    blocks.removeAt(index)
+                    // The file itself lives until save (reconcile) or discard decides its fate.
+                    val previous = blocks.getOrNull(index - 1) as? EditorBlock.Text
+                    val next = blocks.getOrNull(index) as? EditorBlock.Text
+                    if (previous != null && next != null) {
+                        previous.state.setHtml(previous.state.toHtml() + next.state.toHtml())
+                        blocks.removeAt(index)
+                        if (focusedTextKey == next.key) focusedTextKey = previous.key
+                    }
+                }
+
+                val pickInlinePhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+                    if (uri != null) stageInlinePhoto(context, uri)?.let { insertMedia(it) }
+                }
+                // Some devices ship no PICK_IMAGES handler at all (AOSP images without the photo
+                // picker) — the documents UI behind GetContent is the one picker that always exists.
+                val pickInlinePhotoFallback = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                    if (uri != null) stageInlinePhoto(context, uri)?.let { insertMedia(it) }
+                }
+                val takeInlinePhoto = rememberCameraCaptureLauncher(NotesAttachments.FILE_PROVIDER_AUTHORITY) { uri ->
+                    stageInlinePhoto(context, uri)?.let { insertMedia(it) }
+                }
+                val recordVoice = rememberVoiceMemoLauncher(
+                    dirName = NotesAttachments.DIR,
+                    recordingLabel = languageManager.getString("voice_recording"),
+                    stopLabel = languageManager.getString("voice_stop"),
+                    cancelLabel = languageManager.getString("cancel"),
+                    onPermissionDenied = {
+                        android.widget.Toast.makeText(
+                            context, languageManager.getString("voice_permission_denied"), android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onRecorded = { fileName, durationMs -> insertMedia(InlineMedia.buildVoiceMarker(fileName, durationMs)) }
+                )
+                RichFormatBar(
+                    state = focusedText.state,
+                    onPickPhoto = {
+                        runCatching {
+                            pickInlinePhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }.onFailure { pickInlinePhotoFallback.launch("image/*") }
+                    },
+                    onTakePhoto = takeInlinePhoto,
+                    onRecordVoice = recordVoice
+                )
                 // The writing room the handle at the card's foot controls: dragged, it grows
                 // by exactly the drag; tapped, it jumps to most of the screen and back to
                 // whatever size it had. A minimum only — content taller than the room still
@@ -276,26 +376,47 @@ fun NoteEditorCard(
                 } else {
                     DEFAULT_EDITOR_MIN_HEIGHT + with(LocalDensity.current) { editorExtraHeightPx.toDp() }
                 }
-                Box(
+                val isBodyEmpty = blocks.size == 1 &&
+                    (blocks[0] as? EditorBlock.Text)?.state?.annotatedString?.text?.isEmpty() == true
+                Column(
                     modifier = if (fullscreen) {
-                        Modifier.fillMaxWidth().weight(1f).padding(top = 4.dp)
+                        Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(top = 4.dp)
                     } else {
                         Modifier.fillMaxWidth().heightIn(min = editorMinHeight).padding(top = 4.dp)
                     }
                 ) {
-                    if (richState.annotatedString.text.isEmpty()) {
-                        Text(
-                            languageManager.getString("note_text"),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    blocks.forEach { block ->
+                        when (block) {
+                            is EditorBlock.Text -> Box(modifier = Modifier.fillMaxWidth()) {
+                                if (isBodyEmpty) {
+                                    Text(
+                                        languageManager.getString("note_text"),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                BasicRichTextEditor(
+                                    state = block.state,
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onFocusChanged { if (it.isFocused) focusedTextKey = block.key }
+                                )
+                            }
+                            is EditorBlock.Photo -> InlinePhotoRow(
+                                fileName = block.fileName,
+                                width = block.width,
+                                height = block.height,
+                                onRemove = { removeMediaBlock(block) }
+                            )
+                            is EditorBlock.Voice -> InlineVoiceRow(
+                                fileName = block.fileName,
+                                durationLabel = block.durationLabel,
+                                onRemove = { removeMediaBlock(block) }
+                            )
+                        }
                     }
-                    BasicRichTextEditor(
-                        state = richState,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = if (fullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
-                    )
                 }
     }
 
@@ -464,6 +585,205 @@ private val MAX_EDITOR_EXTRA_HEIGHT = 600.dp
 private fun plainTextAsHtml(text: String): String =
     text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
 
+/**
+ * The editor's working form of a [com.voxapps.notes.domain.NoteBlock]: text runs get a live
+ * [RichTextState], media rows carry just what their composable draws. [key] keeps focus tracking
+ * and list identity stable while blocks are spliced around an insert or a delete.
+ */
+private sealed interface EditorBlock {
+    val key: String
+
+    class Text(val state: RichTextState, override val key: String = UUID.randomUUID().toString()) : EditorBlock
+    class Photo(
+        val fileName: String, val width: Int, val height: Int,
+        override val key: String = fileName
+    ) : EditorBlock
+    class Voice(
+        val fileName: String, val durationLabel: String,
+        override val key: String = fileName
+    ) : EditorBlock
+}
+
+private fun NoteBlock.toEditorBlock(): EditorBlock = when (this) {
+    is NoteBlock.Text -> EditorBlock.Text(RichTextState().apply { setHtml(html) })
+    is NoteBlock.Photo -> EditorBlock.Photo(fileName, width, height)
+    is NoteBlock.Voice -> EditorBlock.Voice(fileName, durationLabel)
+}
+
+private fun EditorBlock.toNoteBlock(): NoteBlock = when (this) {
+    is EditorBlock.Text -> NoteBlock.Text(state.toHtml())
+    is EditorBlock.Photo -> NoteBlock.Photo(fileName, width, height)
+    is EditorBlock.Voice -> NoteBlock.Voice(fileName, durationLabel)
+}
+
+/** What the journal stores as its plain text: each run's own text, media as their placeholders —
+ *  see [InlineMedia.PHOTO_PLACEHOLDER]'s doc for why these lines must exist. */
+private fun editorPlainText(blocks: List<EditorBlock>): String =
+    blocks.joinToString(separator = "\n") { block ->
+        when (block) {
+            is EditorBlock.Text -> block.state.annotatedString.text
+            is EditorBlock.Photo -> InlineMedia.PHOTO_PLACEHOLDER
+            is EditorBlock.Voice -> block.durationLabel
+        }
+    }.trim()
+
+/** Stages a picked/captured photo and returns its ready-to-insert marker, sized off the real
+ *  image's own aspect ratio (bounds-only decode — the pixels stay on disk). */
+private fun stageInlinePhoto(context: android.content.Context, uri: Uri): String? {
+    val fileName = AttachmentFileStore.stage(context, uri, NotesAttachments.DIR) ?: return null
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeFile(
+        AttachmentFileStore.file(context, NotesAttachments.DIR, fileName).absolutePath, bounds
+    )
+    val (width, height) = InlineMedia.thumbDimensions(bounds.outWidth, bounds.outHeight)
+    return InlineMedia.buildPhotoMarker(fileName, width, height)
+}
+
+/** An inline photo's row: the thumbnail at its marker's size, an ✕ while editing. */
+@Composable
+private fun InlinePhotoRow(
+    fileName: String,
+    width: Int,
+    height: Int,
+    onRemove: (() -> Unit)?
+) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val file = remember(fileName) { AttachmentFileStore.file(context, NotesAttachments.DIR, fileName) }
+    if (!file.exists()) {
+        MissingMediaRow()
+        return
+    }
+    Box(modifier = Modifier.padding(vertical = 4.dp)) {
+        coil.compose.AsyncImage(
+            model = file,
+            contentDescription = languageManager.getString("attachments"),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier
+                .width(width.dp)
+                .height(height.dp)
+                .clip(MaterialTheme.shapes.medium)
+        )
+        if (onRemove != null) {
+            Surface(
+                onClick = onRemove,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = languageManager.getString("delete"),
+                    modifier = Modifier.padding(3.dp).size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+/** An inline voice note's row: a pill mini-player — play/stop state follows
+ *  [VoiceNotePlayer.playingFileName] — plus an ✕ while editing. */
+@Composable
+private fun InlineVoiceRow(
+    fileName: String,
+    durationLabel: String,
+    onRemove: (() -> Unit)?
+) {
+    val languageManager = LocalLanguageManager.current
+    val context = LocalContext.current
+    val file = remember(fileName) { AttachmentFileStore.file(context, NotesAttachments.DIR, fileName) }
+    if (!file.exists()) {
+        MissingMediaRow()
+        return
+    }
+    val playingFile by VoiceNotePlayer.playingFileName.collectAsStateWithLifecycle()
+    val isPlaying = playingFile == fileName
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+        Surface(
+            onClick = { VoiceNotePlayer.toggle(context, file) },
+            shape = CircleShape,
+            color = if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+            else MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(
+                    if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = languageManager.getString("rich_insert_voice"),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    durationLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+        }
+        if (onRemove != null) {
+            IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = languageManager.getString("delete"),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+/** What a marker renders when its file is not on this device — the P2P-synced-note case, where
+ *  rows travel but media files do not. */
+@Composable
+private fun MissingMediaRow() {
+    val languageManager = LocalLanguageManager.current
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+        Icon(
+            Icons.Filled.HideImage,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            languageManager.getString("media_missing"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp)
+        )
+    }
+}
+
+/** How high a journal card's body may grow in the list before it clips — roughly a dozen text
+ *  lines' worth, media rows included. */
+private val JOURNAL_CARD_MAX_BODY_HEIGHT = 320.dp
+
+/**
+ * The collapsed card's body for a note that carries inline media: the same block structure the
+ * editor works on, read-only — styled text runs, real thumbnails, live mini-players. Clipped at
+ * [JOURNAL_CARD_MAX_BODY_HEIGHT]; opening the note shows the rest.
+ */
+@Composable
+private fun JournalBody(textHtml: String, modifier: Modifier = Modifier) {
+    val blocks = remember(textHtml) { InlineMedia.splitBlocks(textHtml) }
+    Column(modifier = modifier.heightIn(max = JOURNAL_CARD_MAX_BODY_HEIGHT).clipToBounds()) {
+        blocks.forEach { block ->
+            when (block) {
+                is NoteBlock.Text -> {
+                    val state = remember(block.html) { RichTextState().apply { setHtml(block.html) } }
+                    com.mohamedrejeb.richeditor.ui.material3.RichText(
+                        state = state,
+                        style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                }
+                is NoteBlock.Photo -> InlinePhotoRow(block.fileName, block.width, block.height, onRemove = null)
+                is NoteBlock.Voice -> InlineVoiceRow(block.fileName, block.durationLabel, onRemove = null)
+            }
+        }
+    }
+}
+
 /** The sizes the bar cycles through — named steps rather than a number field, because a note is
  *  styled by eye, not typeset. */
 private val RICH_TEXT_SIZES = listOf(14.sp, 18.sp, 24.sp, 32.sp)
@@ -486,9 +806,15 @@ private val RICH_TEXT_COLORS = listOf(
  * typed next when there is not.
  */
 @Composable
-private fun RichFormatBar(state: RichTextState) {
+private fun RichFormatBar(
+    state: RichTextState,
+    onPickPhoto: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onRecordVoice: () -> Unit
+) {
     val languageManager = LocalLanguageManager.current
     val current = state.currentSpanStyle
+    var insertMenuOpen by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -497,6 +823,34 @@ private fun RichFormatBar(state: RichTextState) {
             .horizontalScroll(rememberScrollState())
             .padding(top = 4.dp)
     ) {
+        // The journal "+": photo or voice note, dropped at the cursor as a row of its own.
+        Box {
+            FormatToggle(
+                icon = Icons.Filled.AddCircleOutline,
+                active = insertMenuOpen,
+                description = languageManager.getString("rich_insert_media")
+            ) { insertMenuOpen = true }
+            DropdownMenu(expanded = insertMenuOpen, onDismissRequest = { insertMenuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(languageManager.getString("attachment_choose_gallery")) },
+                    leadingIcon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
+                    onClick = { insertMenuOpen = false; onPickPhoto() }
+                )
+                DropdownMenuItem(
+                    text = { Text(languageManager.getString("attachment_take_photo")) },
+                    leadingIcon = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
+                    onClick = { insertMenuOpen = false; onTakePhoto() }
+                )
+                DropdownMenuItem(
+                    text = { Text(languageManager.getString("rich_insert_voice")) },
+                    leadingIcon = { Icon(Icons.Filled.Mic, contentDescription = null) },
+                    onClick = { insertMenuOpen = false; onRecordVoice() }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
         FormatToggle(
             icon = Icons.Filled.FormatBold,
             active = current.fontWeight == FontWeight.Bold,
@@ -616,7 +970,15 @@ private fun FormatToggle(
 private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
-    val entities by stateManager.observeAttachments(noteId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val allEntities by stateManager.observeAttachments(noteId).collectAsStateWithLifecycle(initialValue = emptyList())
+    // Inline media (journal photos/voice notes) live in the note body — the strip is the home of
+    // everything else, so showing them here would double every item.
+    val entities = remember(allEntities) {
+        allEntities.filterNot { it.source == AttachmentSource.INLINE_PHOTO || it.source == AttachmentSource.VOICE }
+    }
+    // An empty strip is pure chrome on a journal-style note — it appears once something actually
+    // lands in it (a Vision scan capture keeps filing here regardless of this UI).
+    if (entities.isEmpty()) return
     val items = remember(entities) {
         val groupSizes = entities.mapNotNull { it.groupId }.groupingBy { it }.eachCount()
         entities.map { e ->
@@ -710,6 +1072,9 @@ private fun NoteAttachmentsHost(noteId: Long, stateManager: NotesStateManager) {
  *  database id. */
 @Composable
 private fun PendingNoteAttachmentsHost(pendingAttachments: List<String>, onChange: (List<String>) -> Unit) {
+    // Same rule as the saved-note strip: it earns its screen space only once it holds something.
+    // A draft's photos come in through the body's own "+" anyway.
+    if (pendingAttachments.isEmpty()) return
     val languageManager = LocalLanguageManager.current
     val context = LocalContext.current
     val items = remember(pendingAttachments) {
