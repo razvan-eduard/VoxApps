@@ -29,6 +29,12 @@ class NotesActivity : FragmentActivity() {
     // still re-trigger the effect, but two equal Long values wouldn't look like a change.
     private val editNoteTrigger = mutableIntStateOf(0)
 
+    override fun onPause() {
+        // A voice note must not keep talking once the app leaves the screen.
+        com.voxapps.attachments.VoiceNotePlayer.stop()
+        super.onPause()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleWidgetIntent(intent)

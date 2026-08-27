@@ -176,6 +176,17 @@ through Commander (`create`/`read`) or used entirely on its own.
   <img width="388" height="850" alt="Rich text editor card: formatting bar and resize handle" src="../vox-notes/fastlane/metadata/android/en-US/images/phoneScreenshots/6_rich_editor.png" />
   <img width="388" height="850" alt="Fullscreen editing mode" src="../vox-notes/fastlane/metadata/android/en-US/images/phoneScreenshots/7_fullscreen_editor.png" />
 
+- **Inline journal media** — a "+" in the formatting bar drops a photo (gallery or camera) or a
+  recorded voice note straight into the note body at the cursor, each on a row of its own: photos
+  render as real thumbnails and voice notes as tappable mini-players (play/stop, duration), both
+  while editing and on the note's card in the list. Media are stored as ordinary attachment files;
+  the note's HTML carries one marker per item (`att://` images, `voice://` links) and is the source
+  of truth — attachment rows are reconciled from the markers on save, and the plain `text` carries
+  `📷` / `🎤 m:ss` placeholder lines so search, widgets and IPC previews stay honest. Inline media
+  ride backup/restore with the rest of the attachments; peer-to-peer sync transfers the note's rows
+  only, so a synced journal entry shows a "media not on this device" row where the files stayed
+  behind. Deleting the media row in the editor (✕) removes the marker; the file follows on save.
+
 - **Scan-to-note** — receives raw OCR text from Vox Vision, sends it through the LLM hook to get a
   clean title/body and a suggested category, then creates the note
 - Editor UI: tap a note's title to expand/collapse it in place (collapse via a dedicated chevron

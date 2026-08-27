@@ -94,6 +94,9 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.richeditor.compose)
+    // Inline journal thumbnails in the note body (the attachments strip's own images ride
+    // telephoto's internal coil; these are plain AsyncImages, so the dependency is direct).
+    implementation(libs.coil.compose)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)

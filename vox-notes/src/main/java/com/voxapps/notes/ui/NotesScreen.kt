@@ -71,6 +71,7 @@ import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
 import com.voxapps.attachments.AttachmentFileStore
+import com.voxapps.notes.domain.InlineMedia
 import com.voxapps.design.DoubleBackToExitHandler
 import com.voxapps.design.SpeedDialAction
 import com.voxapps.design.SpeedDialFab
@@ -147,7 +148,11 @@ fun NotesScreen(
     // here, unrelated to this change) — a new note's staged-but-unlinked attachment files would
     // otherwise leak, so discard them along with the rest of the draft.
     val dismissEditor: () -> Unit = {
-        editing?.let { if (it.id == null) discardPendingAttachments(it.pendingAttachments, context) }
+        editing?.let { buf ->
+            if (buf.id == null) discardPendingAttachments(buf.pendingAttachments, context)
+            val savedHtml = buf.id?.let { id -> state.notes.firstOrNull { it.note.id == id }?.note?.textHtml }
+            discardSessionInlineMedia(buf.textHtml, savedHtml, context)
+        }
         editing = null
     }
     BackHandler(enabled = editing != null, onBack = dismissEditor)
@@ -328,6 +333,7 @@ fun NotesScreen(
                                     },
                                     onDelete = {
                                         discardPendingAttachments(editing?.pendingAttachments.orEmpty(), context)
+                                        discardSessionInlineMedia(editing?.textHtml, null, context)
                                         editing = null
                                     }
                                 )
@@ -381,6 +387,8 @@ fun NotesScreen(
         ModalBottomSheet(
             onDismissRequest = {
                 if (current.id == null) discardPendingAttachments(current.pendingAttachments, context)
+                val savedHtml = current.id?.let { id -> state.notes.firstOrNull { it.note.id == id }?.note?.textHtml }
+                discardSessionInlineMedia(current.textHtml, savedHtml, context)
                 editing = null
             }
         ) {
@@ -406,6 +414,7 @@ fun NotesScreen(
                 onDelete = {
                     if (current.id == null) {
                         discardPendingAttachments(current.pendingAttachments, context)
+                        discardSessionInlineMedia(current.textHtml, null, context)
                         editing = null
                     } else {
                         pendingDeleteNote = state.notes.firstOrNull { it.note.id == current.id }?.note
@@ -438,7 +447,7 @@ fun NotesScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        saveNote(pending.id, NoteSanitizer.sanitize(pending.note), pending.pendingAttachments, stateManager)
+                        saveNote(pending.id, NoteSanitizer.sanitize(pending.note), pending.pendingAttachments, stateManager, context)
                         pendingNoteCleanup = null
                         editing = null
                     }
@@ -559,6 +568,7 @@ private fun commitEdit(
             // A blank draft with a photo attached still staged real files on disk (title/text being
             // empty doesn't mean nothing was added) — nothing will ever link them, so delete them now.
             discardPendingAttachments(buf.pendingAttachments, context)
+            discardSessionInlineMedia(buf.textHtml, null, context)
         }
         return null
     }
@@ -571,12 +581,12 @@ private fun commitEdit(
         textHtml = buf.textHtml
     )
     if (!confirmCleanup) {
-        saveNote(buf.id, NoteSanitizer.sanitize(candidate), buf.pendingAttachments, stateManager)
+        saveNote(buf.id, NoteSanitizer.sanitize(candidate), buf.pendingAttachments, stateManager, context)
         return null
     }
     return when (val decision = NoteSanitizer.decideForSave(candidate, RecordSource.MANUAL_UI)) {
         is SaveDecision.Proceed -> {
-            saveNote(buf.id, decision.record, buf.pendingAttachments, stateManager)
+            saveNote(buf.id, decision.record, buf.pendingAttachments, stateManager, context)
             null
         }
         is SaveDecision.ConfirmCleanup -> PendingNoteCleanup(buf.id, decision.original, decision.dirtyFields, buf.pendingAttachments)
@@ -586,14 +596,24 @@ private fun commitEdit(
 /** Saves [note], then links any [pendingAttachments] (already staged on disk, see [EditBuffer]) to
  *  the real note id — for an update this is always an empty list (existing notes' attachments are
  *  already DB-linked directly, never staged locally), so the link step is a no-op there. */
-private fun saveNote(id: Long?, note: Note, pendingAttachments: List<String>, stateManager: NotesStateManager) {
+private fun saveNote(id: Long?, note: Note, pendingAttachments: List<String>, stateManager: NotesStateManager, context: Context) {
     if (id == null) {
         stateManager.addNote(note.title, note.text, note.categoryId, textHtml = note.textHtml) { newId ->
             pendingAttachments.forEach { fileName -> stateManager.addManualAttachment(newId, fileName) }
+            stateManager.syncInlineAttachments(newId, note.textHtml, context)
         }
     } else {
         stateManager.updateNoteFields(id, note.title, note.text, note.categoryId, textHtml = note.textHtml)
+        stateManager.syncInlineAttachments(id, note.textHtml, context)
     }
+}
+
+/** Deletes the inline-media files this editing session staged but whose note never saved them —
+ *  everything the buffer's markers reference beyond what the note's last saved HTML does. */
+private fun discardSessionInlineMedia(draftHtml: String?, savedHtml: String?, context: Context) {
+    val draft = InlineMedia.mediaRefs(draftHtml).map { it.fileName }.toSet()
+    val saved = InlineMedia.mediaRefs(savedHtml).map { it.fileName }.toSet()
+    (draft - saved).forEach { AttachmentFileStore.delete(context, NotesAttachments.DIR, it) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
