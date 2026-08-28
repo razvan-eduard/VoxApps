@@ -56,7 +56,14 @@ data class CapturedNotification(
     val currency: String?,
     val templateHash: String?,
     val direction: TransactionDirection?,
-    val knownPayment: Boolean
+    val knownPayment: Boolean,
+    /** The source package carries the person's banking star — their standing statement that this
+     *  app announces their own money moving. A figure arriving from it is a payment by
+     *  declaration, not by inference. */
+    val fromStarredBank: Boolean = false,
+    /** The system delivered this notification with its body withheld (its code-protection guard).
+     *  There was never a text to read — a different fact from a text that carried no figure. */
+    val redacted: Boolean = false
 )
 
 /**
@@ -119,7 +126,10 @@ class NotificationExpenseFlow(
             // promotional message harmless. Some senders do announce a payment and leave the sum
             // out, though, and for those the capture is worth keeping unfinished; it is opt-in
             // because the cost of being wrong is every promotion landing in review.
-            usable = hasAmount || settings.captureAmountlessPayments,
+            // A message the system delivered gutted is also worth keeping: there is no figure to
+            // find because the OS withheld the body, and the review list is where a person supplies
+            // what the device was never shown.
+            usable = hasAmount || input.redacted || settings.captureAmountlessPayments,
             // Proved means: how much, and which way the money went. A shape a person has taught
             // says so itself; otherwise this flow assumes nothing and waits — unless the user has
             // said what to assume, which is the only thing that lets an untaught shape through.
@@ -127,6 +137,11 @@ class NotificationExpenseFlow(
             // direction, but nothing here may supply the sum.
             complete = hasAmount && when {
                 input.knownPayment -> input.direction == TransactionDirection.OUTGOING
+                // The banking star is the person's own standing answer for the whole source: an app
+                // they marked as their bank announcing a figure is a payment to file, vendor or no
+                // vendor. A taught shape still outranks it — teaching is per-sentence, the star is
+                // per-app, and the more specific statement wins.
+                input.fromStarredBank -> true
                 else -> assumed != null
             }
         )
