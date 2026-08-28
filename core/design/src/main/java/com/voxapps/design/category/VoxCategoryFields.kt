@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -68,7 +69,11 @@ fun VoxCategoryFields(
     icon: String? = null,
     /** Null draws no icon slot at all — for an app whose categories have nothing to mark them
      *  with. An empty slot would promise a field that has nowhere to be stored. */
-    onIconChange: ((String?) -> Unit)? = null
+    onIconChange: ((String?) -> Unit)? = null,
+    /** The swatches' outline — see [VoxColorSwatchPicker]'s own shape param. A caller editing the
+     *  entity everything else falls back to passes the star its list row already wears, so the
+     *  editor keeps saying what the row said. */
+    swatchShape: Shape = CircleShape
 ) {
     var pickingIcon by remember { mutableStateOf(false) }
 
@@ -101,6 +106,7 @@ fun VoxCategoryFields(
             selectedColor = color,
             onColorSelected = onColorChange,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp),
+            shape = swatchShape,
             customColorDialogTitle = strings.customColorTitle,
             customColorUseLabel = strings.customColorUse,
             customColorCancelLabel = strings.cancel,
@@ -142,7 +148,8 @@ fun VoxCategoryEditCard(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     icon: String? = null,
-    onIconChange: ((String?) -> Unit)? = null
+    onIconChange: ((String?) -> Unit)? = null,
+    swatchShape: Shape = CircleShape
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         VoxCategoryFields(
@@ -152,7 +159,8 @@ fun VoxCategoryEditCard(
             onColorChange = onColorChange,
             strings = strings,
             icon = icon,
-            onIconChange = onIconChange
+            onIconChange = onIconChange,
+            swatchShape = swatchShape
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // A category with no name is not a category, so the way out of an empty one is Cancel.
