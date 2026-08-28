@@ -333,6 +333,17 @@ class ExpensesStateManager(
 
     fun updateBankAccount(account: BankAccount) { scope.launch { expensesRepo.updateBankAccount(account) } }
     fun deleteBankAccount(account: BankAccount) { scope.launch { expensesRepo.deleteBankAccount(account) } }
+
+    // --- who transactions paid (see Recipient) ---
+
+    val recipientsFlow: Flow<List<com.voxapps.expenses.data.Recipient>> = expensesRepo.recipients
+
+    /** [onReady] takes the new row's id, for the editor that wants to point at it right away. */
+    fun addTypedRecipient(name: String, bankName: String?, iban: String?, onReady: (Long?) -> Unit = {}) {
+        scope.launch { onReady(expensesRepo.addTypedRecipient(name, bankName, iban).takeIf { it > 0 }) }
+    }
+    fun updateRecipient(recipient: com.voxapps.expenses.data.Recipient) { scope.launch { expensesRepo.updateRecipient(recipient) } }
+    fun deleteRecipient(recipient: com.voxapps.expenses.data.Recipient) { scope.launch { expensesRepo.deleteRecipient(recipient) } }
     fun setNotificationAssumedDirection(mode: String) { scope.launch { settingsRepo.setNotificationAssumedDirection(mode) } }
     fun setAttachPhotoOnRetry(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnRetry(enabled) } }
     fun setAutoRescanOnFirstAttachment(enabled: Boolean) { scope.launch { settingsRepo.setAutoRescanOnFirstAttachment(enabled) } }

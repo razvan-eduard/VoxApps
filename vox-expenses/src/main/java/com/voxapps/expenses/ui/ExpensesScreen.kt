@@ -8,6 +8,8 @@ import com.voxapps.expenses.state.ExpenseFilterSummary
 import com.voxapps.design.filter.VoxFilterSummary
 import com.voxapps.design.filter.VoxFilterButton
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.MoreVert
@@ -43,6 +46,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -74,6 +78,7 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.Dismissals
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.expenses.data.RecurringPayment
+import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.recurring.PaymentPredictor
 import com.voxapps.expenses.state.ExpensesStateManager
@@ -83,6 +88,9 @@ import com.voxapps.expenses.state.SortMode
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,6 +173,19 @@ fun ExpensesScreen(
         baseTask = "${LlmTasks.EXPENSE_SCAN_CLEANUP}:pending-create", hint = null, produceOCR = true,
         captureMode = VoxOcrRequest.CAPTURE_MODE_BATCH, tableMode = true
     )
+    // A picked file's read grant lives only as long as this composition's activity result — staging
+    // (plus a PDF's page rendering) happens right here in the callback, off the main thread, and the
+    // rest of the flow is one headless Vision request identical in shape to the camera paths above.
+    val scanScope = rememberCoroutineScope()
+    val scanFromFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scanScope.launch(Dispatchers.IO) {
+            if (!ExpenseScanRequestSender.sendHeadlessFileCreate(context, uri)) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, languageManager.getString("scan_file_failed"), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     fun gatedScan(action: () -> Unit) {
         if (visionInstalled && commanderInstalled) {
             action()
@@ -179,7 +200,10 @@ fun ExpensesScreen(
     val scanActions = listOf(
         SpeedDialAction(Icons.Filled.PhotoCamera, languageManager.getString("capture_mode_single")) { gatedScan(scanSingle) },
         SpeedDialAction(Icons.Filled.Layers, languageManager.getString("capture_mode_stitch")) { gatedScan(scanStitch) },
-        SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch")) { gatedScan(scanBatch) }
+        SpeedDialAction(Icons.Filled.BurstMode, languageManager.getString("capture_mode_batch")) { gatedScan(scanBatch) },
+        SpeedDialAction(Icons.Filled.FileOpen, languageManager.getString("scan_from_file")) {
+            gatedScan { scanFromFile.launch(arrayOf("image/*", "application/pdf")) }
+        }
     )
 
     // Amount-sorted order isn't chronological, so it doesn't fit a per-day calendar layout — a

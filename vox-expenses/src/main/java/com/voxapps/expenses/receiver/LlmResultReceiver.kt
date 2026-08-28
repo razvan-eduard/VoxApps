@@ -136,8 +136,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                             val newId = if (baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP) {
                                 val settings = container.settingsRepository.getSnapshot()
                                 val outcome = RecordFlow.deliver(
+                                    // The flow links pendingFileNames itself, beside every one of its
+                                    // writes — deliver's Outcome.Queued carries no id, so linking out
+                                    // here would silently skip the queued-for-review records.
                                     spec = ExpenseScanFlow(
-                                        context.applicationContext, container, storedImageName, preParse
+                                        context.applicationContext, container, storedImageName, preParse,
+                                        pendingFileNames = pendingFileNames, pendingGroupId = pendingGroupId
                                     ),
                                     reading = null,
                                     level = ExpensesSettings.scanLevelOf(settings.scanModelUse),
@@ -156,9 +160,6 @@ class LlmResultReceiver : BroadcastReceiver() {
                                     reply = rawJson!!
                                 )
                                 (outcome as? RecordFlow.Outcome.Committed)?.recordId ?: 0L
-                            }
-                            if (isPendingScanCreate && newId > 0) {
-                                linkPendingScanAttachments(container, newId, pendingFileNames, pendingGroupId)
                             }
                             // Scan-specific — a voice-created expense keeps today's behavior (an
                             // optional save toast, no forced navigation). Commander's cleanup is
@@ -481,7 +482,15 @@ class LlmResultReceiver : BroadcastReceiver() {
         origins: Map<com.voxapps.recordflow.FieldOrigin, Set<String>> = emptyMap(),
         /** An account already resolved by the caller — see [ScanPreParse.bankAccountId]. Takes
          *  precedence over [sourceText], which is only read when nothing was settled earlier. */
-        knownAccountId: Long? = null
+        knownAccountId: Long? = null,
+        /** The counterparty a slip resolved to a [com.voxapps.expenses.data.Recipient] row — its
+         *  presence makes the record a transaction. Only the scan flow ever passes it. */
+        knownRecipientId: Long? = null,
+        /** The capture was a scan even though no [imageName] rides the legacy receipt field — the
+         *  pending-create paths link their pages as ordinary attachment rows instead (see
+         *  [linkPendingScanAttachments]), and without this the record would be stamped
+         *  [ExpenseSource.VOICE] and read the wrong auto-create-accounts setting. */
+        treatAsScan: Boolean = false
     ): Long {
         val settings: ExpensesSettings = container.settingsRepository.getSnapshot()
         val items = parsed.items.map {
@@ -536,17 +545,18 @@ class LlmResultReceiver : BroadcastReceiver() {
             correctionsEnabled = settings.fieldCorrectionMemoryEnabled,
             correctionsThreshold = settings.fieldCorrectionThreshold,
             correctionsApplyMode = settings.fieldCorrectionApplyMode,
-            // This one helper handles both voice and scan tasks — imageName is only ever non-null for
-            // a scan (the receipt photo), never for voice, so it's already the exact signal needed.
-            source = if (imageName != null) ExpenseSource.SCAN else ExpenseSource.VOICE,
+            // This one helper handles both voice and scan tasks — a scan announces itself either by
+            // its legacy receipt photo (imageName) or explicitly (treatAsScan); voice sets neither.
+            source = if (imageName != null || treatAsScan) ExpenseSource.SCAN else ExpenseSource.VOICE,
             previousBalanceAmount = preParse?.previousBalance,
             invoiceOwnAmount = preParse?.invoiceOwnTotal,
             // Resolved before the record is written so the two arrive together. The bank comes from
             // the vocabulary reading of the same text; the account reader never sees a vocabulary.
+            recipientId = knownRecipientId,
             bankAccountId = knownAccountId ?: container.expensesRepository.resolveBankAccount(
                 text = sourceText,
                 autoCreate = com.voxapps.expenses.domain.accounts.BankAccounts.shouldCreate(
-                    fromScan = imageName != null,
+                    fromScan = imageName != null || treatAsScan,
                     scansEnabled = settings.autoCreateAccountsFromScans,
                     notificationsEnabled = settings.autoCreateAccountsFromNotifications
                 ),
@@ -763,7 +773,7 @@ class LlmResultReceiver : BroadcastReceiver() {
      *  known — win or lose (see both call sites above): a failed parse still gets its photo(s) linked
      *  to the resulting stub, matching the legacy imageName-based recovery flow's own "never lose the
      *  photo" behavior, just generalized from one field to N ordinary attachments. */
-    private suspend fun linkPendingScanAttachments(
+    internal suspend fun linkPendingScanAttachments(
         container: ExpensesContainer,
         expenseId: Long,
         fileNames: List<String>,

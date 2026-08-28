@@ -111,7 +111,14 @@ object ExpenseParseResultParser {
         val o = JSONObject(extracted)
         val totalAmount = o.optNullableDouble("totalAmount")
             ?: (if (requireTotalAmount) {
-                Logger.w(TAG, "LLM reply parsed but has no usable totalAmount — rejecting")
+                // Same head/tail the other two rejection branches print — a rejection whose reply
+                // nobody can see is undiagnosable from the field (measured: a 256-char SUCCESS
+                // reply bounced here and the log had nothing to say about what the model wrote).
+                Logger.w(
+                    TAG,
+                    "LLM reply parsed but has no usable totalAmount — rejecting. " +
+                        "head: ${extracted.take(160)} | tail: ${extracted.takeLast(160)}"
+                )
                 return null
             } else Double.NaN)
 

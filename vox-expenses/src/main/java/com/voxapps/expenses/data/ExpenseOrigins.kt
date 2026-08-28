@@ -21,6 +21,7 @@ object ExpenseOrigins {
     const val FIELD_CATEGORY = "category"
     const val FIELD_DATE = "date"
     const val FIELD_ITEMS = "items"
+    const val FIELD_RECIPIENT = "recipient"
 
     fun encode(origins: Map<String, FieldOrigin>): String? =
         origins.entries

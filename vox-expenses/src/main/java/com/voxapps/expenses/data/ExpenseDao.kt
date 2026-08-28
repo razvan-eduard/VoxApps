@@ -117,6 +117,11 @@ interface ExpenseDao {
     @Query("UPDATE expenses SET bankAccountId = NULL WHERE bankAccountId = :accountId")
     suspend fun clearBankAccount(accountId: Long)
 
+    /** Lets go of a deleted recipient the same way — the records keep their spending and only
+     *  stop being transactions, which is what losing the link means (see [Expense.recipientId]). */
+    @Query("UPDATE expenses SET recipientId = NULL WHERE recipientId = :recipientId")
+    suspend fun clearRecipient(recipientId: Long)
+
     @Query("SELECT id FROM expenses WHERE uid = :uid")
     suspend fun getIdByUid(uid: String): Long?
 

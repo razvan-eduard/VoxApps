@@ -65,6 +65,10 @@ fun NamesSettingsTab(
             )
         }
 
+        // Directly under the switches that fill it — a scanned slip's beneficiary becomes a row
+        // here exactly when learning from scans is on, and the proximity is the explanation.
+        RecipientsSettingsCard(stateManager)
+
         VocabularySettingsCard(
             provided = provided.banks,
             custom = settings.customBanks,

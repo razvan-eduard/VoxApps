@@ -20,6 +20,27 @@ import java.io.File
  */
 object LineItemsRescanCombiner {
 
+    /** The group members OCR can actually run on. A picked file's original PDF sits in its group
+     *  beside the page images that carry its text — it can never have a `.txt` sibling of its own,
+     *  and handing it to Vision's bitmap decode would only fail, so every re-OCR path reads through
+     *  this filter. */
+    fun ocrEligible(fileNames: List<String>): List<String> =
+        fileNames.filterNot { it.endsWith(".pdf", ignoreCase = true) }
+
+    /** One document out of per-page OCR texts, in page order: blank pages are skipped but keep their
+     *  page numbers, a single non-blank page is returned verbatim (same shape a single-shot scan
+     *  produces), and no text at all is null. */
+    fun combinePageTexts(texts: List<String>): String? {
+        val pages = texts.mapIndexedNotNull { index, text ->
+            text.takeIf { it.isNotBlank() }?.let { (index + 1) to it }
+        }
+        return when {
+            pages.isEmpty() -> null
+            pages.size == 1 -> pages.single().second
+            else -> pages.joinToString("\n\n") { (number, text) -> "--- Page $number ---\n$text" }
+        }
+    }
+
     /** Reads one group member's own `.txt` sibling (written by an earlier/other capture/rescan reply)
      *  — null means that member's OCR text isn't on disk yet, the signal callers wait on. */
     fun readOcrTextSibling(context: Context, dirName: String, fileName: String): String? =
@@ -30,12 +51,14 @@ object LineItemsRescanCombiner {
             null
         }
 
-    /** Null if [fileNames] (expected pre-sorted by capture order) is empty, or any member is missing
-     *  its `.txt` sibling — the caller decides whether that means "wait and re-check later" (async
-     *  path) or "log and bail" (synchronous path, where it should never actually happen). */
+    /** Null if [fileNames] (expected pre-sorted by capture order) has no OCR-eligible member, or any
+     *  eligible member is missing its `.txt` sibling — the caller decides whether that means "wait
+     *  and re-check later" (async path) or "log and bail" (synchronous path, where it should never
+     *  actually happen). A PDF member is not waited on — see [ocrEligible]. */
     fun combineGroupText(context: Context, dirName: String, fileNames: List<String>): String? {
-        if (fileNames.isEmpty()) return null
-        val pageTexts = fileNames.map { readOcrTextSibling(context, dirName, it) }
+        val eligible = ocrEligible(fileNames)
+        if (eligible.isEmpty()) return null
+        val pageTexts = eligible.map { readOcrTextSibling(context, dirName, it) }
         if (pageTexts.any { it == null }) return null
         return pageTexts.mapIndexed { index, text -> "--- Page ${index + 1} ---\n$text" }.joinToString("\n\n")
     }
@@ -54,7 +77,7 @@ object LineItemsRescanCombiner {
         groupId: String? = null
     ): Boolean {
         val combinedText = combineGroupText(context, dirName, fileNames) ?: return false
-        val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, dirName, fileNames.first(), attachPhotoToggle)
+        val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, dirName, ocrEligible(fileNames).first(), attachPhotoToggle)
         ExpenseScanCleanupRequestSender.sendLineItemsRescan(context, container, expenseId, combinedText, attachmentUri, groupId)
         return true
     }
