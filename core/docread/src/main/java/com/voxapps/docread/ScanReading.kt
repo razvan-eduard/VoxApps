@@ -61,6 +61,10 @@ object ScanReading {
         // reads correctly when no template matches it.
         val fallback = ReceiptTotalRegexParser.parse(footerText)
         val candidates = footerTemplates.mapNotNull { FooterReader.read(footerText, it) } +
+            // The transaction-slip shape: a Debit/Credit table heading vouches for the one bare
+            // figure beneath it, on documents that label no total and sum no rows — structural
+            // proof, so it sits with the templates, ahead of the pairings walked from raw text.
+            listOfNotNull(BankSlipReader.candidate(plainText)) +
             // Pairings found by walking the whole text rather than its footer, for pages that
             // reached us with no usable structure at all. Offered after the templates, which read a
             // well-formed document more precisely, and before the compiled-in guess.
@@ -112,14 +116,17 @@ object ScanReading {
         }
 
         // Nothing closed. The totals still have to come from somewhere, so the strongest candidate
-        // that read anything serves, and no items are emitted.
-        val totals = candidates.firstOrNull { !it.isEmpty() }?.asTotals() ?: fallback
+        // that read anything serves, and no items are emitted. Its template id travels with the
+        // totals — a totals-only reading still owes the caller which shape vouched for the figure
+        // (a bank slip's fields are read differently from a receipt's precisely off that id).
+        val chosen = candidates.firstOrNull { !it.isEmpty() }
+        val totals = chosen?.asTotals() ?: fallback
         Logger.d(
             TAG,
             "No footer+items combination reconciles (${candidates.size} footer candidate(s), " +
                 "${itemTemplates.size} item pattern(s)) — totals only, no items"
         )
-        return Result(repaired(totals, rawText, null), null, null, null, header)
+        return Result(repaired(totals, rawText, null), null, null, chosen?.templateId, header)
     }
 
     private fun repaired(
