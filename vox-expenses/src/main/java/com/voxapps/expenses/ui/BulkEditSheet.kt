@@ -17,10 +17,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.PaperTapField
+import com.voxapps.design.VoxFullscreenSheet
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.design.picklist.VoxNameDialog
 import com.voxapps.expenses.data.BankAccount
@@ -71,7 +70,6 @@ fun BulkEditSheet(
     onDismiss: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val names = rememberFieldNameLists(stateManager, settings)
     val scope = rememberCoroutineScope()
 
@@ -120,13 +118,13 @@ fun BulkEditSheet(
         else -> none to true
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    VoxFullscreenSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
+                .padding(top = 20.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
@@ -288,19 +286,19 @@ fun BulkEditSheet(
                     )
                 }
             )
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                horizontalArrangement = Arrangement.End
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
+            Button(
+                onClick = { onApply(edit) },
+                enabled = !edit.isEmpty,
+                modifier = Modifier.padding(start = 8.dp)
             ) {
-                TextButton(onClick = onDismiss) { Text(languageManager.getString("cancel")) }
-                Button(
-                    onClick = { onApply(edit) },
-                    enabled = !edit.isEmpty,
-                    modifier = Modifier.padding(start = 8.dp)
-                ) {
-                    Text(languageManager.getString("bulk_edit_apply"))
-                }
+                Text(languageManager.getString("bulk_edit_apply"))
             }
         }
     }

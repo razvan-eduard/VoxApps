@@ -4,9 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -18,12 +19,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.voxapps.datahygiene.RuleCombinator
+import com.voxapps.design.VoxFullscreenSheet
 import com.voxapps.expenses.data.DuplicateRuleEntity
 import com.voxapps.expenses.data.ExpenseRuleFields
 import com.voxapps.expenses.domain.localization.LanguageManager
@@ -187,10 +187,16 @@ private fun DuplicateRuleEditSheet(
     var combinator by remember { mutableStateOf(initial.combinator) }
     var appliesAutomatically by remember { mutableStateOf(initial.appliesAutomatically) }
     var fuzzyMatchEnabled by remember { mutableStateOf(initial.fuzzyMatchEnabled) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    // Same shell as the remap-rule editor: full-height sheet, no handle, dismissed by dragging
+    // the form down from the top of its scroll; the button row below stays put.
+    VoxFullscreenSheet(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
@@ -264,27 +270,31 @@ private fun DuplicateRuleEditSheet(
             }
 
             HorizontalDivider()
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text(languageManager.getString("cancel"))
-                }
-                Button(
-                    onClick = {
-                        onSave(
-                            initial.copy(
-                                name = name.trim().ifEmpty { languageManager.getString("duplicate_rule_default_name") },
-                                fieldIds = selectedFieldIds.toList(),
-                                combinator = combinator,
-                                appliesAutomatically = appliesAutomatically,
-                                fuzzyMatchEnabled = fuzzyMatchEnabled
-                            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("cancel"))
+            }
+            Button(
+                onClick = {
+                    onSave(
+                        initial.copy(
+                            name = name.trim().ifEmpty { languageManager.getString("duplicate_rule_default_name") },
+                            fieldIds = selectedFieldIds.toList(),
+                            combinator = combinator,
+                            appliesAutomatically = appliesAutomatically,
+                            fuzzyMatchEnabled = fuzzyMatchEnabled
                         )
-                    },
-                    enabled = selectedFieldIds.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("done"))
-                }
+                    )
+                },
+                enabled = selectedFieldIds.isNotEmpty(),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(languageManager.getString("done"))
             }
         }
     }

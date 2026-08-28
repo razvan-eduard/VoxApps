@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.Icons
 import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.data.BankAccount
+import com.voxapps.design.VoxFullscreenSheet
 import com.voxapps.design.picklist.PicklistButtonAnchor
 import androidx.compose.ui.graphics.Color
 import com.voxapps.expenses.state.ExpenseFilterSummary
@@ -36,7 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
@@ -103,13 +103,13 @@ fun ExpenseFilterSortSheet(
 
     var editingAmount by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    VoxFullscreenSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp)
+                .padding(top = 20.dp, bottom = 24.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

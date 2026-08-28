@@ -38,7 +38,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -70,6 +69,7 @@ import com.voxapps.datahygiene.DirtyField
 import com.voxapps.datahygiene.RecordSource
 import com.voxapps.datahygiene.SaveDecision
 import com.voxapps.datahygiene.decideForSave
+import com.voxapps.design.VoxFullscreenSheet
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.notes.domain.InlineMedia
 import com.voxapps.design.DoubleBackToExitHandler
@@ -384,8 +384,8 @@ fun NotesScreen(
     // inline LazyColumn swap — the calendar's day cells have no natural "replace this row" slot.
     if (settings.calendarViewEnabled && editing != null) {
         val current = editing!!
-        ModalBottomSheet(
-            onDismissRequest = {
+        VoxFullscreenSheet(
+            onDismiss = {
                 if (current.id == null) discardPendingAttachments(current.pendingAttachments, context)
                 val savedHtml = current.id?.let { id -> state.notes.firstOrNull { it.note.id == id }?.note?.textHtml }
                 discardSessionInlineMedia(current.textHtml, savedHtml, context)
