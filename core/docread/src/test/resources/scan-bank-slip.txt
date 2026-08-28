@@ -1,0 +1,16 @@
+BANCA EXEMPLU S.A. Detalii tranzactie
+Sucursala Ploiesti, Str. Garii Nr. 1, Ploiesti
+CUI: RO 9999999; BIC(SWIFT): EXAMROB1
+Titular cont: DL lon Popescu Tip cont: Cont Curent
+Str. Exemplu, Nr. 10, Ploiesti, Prahova, RO Numar cont: RO49AAAA1B31007593840000
+Moneda: RON
+Data Detalii tranzactie Debit Credit
+27 august 2026 Transfer Home'Bank 245,90
+Data finalizarii (decontarii): 27-08-2026
+Beneficiar: Salubritate Exemplu SRL
+In contul: RO92BBBB2C41007593840001
+Banca: BANCA MODEL S.A. - PLOIESTI
+Detalii: Factura apa august 2026
+Referinta: 1787000000000000000001
+Document generat electronic - valabil fara semnatura
+1/1
