@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BurstMode
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -59,6 +60,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material.icons.filled.AccessTime
@@ -91,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
+import com.voxapps.attachments.PdfPageRenderer
 import com.voxapps.attachments.ui.AttachmentUiItem
 import com.voxapps.attachments.ui.AttachmentsSection
 import com.voxapps.attachments.ui.GroupDeleteConfig
@@ -128,6 +131,8 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.llm.ExpenseAmountMismatch
 import com.voxapps.expenses.domain.llm.ExpenseScanCleanupRequestSender
 import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
+import com.voxapps.expenses.domain.llm.LineItemsRescanCombiner
+import com.voxapps.expenses.ui.settings.AddRecipientDialog
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
@@ -142,10 +147,12 @@ import com.voxapps.textmatch.FuzzyNameMatcher
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.DateFormat
 import java.time.Instant
@@ -179,6 +186,7 @@ private data class EditSnapshot(
     val dateTime: Long,
     val categoryId: Long?,
     val bankAccountId: Long?,
+    val recipientId: Long?,
     val direction: TransactionDirection,
     val items: List<LineItemDraft>
 )
@@ -263,6 +271,16 @@ fun ExpenseEditScreen(
     }
     val cardsOffered = remember(accounts, accountId, cardId) {
         accounts.filter { !it.isAccount && (it.parentId == accountId || it.id == cardId) && (!it.archived || it.id == cardId) }
+    }
+    // Who a transaction paid — see Recipient. The link IS the transaction flag: a banner announces
+    // it while a recipient is set, and the section is reachable otherwise only through the explicit
+    // mark-as-transaction action. transactionOpen is deliberately transient UI state, never saved.
+    val recipients by stateManager.recipientsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    var recipientId by remember { mutableStateOf(existing?.expense?.recipientId) }
+    var transactionOpen by remember { mutableStateOf(existing?.expense?.recipientId != null) }
+    var addingRecipient by remember { mutableStateOf(false) }
+    val recipientsOffered = remember(recipients, recipientId) {
+        recipients.filter { !it.archived || it.id == recipientId }
     }
     val names = rememberFieldNameLists(stateManager, settingsSnapshot)
     val vendorNames = names.vendors
@@ -456,11 +474,12 @@ fun ExpenseEditScreen(
             // null; taking them as the baseline would mean the list arriving a frame later counts
             // as an edit, and a screen nobody touched asks whether to discard.
             existing?.expense?.bankAccountId,
+            existing?.expense?.recipientId,
             direction, items.toList()
         )
     }
     fun isDirty(): Boolean =
-        EditSnapshot(title, totalText, currency, vendor, location, comments, dateTime, categoryId, bankAccountId, direction, items.toList()) != initialSnapshot ||
+        EditSnapshot(title, totalText, currency, vendor, location, comments, dateTime, categoryId, bankAccountId, recipientId, direction, items.toList()) != initialSnapshot ||
             // A pending suggestion row surviving means there's still something Discard needs to
             // clear even if no field's been touched — a chip left untapped changes no local value,
             // so the diff above alone would silently miss it (the exact bug: chips visible, back
@@ -518,6 +537,7 @@ fun ExpenseEditScreen(
             comments = comments,
             categoryId = categoryId,
             bankAccountId = bankAccountId,
+            recipientId = recipientId,
             direction = direction,
             isStub = false,
             // Whatever was edited is the editor's from now on: a value a person changed carries no
@@ -528,6 +548,7 @@ fun ExpenseEditScreen(
                     if (title != existing?.expense?.title.orEmpty()) add(ExpenseOrigins.FIELD_TITLE)
                     if (vendor != existing?.expense?.vendor.orEmpty()) add(ExpenseOrigins.FIELD_VENDOR)
                     if (bankAccountId != existing?.expense?.bankAccountId) add(ExpenseOrigins.FIELD_BANK)
+                    if (recipientId != existing?.expense?.recipientId) add(ExpenseOrigins.FIELD_RECIPIENT)
                     if (location != existing?.expense?.location.orEmpty()) add(ExpenseOrigins.FIELD_LOCATION)
                     if (currency != existing?.expense?.currencyCode.orEmpty()) add(ExpenseOrigins.FIELD_CURRENCY)
                     if (categoryId != existing?.expense?.categoryId) add(ExpenseOrigins.FIELD_CATEGORY)
@@ -745,6 +766,65 @@ fun ExpenseEditScreen(
                         onNoneSelected = { cardId = null },
                         searchPlaceholder = languageManager.getString("filter_search_hint")
                     )
+                    // Who this paid — see Recipient. The link stays the only stored truth; this
+                    // switch is the door: ON just reveals the section (nothing is stored until a
+                    // recipient is picked), OFF clears the link and collapses it in one gesture.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.SwapHoriz,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            languageManager.getString("expense_transaction"),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        FieldOriginMark(
+                            origin = origins[ExpenseOrigins.FIELD_RECIPIENT],
+                            description = { languageManager.getString(originStringKey(it)) }
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = transactionOpen,
+                            onCheckedChange = { on ->
+                                transactionOpen = on
+                                if (!on) recipientId = null
+                            }
+                        )
+                    }
+                    if (transactionOpen) {
+                        Text(
+                            languageManager.getString("recipient_label"),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Picklist(
+                            items = recipientsOffered,
+                            selected = recipientsOffered.firstOrNull { it.id == recipientId },
+                            itemLabel = { it.name },
+                            itemSubtitle = { it.subtitle() },
+                            // Picking a recipient writes its canonical name into the vendor — the
+                            // list is where the name was cleaned up once. Still editable after; the
+                            // text never syncs back to the row.
+                            onSelect = { chosen ->
+                                recipientId = chosen.id
+                                vendor = chosen.name
+                            },
+                            noneLabel = languageManager.getString("none"),
+                            onNoneSelected = { recipientId = null },
+                            searchPlaceholder = languageManager.getString("filter_search_hint"),
+                            actionLabel = languageManager.getString("recipient_new"),
+                            onAction = { addingRecipient = true },
+                            onRename = { row, to ->
+                                bankScope.launch { stateManager.updateRecipient(row.copy(name = to)) }
+                            }
+                        )
+                    }
                     // Search-first entry (OpenStreetMap place search + GPS lock). The GPS lambda
                     // routes through resolveCurrentCityName — live fix, then the TTL'd cache,
                     // then Home Town, the exact chain commander uses; the rescan suggestion chip
@@ -1090,6 +1170,24 @@ fun ExpenseEditScreen(
         )
     }
 
+    if (addingRecipient) {
+        // The same dialog the recipients page uses, so a row made here matches the same slips a
+        // row made there does. The new id lands back on this record and the canonical name on its
+        // vendor — the exact promise picking an existing recipient makes.
+        AddRecipientDialog(
+            onConfirm = { name, bankName, iban ->
+                stateManager.addTypedRecipient(name, bankName, iban) { id ->
+                    if (id != null) {
+                        recipientId = id
+                        vendor = name
+                    }
+                }
+                addingRecipient = false
+            },
+            onDismiss = { addingRecipient = false }
+        )
+    }
+
     if (showTimePicker) {
         val initialTime = Instant.ofEpochMilli(dateTime).atZone(ZoneId.systemDefault()).toLocalTime()
         val timePickerState = rememberTimePickerState(
@@ -1281,7 +1379,7 @@ private fun StubRetryBanner(expenseId: Long, imageName: String?, stateManager: E
             // isRetryWithPhoto branch waits for every one of them, then combines the whole batch
             // (--- Page N --- separated, same shape as a group rescan) into one direct-overwrite.
             retrying = true
-            manualAttachments.forEach { entity ->
+            manualAttachments.filterNot { it.fileName.endsWith(".pdf", ignoreCase = true) }.forEach { entity ->
                 val uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, ExpensesAttachments.DIR, entity.fileName)
                 ExpenseScanRequestSender.sendHeadlessRetryOcr(context, expenseId, ExpensesAttachments.DIR, entity.fileName, uri)
             }
@@ -1411,7 +1509,10 @@ private fun ExpenseAttachmentsSection(
     // operation, so they share a single guard check/set instead of each racing it independently
     // (which would silently drop every member after the first). See OcrResultReceiver's
     // EXPENSE_LINEITEMS_RESCAN branch for how the resulting per-photo OCR replies get recombined.
-    fun triggerRescan(dirName: String, fileNames: List<String>, silent: Boolean) {
+    fun triggerRescan(dirName: String, rescanFileNames: List<String>, silent: Boolean) {
+        // A group born from a picked PDF carries the PDF itself beside its rendered pages — the
+        // pages hold every pixel of it, and Vision's headless path can only decode images.
+        val fileNames = LineItemsRescanCombiner.ocrEligible(rescanFileNames)
         if (fileNames.isEmpty()) return
         if (rescanInFlight) {
             if (!silent) {
@@ -1420,7 +1521,10 @@ private fun ExpenseAttachmentsSection(
             return
         }
         rescanInFlight = true
-        fileNames.forEach { fileName ->
+        if (fileNames.size > 1) {
+            ExpenseScanRequestSender.sendHeadlessGroupRescan(context, expenseId, dirName, fileNames)
+        } else {
+            val fileName = fileNames.single()
             val uri = AttachmentFileStore.uriFor(context, ExpensesAttachments.FILE_PROVIDER_AUTHORITY, dirName, fileName)
             ExpenseScanRequestSender.sendHeadlessRescan(context, expenseId, dirName, fileName, uri)
         }
@@ -1509,6 +1613,40 @@ private fun ExpenseAttachmentsSection(
     }
     val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris -> handlePickedUris(uris) }
 
+    // "From files" — the documents picker, for what the photo picker can't offer. An image picked
+    // this way joins exactly the gallery path; a PDF stages its original plus one rendered image per
+    // page as ONE group (document first), so the existing group-rescan machinery reads the pages
+    // while the file itself stays attached and openable.
+    val pickFileForAttach = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val isPdf = context.contentResolver.getType(uri) == "application/pdf" ||
+            uri.toString().endsWith(".pdf", ignoreCase = true)
+        if (!isPdf) {
+            handlePickedUris(listOf(uri))
+            return@rememberLauncherForActivityResult
+        }
+        val wasEmpty = items.isEmpty()
+        scope.launch(Dispatchers.IO) {
+            val original = AttachmentFileStore.stage(context, uri, ExpensesAttachments.DIR)
+            val pages = original?.let { PdfPageRenderer.renderToStagedJpegs(context, ExpensesAttachments.DIR, it) }
+            if (original == null || pages == null) {
+                original?.let { AttachmentFileStore.delete(context, ExpensesAttachments.DIR, it) }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, languageManager.getString("scan_file_failed"), Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
+            val groupId = UUID.randomUUID().toString()
+            stateManager.addManualAttachment(expenseId, original, groupId, 0)
+            pages.forEachIndexed { index, page ->
+                stateManager.addManualAttachment(expenseId, page, groupId, index + 1)
+            }
+            if (wasEmpty && autoRescanEnabled()) {
+                triggerRescan(ExpensesAttachments.DIR, pages, silent = true)
+            }
+        }
+    }
+
     var pendingRemoveAttachment by remember { mutableStateOf<AttachmentUiItem?>(null) }
 
     AttachmentsSection(
@@ -1522,6 +1660,8 @@ private fun ExpenseAttachmentsSection(
         visionActions = visionActions,
         galleryLabel = languageManager.getString("attachment_choose_gallery"),
         cancelLabel = languageManager.getString("cancel"),
+        onPickFromFiles = { pickFileForAttach.launch(arrayOf("image/*", "application/pdf")) },
+        filesLabel = languageManager.getString("scan_from_file"),
         onRemove = { item -> pendingRemoveAttachment = item },
         modifier = Modifier.padding(bottom = 12.dp),
         onRescan = ::rescanAttachmentForLineItems,

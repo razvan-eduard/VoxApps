@@ -4,6 +4,7 @@ import com.voxapps.datahygiene.RemapCondition
 import com.voxapps.textmatch.extract.AccountIdentifiers
 import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.domain.accounts.BankAccounts
+import com.voxapps.expenses.domain.accounts.Recipients
 import android.content.Context
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.datahygiene.NameCasing
@@ -96,6 +97,7 @@ class ExpensesRepository(
     private val recurringPayments: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository? = null,
     private val bankAccountDao: BankAccountDao? = null,
     private val accountBudgetDao: AccountBudgetDao? = null,
+    private val recipientDao: RecipientDao? = null,
     /**
      * Told when rules that asked to be heard recognised a newly captured record.
      *
@@ -238,6 +240,91 @@ class ExpensesRepository(
         expenseDao.clearBankAccount(account.id)
         bankAccountDao.delete(account)
     }
+
+    // --- who transactions paid (see Recipient) ---
+
+    val recipients: Flow<List<Recipient>> =
+        recipientDao?.observeAll() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    suspend fun recipientsSnapshot(): List<Recipient> = recipientDao?.getAll().orEmpty()
+
+    /**
+     * The recipient a slip names, creating one where that is allowed — returns the ROW, because the
+     * caller wants the canonical name for the vendor, not just a pointer.
+     *
+     * [learnEnabled] gates only the WRITES (creating a row, filling an empty IBAN slot): matching an
+     * existing recipient is recognition, not learning, and always links — the exact division
+     * [resolveBankAccount] already draws, where Known ids return unconditionally and autoCreate
+     * covers only the branches that would add a row.
+     */
+    suspend fun resolveRecipient(
+        beneficiary: String?,
+        iban: String?,
+        bankName: String?,
+        learnEnabled: Boolean,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Recipient? {
+        val dao = recipientDao ?: return null
+        val existing = dao.getAll()
+
+        Recipients.byIban(iban, existing)?.let { return it }
+
+        Recipients.named(beneficiary, existing)?.let { found ->
+            if (learnEnabled && Recipients.fillsIban(found, iban)) {
+                val filled = found.copy(
+                    iban = iban?.trim(),
+                    bankName = found.bankName ?: bankName?.trim()?.takeIf { it.isNotEmpty() }
+                )
+                dao.update(filled)
+                Logger.d(TAG_ACCOUNTS, "Recipient ${found.id} learned its IBAN from a slip")
+                return filled
+            }
+            return found
+        }
+
+        if (!learnEnabled) return null
+        // An IBAN with no name is not a recipient anyone recognises — deliberately unlike accounts,
+        // where digits alone suffice because the digits can stand in for a name until one arrives.
+        val name = beneficiary?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val created = Recipients.newRecipient(name, bankName, iban, nowMillis)
+        val id = dao.insert(created)
+        Logger.d(TAG_ACCOUNTS, "Recipient created from a scanned slip")
+        // IGNORE on conflict, so two captures racing on one IBAN leave one row — the loser re-reads.
+        return if (id > 0) created.copy(id = id) else Recipients.byIban(created.iban, dao.getAll())
+    }
+
+    suspend fun addRecipient(recipient: Recipient): Long = recipientDao?.insert(recipient) ?: -1L
+
+    /** A recipient somebody typed. The IBAN, when given, must read as one — same validator the
+     *  captures use — so a hand-made row matches the same slips later. */
+    suspend fun addTypedRecipient(name: String, bankName: String?, ibanText: String?): Long {
+        val dao = recipientDao ?: return -1L
+        val cleanName = name.trim().takeIf { it.isNotEmpty() } ?: return -1L
+        val iban = ibanText?.trim()?.takeIf { it.isNotEmpty() }?.let { typed ->
+            AccountIdentifiers.single(typed)
+                ?.takeIf { it.kind == AccountIdentifiers.Kind.IBAN }
+                ?.digits ?: return -1L
+        }
+        iban?.let { typed -> Recipients.byIban(typed, dao.getAll())?.let { return it.id } }
+        return dao.insert(
+            Recipients.newRecipient(cleanName, bankName, iban, System.currentTimeMillis())
+                .copy(autoCreated = false)
+        )
+    }
+
+    /** Deliberately NOT run through NameCasing.capitalized the way account labels are — canonical
+     *  recipient names are legal names ("Salubritate Exemplu SRL") and survive as typed. */
+    suspend fun updateRecipient(recipient: Recipient) {
+        recipientDao?.update(recipient.copy(name = recipient.name.trim()))
+    }
+
+    /** The records keep their spending and only stop being transactions — see [ExpenseDao.clearRecipient]. */
+    suspend fun deleteRecipient(recipient: Recipient) {
+        recipientDao ?: return
+        expenseDao.clearRecipient(recipient.id)
+        recipientDao.delete(recipient)
+    }
+
     val expenses: Flow<List<Expense>> = expenseDao.observeAll()
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
         expenseDao.observeExpensesWithDetails().distinctUntilChanged()
@@ -509,7 +596,10 @@ class ExpensesRepository(
                         setJson = RemapRuleJson.encode(consistent),
                         origin = RemapRuleEntity.ORIGIN_PROPOSED,
                         enabled = false,
-                        sortOrder = remapRuleDao.getAll().size,
+                        // The front of the list, not the back: the newest drafted rule is the one the person
+                        // is most likely looking for, and the list's order is also the engine's, so a
+                        // manual reorder still outranks this — it rewrites sortOrder outright.
+                        sortOrder = (remapRuleDao.getAll().minOfOrNull { it.sortOrder } ?: 0) - 1,
                         updatedAt = now,
                         suggestJson = RemapRuleJson.encode(shared)
                     )
@@ -542,7 +632,8 @@ class ExpensesRepository(
                 setJson = RemapRuleJson.encode(mapOf(fieldId to to)),
                 origin = RemapRuleEntity.ORIGIN_PROPOSED,
                 enabled = true,
-                sortOrder = remapRuleDao.getAll().size,
+                // Front of the list, same as a drafted proposal — newest first.
+                sortOrder = (remapRuleDao.getAll().minOfOrNull { it.sortOrder } ?: 0) - 1,
                 updatedAt = System.currentTimeMillis()
             )
         )
@@ -686,6 +777,8 @@ class ExpensesRepository(
         invoiceOwnAmount: Double? = null,
         /** The card or account the source text named — see [com.voxapps.expenses.domain.accounts.BankAccounts]. */
         bankAccountId: Long? = null,
+        /** The counterparty a slip resolved — see [Recipient]. Its presence makes this a transaction. */
+        recipientId: Long? = null,
         /** Where each field came from, for the record to be able to say so later — see
          *  [ExpenseOrigins]. Empty for a record somebody typed: nothing about it needs explaining. */
         origins: Map<String, com.voxapps.recordflow.FieldOrigin> = emptyMap(),
@@ -702,6 +795,7 @@ class ExpensesRepository(
                 currencyCode = currencyCode,
                 vendor = vendor?.trim()?.takeIf { it.isNotEmpty() },
                 bankAccountId = bankAccountId,
+                recipientId = recipientId,
                 location = location?.trim()?.takeIf { it.isNotEmpty() },
                 dateTime = dateTime,
                 comments = comments?.trim()?.takeIf { it.isNotEmpty() },
@@ -1010,7 +1104,10 @@ class ExpensesRepository(
         previousBalanceAmount: Double? = null,
         invoiceOwnAmount: Double? = null,
         /** The card or account the source text named — see [com.voxapps.expenses.domain.accounts.BankAccounts]. */
-        bankAccountId: Long? = null
+        bankAccountId: Long? = null,
+        /** The counterparty a slip named, already resolved to a row — see [Recipient]. Its presence
+         *  is what makes the record a transaction. */
+        recipientId: Long? = null
     ): Long {
         // Learned spelling corrections run before anything reads the text fields, so a learned
         // merchant mapping keyed on the clean vendor spelling still fires on a garbled arrival.
@@ -1095,6 +1192,7 @@ class ExpensesRepository(
         val newId = addExpense(
             effTitle, totalAmount, currencyCode, effVendor, effLocation, dateTime, effComments, resolved.id, effItems, imageName,
             bankAccountId = ruledAccountId ?: bankAccountId,
+            recipientId = recipientId,
             origins = origins,
             direction = direction,
             nearDuplicateCheckEnabled = nearDuplicateCheckEnabled,

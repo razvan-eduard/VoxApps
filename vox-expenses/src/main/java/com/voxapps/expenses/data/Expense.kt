@@ -78,6 +78,15 @@ data class Expense(
      */
     val bankAccountId: Long? = null,
     /**
+     * Who this paid, where the record is a bank transaction — see [Recipient].
+     *
+     * The pointer IS the transaction flag: a record with a recipient is a transaction, one without
+     * is not, and no second flag exists to disagree with it. The counterparty's name is the row's,
+     * read through the link rather than stored twice — the same rule [bankAccountId] follows for
+     * the bank. Null is the ordinary case: a shop purchase has a vendor, not a recipient.
+     */
+    val recipientId: Long? = null,
+    /**
      * Where each field's value came from, as `field:origin` pairs — see
      * [com.voxapps.recordflow.FieldOrigin] and [ExpenseOrigins].
      *

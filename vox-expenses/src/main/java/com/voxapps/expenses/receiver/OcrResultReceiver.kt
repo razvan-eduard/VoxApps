@@ -16,6 +16,7 @@ import com.voxapps.expenses.domain.llm.ExpenseScanRequestSender
 import com.voxapps.expenses.domain.llm.LineItemsRescanCombiner
 import com.voxapps.expenses.domain.llm.LlmTasks
 import com.voxapps.expenses.domain.llm.MultimodalAttachmentResolver
+import com.voxapps.expenses.domain.llm.PendingFileScanTask
 import com.voxapps.ipc.VoxAppsDiscovery
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrResult
@@ -60,9 +61,20 @@ class OcrResultReceiver : BroadcastReceiver() {
         // non-null one means single or stitch — either way exactly one already-known text for
         // everything captured, so one new expense gets created directly.
         val isPendingScanCreate = baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && taskParts.getOrNull(1) == "pending-create"
-        // A batch reply (Vision never ran OCR) needs no text to proceed; every other family requires
-        // it — computed once here since several guards below need to branch on it.
-        val isBatchReply = (isAttachmentCapture || isPendingScanCreate) && result.rawText == null
+        // "EXPENSE_SCAN_CLEANUP:pending-create-file:…" — one headless reply for a file the user
+        // picked from local storage (see PendingFileScanTask). Always batch-shaped: rawTexts carries
+        // one entry per requested page, and the reply's own imageUris (Vision's re-staged copies) are
+        // ignored — the originals were staged by the sender before the request ever left.
+        val isPendingFileCreate = baseTask == LlmTasks.EXPENSE_SCAN_CLEANUP && taskParts.getOrNull(1) == PendingFileScanTask.SEGMENT
+        // "EXPENSE_LINEITEMS_RESCAN:<id>:<dir>:<f1,f2,…>" — a whole group rescanned in ONE request
+        // (see ExpenseScanRequestSender.sendHeadlessGroupRescan); the single-file shape has no comma.
+        val isGroupRescan = baseTask == LlmTasks.EXPENSE_LINEITEMS_RESCAN &&
+            taskParts.getOrNull(3)?.contains(",") == true
+        // A batch-shaped reply carries its text in rawTexts (or, for a live batch, none at all) — no
+        // rawText needed to proceed; every other family requires it. Computed once here since several
+        // guards below need to branch on it.
+        val isBatchReply = (isAttachmentCapture || isPendingScanCreate || isPendingFileCreate || isGroupRescan) &&
+            result.rawText == null
 
         if (baseTask != LlmTasks.EXPENSE_SCAN_CLEANUP && baseTask != LlmTasks.EXPENSE_LINEITEMS_RESCAN && !isAttachmentCapture) {
             Logger.d(TAG, "Ignoring unknown OCR task: ${result.task}")
@@ -72,6 +84,16 @@ class OcrResultReceiver : BroadcastReceiver() {
         val rawText = result.rawText
         if (result.status != VoxOcrResult.STATUS_SUCCESS || (rawText.isNullOrBlank() && !isBatchReply)) {
             Logger.w(TAG, "Scan failed or empty: ${result.error}")
+            if (isPendingFileCreate) {
+                // Unlike the camera families (whose files only get staged AFTER a successful reply),
+                // the picked file and its pages were staged by the sender — a failed reply must take
+                // them back out or they leak with no record to ever own them.
+                PendingFileScanTask.parse(taskParts)?.let { parsed ->
+                    PendingFileScanTask.linkNames(parsed).forEach {
+                        AttachmentFileStore.delete(context, ExpensesAttachments.DIR, it)
+                    }
+                }
+            }
             val languageManager = (context.applicationContext as ExpensesApplication).container.languageManager
             Toast.makeText(context, languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
             return
@@ -100,6 +122,14 @@ class OcrResultReceiver : BroadcastReceiver() {
                     handleAttachmentCapture(context, container, taskParts, result.imageUris, rawText, result.rawTexts)
                     return@launch
                 }
+                if (isPendingFileCreate) {
+                    handlePendingFileCreate(context, container, taskParts, result.rawTexts)
+                    return@launch
+                }
+                if (isGroupRescan) {
+                    handleGroupRescan(context, container, taskParts, result.rawTexts)
+                    return@launch
+                }
                 if (isPendingScanCreate) {
                     handlePendingScanCreate(context, container, result.imageUris, rawText, result.rawTexts)
                     return@launch
@@ -126,7 +156,9 @@ class OcrResultReceiver : BroadcastReceiver() {
                         Logger.d(TAG, "Stub retry for expense $expenseId: waiting on remaining photos")
                         return@launch
                     }
-                    val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, attachDirName, batchFileNames.first(), settings.attachPhotoOnRetry)
+                    val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(
+                        context, attachDirName, LineItemsRescanCombiner.ocrEligible(batchFileNames).first(), settings.attachPhotoOnRetry
+                    )
                     ExpenseScanCleanupRequestSender.send(context, container, combinedText, imageName = null, retryOfExpenseId = expenseId, attachmentUri = attachmentUri)
                     return@launch
                 }
@@ -290,6 +322,86 @@ class OcrResultReceiver : BroadcastReceiver() {
             val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(context, ExpensesAttachments.DIR, stagedFileNames.first(), settings.attachPhotoOnRetry)
             ExpenseScanCleanupRequestSender.sendLineItemsRescan(context, container, expenseId, rawText, attachmentUri)
         }
+    }
+
+    /**
+     * A whole group's rescan reply, batch-shaped (see
+     * [ExpenseScanRequestSender.sendHeadlessGroupRescan]): each page's fresh text becomes its `.txt`
+     * sibling; a page whose read failed contributes an empty entry and keeps whatever text it already
+     * had, so one bad page never sinks the group. Then the same combine+suggest step the per-file
+     * shape uses, once, off the freshly-written siblings.
+     */
+    private suspend fun handleGroupRescan(
+        context: Context,
+        container: ExpensesContainer,
+        taskParts: List<String>,
+        rawTexts: List<String>
+    ) {
+        val expenseId = taskParts.getOrNull(1)?.toLongOrNull()
+        val dirName = taskParts.getOrNull(2)
+        val fileNames = taskParts.getOrNull(3)?.split(",")?.filter { it.isNotBlank() }
+        if (expenseId == null || dirName == null || fileNames.isNullOrEmpty()) {
+            Logger.w(TAG, "Malformed group rescan task: ${taskParts.joinToString(":")}")
+            return
+        }
+        fileNames.forEachIndexed { index, fileName ->
+            rawTexts.getOrNull(index)?.takeIf { it.isNotBlank() }?.let {
+                writeOcrTextSibling(context, dirName, fileName, it)
+            }
+        }
+        val settings = container.settingsRepository.getSnapshot()
+        val groupId = container.attachmentDao.getFor(ExpensesAttachments.RECORD_TYPE, expenseId)
+            .firstOrNull { it.fileName == fileNames.first() }?.groupId
+        val sent = LineItemsRescanCombiner.combineAndSendRescan(
+            context, container, expenseId, dirName, fileNames, settings.attachPhotoOnRetry, groupId
+        )
+        if (!sent) {
+            Logger.w(TAG, "Group rescan for expense $expenseId: some pages still have no text, not combining")
+        }
+    }
+
+    /**
+     * The picked-local-file family (see [PendingFileScanTask]): the sender already staged the
+     * original file and its OCR page images, so unlike every camera family nothing gets staged here —
+     * the reply's own imageUris are Vision's re-staged copies and are deliberately ignored (same
+     * convention as [LlmTasks.EXPENSE_LINEITEMS_RESCAN]). Pages get their .txt siblings (so later
+     * group rescans work), the page texts combine into ONE document, and ONE expense creation goes
+     * through [ExpenseScanCleanupRequestSender.sendPendingCreate] — a PDF's pages are one document,
+     * never batch's N independent records. All-blank OCR takes the staged files back out.
+     */
+    private suspend fun handlePendingFileCreate(
+        context: Context,
+        container: ExpensesContainer,
+        taskParts: List<String>,
+        rawTexts: List<String>
+    ) {
+        val parsed = PendingFileScanTask.parse(taskParts)
+        if (parsed == null) {
+            Logger.w(TAG, "Malformed picked-file scan task: ${taskParts.joinToString(":")}")
+            return
+        }
+        parsed.pageFileNames.forEachIndexed { index, fileName ->
+            rawTexts.getOrNull(index)?.takeIf { it.isNotBlank() }?.let {
+                writeOcrTextSibling(context, ExpensesAttachments.DIR, fileName, it)
+            }
+        }
+        val combined = LineItemsRescanCombiner.combinePageTexts(rawTexts)
+        val linkNames = PendingFileScanTask.linkNames(parsed)
+        if (combined == null) {
+            Logger.w(TAG, "Picked-file scan produced no text — taking the staged files back out")
+            linkNames.forEach { AttachmentFileStore.delete(context, ExpensesAttachments.DIR, it) }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, container.languageManager.getString("scan_save_failed"), Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        val groupId = if (linkNames.size > 1) UUID.randomUUID().toString() else null
+        val settings = container.settingsRepository.getSnapshot()
+        val attachmentUri = MultimodalAttachmentResolver.resolveArbitraryFile(
+            context, ExpensesAttachments.DIR, parsed.pageFileNames.first(), settings.attachPhotoOnScan
+        )
+        ExpenseScanCleanupRequestSender.sendPendingCreate(context, container, combined, linkNames, groupId, attachmentUri)
+        Logger.d(TAG, "Picked-file scan (${parsed.pageFileNames.size} page(s)) forwarded for creation")
     }
 
     /**

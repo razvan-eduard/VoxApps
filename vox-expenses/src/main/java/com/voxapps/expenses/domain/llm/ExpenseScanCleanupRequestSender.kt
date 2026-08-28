@@ -173,8 +173,14 @@ object ExpenseScanCleanupRequestSender {
 
         // Same flow as a fresh capture, and so the same promise: this is a path the setting has to
         // be honoured on, and honouring it is no longer this function's business to remember.
-        com.voxapps.recordflow.RecordFlow.dispatch(
-            spec = ExpenseScanFlow(context, container, fileNames.firstOrNull()),
+        // imageName stays null — the staged pages live under the attachments dir and become ordinary
+        // attachment rows (the flow links them beside every write), while the legacy receipt field
+        // is resolved against receipts/ by every reader and must not carry an attachments/ name.
+        val outcome = com.voxapps.recordflow.RecordFlow.dispatch(
+            spec = ExpenseScanFlow(
+                context, container, imageName = null,
+                pendingFileNames = fileNames, pendingGroupId = groupId
+            ),
             input = ScannedPage(rawText, plainText),
             level = com.voxapps.expenses.data.preferences.ExpensesSettings.scanLevelOf(settings.scanModelUse)
         ) { _, promptText ->
@@ -188,6 +194,19 @@ object ExpenseScanCleanupRequestSender {
                 attachmentUri = attachmentUri
             )
             rememberPreParse(container, requestId, preParsed, preParsedTotal, totals, preParsedItems, accountFrom(container, plainText))
+        }
+        if (outcome is com.voxapps.recordflow.RecordFlow.Outcome.Discarded) {
+            // No provable amount at a rung that asks nobody: no record was written and none ever
+            // will be — the staged files would be orphans with no row to own them, and the silence
+            // reads as a malfunction. Take the files back out and say why nothing appeared.
+            fileNames.forEach { com.voxapps.attachments.AttachmentFileStore.delete(context, com.voxapps.expenses.data.ExpensesAttachments.DIR, it) }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    context,
+                    container.languageManager.getString("scan_discarded_no_total"),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 

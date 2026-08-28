@@ -49,6 +49,7 @@ class ExpensesContainer(context: Context) {
     )
     val bankAccountDao = database.bankAccountDao()
     val accountBudgetDao = database.accountBudgetDao()
+    val recipientDao = database.recipientDao()
 
     val expensesRepository = ExpensesRepository(
         database.expenseDao(),
@@ -64,6 +65,7 @@ class ExpensesContainer(context: Context) {
         recurringPaymentRepository,
         bankAccountDao,
         accountBudgetDao,
+        recipientDao = recipientDao,
         onRuleAlerts = { alerts ->
             RuleAlertNotifier.notify(appContext, languageManager, settingsRepository.getSnapshot(), alerts)
         }

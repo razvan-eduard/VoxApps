@@ -130,6 +130,7 @@ class ExpensesExportImportHandler(
             // that kept only the yesses would start proposing everything they had already refused.
             json.put("recurringPayments", JSONArray(recurringPaymentRepo.snapshot().map { it.toJson() }))
             json.put("bankAccounts", JSONArray(expensesRepo.bankAccountsSnapshot().map { it.toJson() }))
+            json.put("recipients", JSONArray(expensesRepo.recipientsSnapshot().map { it.toJson() }))
 
             if (includePhotos) {
                 val names = expensesWithDetails.mapNotNull { it.expense.receiptImageName?.takeIf { n -> n.isNotBlank() } }
@@ -418,6 +419,26 @@ class ExpensesExportImportHandler(
             }
         }
 
+        // Merge-by-natural-key like the accounts above, with two deliberate differences: the IBAN
+        // is the key where one exists and the NAME is the fallback key where none does — a
+        // number-less recipient is legitimate and must not be skipped the way a number-less account
+        // row is — and there is no parent pass, recipients being flat.
+        val importedRecipientToLocal = mutableMapOf<Long, Long>()
+        if (root.has("recipients")) {
+            val imported = root.optJSONArray("recipients") ?: JSONArray()
+            for (i in 0 until imported.length()) {
+                val r = imported.getJSONObject(i)
+                val name = r.optStringOrNull("name")?.takeIf { it.isNotBlank() } ?: continue
+                val iban = r.optStringOrNull("iban")?.takeIf { it.isNotBlank() }
+                val existing = expensesRepo.recipientsSnapshot()
+                val local = iban?.let { key -> existing.firstOrNull { it.iban.equals(key, ignoreCase = true) }?.id }
+                    ?: existing.firstOrNull { it.name.trim().lowercase() == name.trim().lowercase() }?.id
+                    ?: expensesRepo.addRecipient(r.toRecipient()).takeIf { it > 0 }
+                    ?: continue
+                importedRecipientToLocal[r.optLong("id")] = local
+            }
+        }
+
         if (root.has("recurringPayments")) {
             val preExisting = recurringPaymentRepo.snapshot()
             val imported = root.optJSONArray("recurringPayments") ?: JSONArray()
@@ -480,6 +501,11 @@ class ExpensesExportImportHandler(
                             .takeIf { e.has("bankAccountId") && !e.isNull("bankAccountId") }
                             ?.let { importedAccountToLocal[it] }
                             ?: e.optStringOrNull("bank")?.let { expensesRepo.accountNamed(it, settings.defaultCurrency) },
+                        // Same map for the transaction's counterparty; no name fallback — there are
+                        // no legacy exports carrying a recipient name to honor.
+                        recipientId = e.optLong("recipientId")
+                            .takeIf { e.has("recipientId") && !e.isNull("recipientId") }
+                            ?.let { importedRecipientToLocal[it] },
                         location = e.optStringOrNull("location"),
                         dateTime = e.optLong("dateTime", System.currentTimeMillis()),
                         comments = e.optStringOrNull("comments"),
@@ -560,6 +586,25 @@ private fun BankAccount.toJson(): JSONObject = JSONObject().apply {
     put("autoCreated", autoCreated)
     put("archived", archived)
 }
+
+private fun com.voxapps.expenses.data.Recipient.toJson(): JSONObject = JSONObject().apply {
+    put("id", id)
+    put("name", name)
+    bankName?.let { put("bankName", it) }
+    iban?.let { put("iban", it) }
+    put("createdAt", createdAt)
+    put("autoCreated", autoCreated)
+    put("archived", archived)
+}
+
+private fun JSONObject.toRecipient(): com.voxapps.expenses.data.Recipient = com.voxapps.expenses.data.Recipient(
+    name = optStringOrNull("name") ?: "",
+    bankName = optStringOrNull("bankName"),
+    iban = optStringOrNull("iban"),
+    createdAt = optLong("createdAt", System.currentTimeMillis()),
+    autoCreated = optBoolean("autoCreated", false),
+    archived = optBoolean("archived", false)
+)
 
 /** [parentId] is supplied by the caller after the id map exists — a card may be listed before the
  *  account it belongs to. */
@@ -666,6 +711,7 @@ private fun Expense.toJson(
     put("currencyCode", currencyCode)
     put("vendor", vendor)
     bankAccountId?.let { put("bankAccountId", it) }
+    recipientId?.let { put("recipientId", it) }
     put("location", location)
     put("dateTime", dateTime)
     put("comments", comments)

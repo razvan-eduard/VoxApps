@@ -12,6 +12,7 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.logging.Logger
 import com.voxapps.recordflow.AskScope
+import com.voxapps.expenses.data.preferences.accountCurrencyFor
 import com.voxapps.expenses.data.preferences.knownCurrencies
 import com.voxapps.expenses.data.ExpenseOrigins
 import com.voxapps.recordflow.FieldOrigin
@@ -56,7 +57,15 @@ class ExpenseScanFlow(
      * survives the round trip — see [ScanPreParseRepository]. Null while dispatching, because the
      * reading itself is still in hand; present at delivery, where it is the only form of it left.
      */
-    private val suppressed: ScanPreParse? = null
+    private val suppressed: ScanPreParse? = null,
+    /**
+     * The capture's already-staged files (pages, and for a picked file its original too), linked as
+     * ordinary attachment rows beside every write this flow makes. On the spec rather than at either
+     * call site because both halves write: dispatch commits and queues offline, and delivery's
+     * queued outcome carries no record id for a caller to link against.
+     */
+    private val pendingFileNames: List<String> = emptyList(),
+    private val pendingGroupId: String? = null
 ) : RecordFlowSpec<ScannedPage, ProvedScan, ExpenseParseResultParser.Parsed> {
 
     override val source = RecordSource.SCAN
@@ -192,9 +201,52 @@ class ExpenseScanFlow(
             proved.plainText,
             FieldVocabularies.vocabularies(context.applicationContext, settings)
         )
-        val vendor = head?.vendor ?: named.vendor ?: reading.header.vendor
+        // A transfer slip's parties sit in different fields than a receipt's: its letterhead names
+        // the payer's BANK (the org that printed the slip), the counterparty beside "Beneficiar:"
+        // is who got paid — the record's vendor — and "Numar cont:" carries the payer's own IBAN,
+        // told apart from the counterparty's by their captions (the page prints two valid IBANs, so
+        // an ambiguity rule that reads them together must refuse both). Keyed off the shape that
+        // vouched for the total, never guessed from content.
+        val slip = reading.footerTemplateId?.startsWith(com.voxapps.docread.BankSlipReader.TEMPLATE_ID_TABLE) == true
+        val slipFields = if (slip) com.voxapps.docread.BankSlipReader.fields(proved.plainText) else null
+
+        // The counterparty becomes (or matches) a Recipient row — the record's transaction link.
+        // learnNamesFromScans gates only the writes; matching an existing row always links, and its
+        // canonical name outranks even a model's vendor answer: a list lookup is deterministic
+        // where an answer is proposed, and the list is where the name was cleaned up once.
+        val recipient = slipFields?.let {
+            container.expensesRepository.resolveRecipient(
+                beneficiary = it.beneficiary,
+                iban = it.counterpartyIban,
+                bankName = it.counterpartyBank,
+                learnEnabled = settings.learnNamesFromScans
+            )
+        }
+
+        val vendor = recipient?.name ?: head?.vendor ?: slipFields?.beneficiary
+            ?: named.vendor ?: reading.header.vendor.takeUnless { slip }
         val dateTime = DateTimeRegexParser.parse(proved.plainText)
         val provedDate = reading.header.date ?: dateTime.date
+        val currency = com.voxapps.textmatch.extract.CurrencyCodes.find(
+            proved.plainText,
+            settings.knownCurrencies(accountCurrencies)
+        ) ?: head?.currency ?: settings.defaultCurrency
+        val bank = head?.bank ?: named.bank ?: reading.header.vendor.takeIf { slip }
+
+        // The slip's own IBAN resolves the account here, where it is unambiguous — the generic
+        // resolver reads the whole text, sees both parties' IBANs and rightly claims neither.
+        val slipAccountId = slipFields?.ownIban?.let { iban ->
+            container.expensesRepository.resolveBankAccount(
+                text = iban,
+                autoCreate = com.voxapps.expenses.domain.accounts.BankAccounts.shouldCreate(
+                    fromScan = true,
+                    scansEnabled = settings.autoCreateAccountsFromScans,
+                    notificationsEnabled = settings.autoCreateAccountsFromNotifications
+                ),
+                defaultCurrency = settings.accountCurrencyFor(currency),
+                bankName = bank
+            )
+        }
 
         val record = ExpenseParseResultParser.Parsed(
             title = head?.title ?: composeTitle(vendor, category?.name),
@@ -203,12 +255,9 @@ class ExpenseScanFlow(
             // so it is read rather than asked for or defaulted. Exactly one currency or none: a
             // receipt printing a second one is converting, and choosing between them is not a
             // reading.
-            currency = com.voxapps.textmatch.extract.CurrencyCodes.find(
-                proved.plainText,
-                settings.knownCurrencies(accountCurrencies)
-            ) ?: head?.currency ?: settings.defaultCurrency,
+            currency = currency,
             vendor = vendor,
-            bank = head?.bank ?: named.bank,
+            bank = bank,
             // A printed address is a reading of the page; with no model there is none, and the
             // location fill falls through to whatever the settings allow, as it does for voice.
             location = head?.location,
@@ -257,6 +306,7 @@ class ExpenseScanFlow(
             if (ExpenseOrigins.FIELD_VENDOR !in answered && vendor != null) add(ExpenseOrigins.FIELD_VENDOR)
             if (ExpenseOrigins.FIELD_DATE !in answered && record.date != null) add(ExpenseOrigins.FIELD_DATE)
             if (ExpenseOrigins.FIELD_ITEMS !in answered && record.items.isNotEmpty()) add(ExpenseOrigins.FIELD_ITEMS)
+            if (recipient != null) add(ExpenseOrigins.FIELD_RECIPIENT)
         }
         val newId = com.voxapps.expenses.receiver.LlmResultReceiver().createExpenseFromParsed(
             appContext = context.applicationContext,
@@ -268,8 +318,12 @@ class ExpenseScanFlow(
             origins = mapOf(
                 FieldOrigin.ANSWERED to answered,
                 FieldOrigin.PROVED to provedFields
-            )
+            ),
+            knownAccountId = slipAccountId,
+            knownRecipientId = recipient?.id,
+            treatAsScan = true
         )
+        linkPendingFiles(newId)
 
         // The two figures the creation path has no field for. Written only where the reading
         // produced them, and never where the restatements disagreed — a contradicted breakdown is
@@ -364,12 +418,23 @@ class ExpenseScanFlow(
                     if (!headApplied && provedVendor != null) add(ExpenseOrigins.FIELD_VENDOR)
                     if (!applies(FieldWeight.BODY) && provedItems.isNotEmpty()) add(ExpenseOrigins.FIELD_ITEMS)
                 }
-            )
+            ),
+            treatAsScan = true
         )
+        linkPendingFiles(newId)
         Logger.d(TAG, "Wrote a reply-backed record $newId (head applied=$headApplied)")
         container.expensesStateManager.learnNamesFrom(record.vendor, record.bank, fromScan = true)
         offerWhatWasNotWritten(newId, parsed, applies)
         return newId.takeIf { it > 0 }
+    }
+
+    /** The staged files become the record's attachments the moment a record exists to own them —
+     *  never on a merge/failure sentinel, where there is no row the group could belong to. */
+    private suspend fun linkPendingFiles(recordId: Long) {
+        if (recordId > 0 && pendingFileNames.isNotEmpty()) {
+            com.voxapps.expenses.receiver.LlmResultReceiver()
+                .linkPendingScanAttachments(container, recordId, pendingFileNames, pendingGroupId)
+        }
     }
 
     /** Whatever the rung declined to write is offered on the record instead, field by field. */

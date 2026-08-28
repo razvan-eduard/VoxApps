@@ -71,6 +71,8 @@ class ExpensesExportImportHandlerTest {
         coEvery { expensesRepo.setDefaultCategory(any()) } just Runs
         coEvery { expensesRepo.addCategory(any(), any(), any(), any(), any()) } returns 1L
         coEvery { expensesRepo.bankAccountsSnapshot() } returns emptyList()
+        coEvery { expensesRepo.recipientsSnapshot() } returns emptyList()
+        coEvery { expensesRepo.addRecipient(any()) } returns 1L
         coEvery { expensesRepo.addBankAccount(any()) } returns 1L
         coEvery { expensesRepo.updateBankAccount(any()) } just Runs
         every { duplicateRuleDao.observeAll() } returns flowOf(emptyList())
