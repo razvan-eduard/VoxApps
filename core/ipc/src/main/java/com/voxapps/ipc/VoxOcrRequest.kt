@@ -30,6 +30,20 @@ data class VoxOcrRequest(
     // explicit grant on the reply side — see OcrResultSender). Null (the default) is today's
     // camera-capture behavior, unchanged.
     val imageUri: String? = null,
+    // The multi-source form of [imageUri]: Vision runs the same no-camera OCR over every listed
+    // content:// URI in order and replies ONCE, batch-shaped — [VoxOcrResult.rawText] null,
+    // [VoxOcrResult.rawTexts] one entry per REQUEST entry (same index; a source that failed to
+    // decode/recognize contributes an empty string so alignment survives). One request for the whole
+    // set is not an optimization but a correctness requirement: Vision's activity is singleTask and a
+    // second headless request cancels the one in flight, so N separate sends lose N-1 replies. Every
+    // entry needs its own caller-side grantUriPermission for the same JSON-string-extra reason as
+    // [imageUri]. Ignored while empty; when non-empty it wins over [imageUri].
+    val imageUris: List<String> = emptyList(),
+    // Headless-only: skip Vision's document-crop stage and OCR the source pixels as-is — for sources
+    // that are already flat, full-bleed document images (e.g. pages rendered out of a file), where
+    // edge detection has nothing to find and can only trim real content. Live camera captures ignore
+    // this; their crop remains Vision's own decision.
+    val skipCrop: Boolean = false,
     // When false, Vision still captures/crops/stages a photo (live or headless) but skips running it
     // through the OCR engine entirely — VoxOcrResult.rawText comes back null. For a caller that only
     // wants Vision's camera quality (flash/auto-capture/document-crop) on a photo it has no use for
@@ -70,6 +84,12 @@ data class VoxOcrRequest(
         hint?.let { o.put("hint", it) }
         o.put("returnToCallerOnComplete", returnToCallerOnComplete)
         imageUri?.let { o.put("imageUri", it) }
+        if (imageUris.isNotEmpty()) {
+            val arr = org.json.JSONArray()
+            imageUris.forEach { arr.put(it) }
+            o.put("imageUris", arr)
+        }
+        o.put("skipCrop", skipCrop)
         o.put("produceOCR", produceOCR)
         o.put("captureMode", captureMode)
         o.put("tableMode", tableMode)
@@ -93,6 +113,10 @@ data class VoxOcrRequest(
                     hint = o.optStringOrNull("hint"),
                     returnToCallerOnComplete = o.optBoolean("returnToCallerOnComplete", false),
                     imageUri = o.optStringOrNull("imageUri"),
+                    imageUris = o.optJSONArray("imageUris")?.let { arr ->
+                        (0 until arr.length()).map { arr.getString(it) }
+                    } ?: emptyList(),
+                    skipCrop = o.optBoolean("skipCrop", false),
                     produceOCR = o.optBoolean("produceOCR", true),
                     captureMode = o.optString("captureMode").takeIf { it.isNotBlank() } ?: CAPTURE_MODE_SINGLE,
                     tableMode = o.optBoolean("tableMode", false)

@@ -12,6 +12,10 @@ data class PendingScanRequest(
     val hint: String?,
     val returnToCallerOnComplete: Boolean = false,
     val imageUri: String? = null,
+    /** Multi-source headless form — see [com.voxapps.ipc.VoxOcrRequest.imageUris]. */
+    val imageUris: List<String> = emptyList(),
+    /** Headless-only crop skip for flat full-bleed sources — see [com.voxapps.ipc.VoxOcrRequest.skipCrop]. */
+    val skipCrop: Boolean = false,
     val produceOCR: Boolean = true,
     val captureMode: String = com.voxapps.ipc.VoxOcrRequest.CAPTURE_MODE_SINGLE,
     /** The caller declared a tabular document — see [com.voxapps.ipc.VoxOcrRequest.tableMode].

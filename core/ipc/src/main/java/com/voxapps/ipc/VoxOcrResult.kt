@@ -24,6 +24,12 @@ import org.json.JSONObject
  * batch reply's [rawText] itself stays null (unlike stitch, batch entries are never combined into
  * one string) — callers zip [imageUris] with [rawTexts] directly, no round trip needed.
  *
+ * A headless multi-source request ([VoxOcrRequest.imageUris]) replies in that same batch shape, with
+ * one difference in what aligns with what: [rawTexts] is index-aligned with the REQUEST's sources
+ * (a failed source contributes an empty string), while this reply's [imageUris] carries only
+ * Vision's own staged copies of the sources that survived — possibly shorter. A caller that already
+ * owns the source files keys off its request order and ignores the reply copies entirely.
+ *
  * [aiImageUri] is a *separate*, smaller copy Vision prepares specifically for LLM attachment
  * (downscaled to the user's configured "photo detail for AI" setting) — kept distinct from
  * [imageUris] (which stays full-resolution, for the caller's own receipt/record display) since a

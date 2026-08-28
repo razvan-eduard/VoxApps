@@ -101,6 +101,8 @@ class VisionActivity : ComponentActivity() {
                 hint = request.hint,
                 returnToCallerOnComplete = request.returnToCallerOnComplete,
                 imageUri = request.imageUri,
+                imageUris = request.imageUris,
+                skipCrop = request.skipCrop,
                 produceOCR = request.produceOCR,
                 captureMode = request.captureMode,
                 tableMode = request.tableMode
