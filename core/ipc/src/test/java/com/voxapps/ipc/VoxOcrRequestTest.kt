@@ -121,6 +121,39 @@ class VoxOcrRequestTest {
     }
 
     @Test
+    fun `round-trips with imageUris and skipCrop`() {
+        val req = VoxOcrRequest(
+            sourcePackage = "com.voxapps.expenses",
+            task = "EXPENSE_SCAN_CLEANUP:pending-create-file:att_1.pdf:att_2.jpg,att_3.jpg",
+            imageUris = listOf(
+                "content://com.voxapps.expenses.fileprovider/attachments/att_2.jpg",
+                "content://com.voxapps.expenses.fileprovider/attachments/att_3.jpg"
+            ),
+            skipCrop = true,
+            tableMode = true
+        )
+        val parsed = VoxOcrRequest.fromJson(req.toJson())
+        assertEquals(req, parsed)
+        assertEquals(2, parsed!!.imageUris.size)
+        assertTrue(parsed.skipCrop)
+    }
+
+    @Test
+    fun `imageUris and skipCrop default when absent from JSON`() {
+        // Backward compatibility: an older satellite's JSON simply lacks both keys.
+        val legacy = """{"sourcePackage":"com.voxapps.notes","task":"NOTE_SCAN"}"""
+        val parsed = VoxOcrRequest.fromJson(legacy)!!
+        assertTrue(parsed.imageUris.isEmpty())
+        assertFalse(parsed.skipCrop)
+    }
+
+    @Test
+    fun `an empty imageUris list is not emitted as a JSON key`() {
+        val req = VoxOcrRequest(sourcePackage = "com.voxapps.notes", task = "NOTE_SCAN")
+        assertFalse(req.toJson().contains("imageUris"))
+    }
+
+    @Test
     fun `tableMode survives the round trip`() {
         val req = VoxOcrRequest(
             sourcePackage = "com.voxapps.expenses",

@@ -162,10 +162,10 @@ fun VisionScreen(
     onOpenSettings: () -> Unit,
     finishActivity: () -> Unit
 ) {
-    // A caller with an already-existing image (see VoxOcrRequest.imageUri) wants OCR text only, no
-    // camera UI at all — short-circuits before any of the camera/permission/preview setup below,
-    // which this path never needs.
-    if (pendingRequest?.imageUri != null) {
+    // A caller with already-existing image(s) (see VoxOcrRequest.imageUri/imageUris) wants OCR text
+    // only, no camera UI at all — short-circuits before any of the camera/permission/preview setup
+    // below, which this path never needs.
+    if (pendingRequest?.imageUri != null || pendingRequest?.imageUris?.isNotEmpty() == true) {
         HeadlessOcrScreen(container = container, pendingRequest = pendingRequest, finishActivity = finishActivity)
         return
     }
@@ -1110,10 +1110,13 @@ fun VisionScreen(
     }
 }
 
-/** The [PendingScanRequest.imageUri] branch of [VisionScreen] — no camera, no permission prompt, just
- *  decode the given image, run it through the same OCR pipeline a live capture would, and reply. Runs
- *  once per distinct [pendingRequest] (keyed on the whole object, so a second request while this one's
- *  still in flight — e.g. a fast onNewIntent — starts its own fresh run rather than being ignored). */
+/** The [PendingScanRequest.imageUri]/[PendingScanRequest.imageUris] branch of [VisionScreen] — no
+ *  camera, no permission prompt, just decode the given image(s), run each through the same OCR
+ *  pipeline a live capture would, and reply. Runs once per distinct [pendingRequest] (keyed on the
+ *  whole object, so a second request while this one's still in flight — e.g. a fast onNewIntent —
+ *  starts its own fresh run rather than being ignored). The multi-source form loops INSIDE this one
+ *  effect and replies once, batch-shaped — N separate requests would cancel each other here (see
+ *  [com.voxapps.ipc.VoxOcrRequest.imageUris]), so the loop is the only shape that keeps every page. */
 @Composable
 private fun HeadlessOcrScreen(
     container: VisionContainer,
@@ -1124,16 +1127,62 @@ private fun HeadlessOcrScreen(
     val languageManager = LocalLanguageManager.current
 
     LaunchedEffect(pendingRequest) {
-        val (text, imageUri, aiImageUri) = try {
-            recognizeExistingImage(context, container, android.net.Uri.parse(pendingRequest.imageUri), pendingRequest.produceOCR, tableMode = pendingRequest.tableMode)
+        // One retry per source, because the very first detection inference after a cold engine start
+        // can fail where the identical input then succeeds — the live-camera path never sees this
+        // (it pre-warms the engine before the first real capture), and this path has no camera to
+        // hide a warm-up behind. A cancellation is not a failure and must propagate, or a superseding
+        // request's cancel would trigger a ghost retry.
+        suspend fun recognizeOnceRetried(source: String): Triple<String, String?, String?> = try {
+            recognizeExistingImage(
+                context, container, android.net.Uri.parse(source),
+                pendingRequest.produceOCR, skipCrop = pendingRequest.skipCrop, tableMode = pendingRequest.tableMode
+            )
         } catch (t: Throwable) {
-            Logger.e("VisionScreen", "Headless OCR failed", t)
-            Triple("", null, null)
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            Logger.w("VisionScreen", "Headless OCR failed once for $source, retrying", t)
+            recognizeExistingImage(
+                context, container, android.net.Uri.parse(source),
+                pendingRequest.produceOCR, skipCrop = pendingRequest.skipCrop, tableMode = pendingRequest.tableMode
+            )
         }
-        val trimmed = text.trim()
-        OcrResultSender.send(
-            context,
-            pendingRequest.sourcePackage,
+
+        val reply = if (pendingRequest.imageUris.isNotEmpty()) {
+            val texts = mutableListOf<String>()
+            val copies = mutableListOf<String>()
+            var firstAiImageUri: String? = null
+            pendingRequest.imageUris.forEach { source ->
+                val (text, imageUri, aiImageUri) = try {
+                    recognizeOnceRetried(source)
+                } catch (t: Throwable) {
+                    if (t is kotlinx.coroutines.CancellationException) throw t
+                    Logger.e("VisionScreen", "Headless OCR failed for one source", t)
+                    Triple("", null, null)
+                }
+                // A failed source still contributes an entry — rawTexts stays index-aligned with the
+                // request, which is the whole contract of the multi-source reply.
+                texts.add(text.trim())
+                imageUri?.let { copies.add(it) }
+                if (firstAiImageUri == null) firstAiImageUri = aiImageUri
+            }
+            val anyText = texts.any { it.isNotEmpty() }
+            VoxOcrResult(
+                task = pendingRequest.task,
+                status = if (anyText) VoxOcrResult.STATUS_SUCCESS else VoxOcrResult.STATUS_ERROR,
+                rawText = null,
+                imageUris = copies,
+                rawTexts = texts,
+                aiImageUri = firstAiImageUri,
+                error = if (anyText) null else "OCR failed"
+            )
+        } else {
+            val (text, imageUri, aiImageUri) = try {
+                recognizeOnceRetried(pendingRequest.imageUri!!)
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                Logger.e("VisionScreen", "Headless OCR failed", t)
+                Triple("", null, null)
+            }
+            val trimmed = text.trim()
             VoxOcrResult(
                 task = pendingRequest.task,
                 status = if (trimmed.isNotEmpty() || imageUri != null) VoxOcrResult.STATUS_SUCCESS else VoxOcrResult.STATUS_ERROR,
@@ -1142,7 +1191,8 @@ private fun HeadlessOcrScreen(
                 aiImageUri = aiImageUri,
                 error = if (trimmed.isEmpty() && imageUri == null) "OCR failed" else null
             )
-        )
+        }
+        OcrResultSender.send(context, pendingRequest.sourcePackage, reply)
         if (pendingRequest.returnToCallerOnComplete) {
             context.packageManager.getLaunchIntentForPackage(pendingRequest.sourcePackage)?.let { launchIntent ->
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)

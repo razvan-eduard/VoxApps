@@ -1,5 +1,6 @@
 package com.voxapps.attachments.ui
 
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.voxapps.attachments.AttachmentSource
@@ -35,7 +36,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -92,6 +95,11 @@ data class AttachmentUiItem(
     val groupSource: String? = null
 )
 
+/** The one place the strip decides an attachment is a document rather than a photo — the suite has
+ *  no mime column, the staged filename's extension IS the type record (see
+ *  [com.voxapps.attachments.AttachmentFileStore.stage]), and FileProvider URIs keep it. */
+internal fun isPdfAttachment(uri: Uri): Boolean = uri.toString().endsWith(".pdf", ignoreCase = true)
+
 /** Text/callback bundle for the zoom view's "delete this whole burst" action — only rendered when
  *  supplied, and only reachable for a photo that's part of a 2+ group (a lone photo has nothing
  *  distinct to offer beyond the regular per-photo [AttachmentsSection.onRemove]). Bundled into one
@@ -127,6 +135,11 @@ fun AttachmentsSection(
     captureActions: List<SpeedDialAction>,
     galleryLabel: String,
     cancelLabel: String,
+    // "From files" (documents picker) — for callers whose records accept more than the photo picker
+    // can offer (a PDF, or any image as a file). Both the callback and its label must be supplied
+    // for the row to render; null (the default) keeps the chooser exactly as before.
+    onPickFromFiles: (() -> Unit)? = null,
+    filesLabel: String? = null,
     // Vision-powered capture modes, rendered inside a labeled outline so the user can tell at a
     // glance which options come from Vox Vision and which are plain phone features. Empty (the
     // default, and what callers pass when Vision isn't installed) hides the whole group.
@@ -148,6 +161,7 @@ fun AttachmentsSection(
 ) {
     if (items.isEmpty() && !canAdd) return
 
+    val context = LocalContext.current
     var showChooser by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<AttachmentUiItem?>(null) }
     val confirmedRemove: (AttachmentUiItem) -> Unit =
@@ -239,6 +253,42 @@ fun AttachmentsSection(
                                             .fillMaxSize()
                                             .clip(RoundedCornerShape(10.dp))
                                     ) {
+                                        if (isPdfAttachment(item.uri)) {
+                                            // No in-app renderer can draw a PDF (Coil decodes
+                                            // bitmaps), and its rendered pages sit right beside it
+                                            // in the group — the document tile's tap hands the file
+                                            // to whatever viewer the phone offers instead of the
+                                            // zoom dialog. The grant rides the intent DATA, so it
+                                            // propagates to the chosen viewer by itself.
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(MaterialTheme.colorScheme.surface)
+                                                    .clickable {
+                                                        try {
+                                                            context.startActivity(
+                                                                Intent.createChooser(
+                                                                    Intent(Intent.ACTION_VIEW)
+                                                                        .setDataAndType(item.uri, "application/pdf")
+                                                                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                                                                    null
+                                                                )
+                                                            )
+                                                        } catch (_: Exception) {
+                                                        }
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    Icon(
+                                                        Icons.Filled.PictureAsPdf,
+                                                        contentDescription = "PDF",
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text("PDF", style = MaterialTheme.typography.labelSmall)
+                                                }
+                                            }
+                                        } else {
                                         // Zoom/pan disabled here (maxZoomFactor = 1f) — a thumbnail this
                                         // small has nothing useful to pan/zoom into; tapping it opens the
                                         // full-size, fully zoomable view in the dialog below instead.
@@ -252,6 +302,7 @@ fun AttachmentsSection(
                                             onClick = { zoomedItem = item },
                                             modifier = Modifier.fillMaxSize()
                                         )
+                                        }
                                     }
                                     if (item.removable) {
                                         IconButton(
@@ -319,6 +370,13 @@ fun AttachmentsSection(
                         Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(galleryLabel)
+                    }
+                    if (onPickFromFiles != null && filesLabel != null) {
+                        TextButton(onClick = { showChooser = false; onPickFromFiles() }) {
+                            Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(filesLabel)
+                        }
                     }
                     if (visionActions.isNotEmpty()) {
                         // The Vision group: a small outline whose top border the "Vision" label cuts
@@ -391,12 +449,14 @@ fun AttachmentsSection(
 
     val current = zoomedItem
     if (current != null) {
-        val context = LocalContext.current
         // A lone photo's own groupKey still resolves to a one-element list here — deliberately not
         // special-cased, since "1 sibling" and "no group at all" already render identically (no
-        // header/arrows/group-delete rendered unless there are 2+).
+        // header/arrows/group-delete rendered unless there are 2+). A PDF member never enters the
+        // carousel: its tile opens an external viewer, so an arrow landing on it would show a blank
+        // frame.
         val groupSiblings = remember(items, current.groupKey) {
-            current.groupKey?.let { gk -> items.filter { it.groupKey == gk } } ?: listOf(current)
+            current.groupKey?.let { gk -> items.filter { it.groupKey == gk && !isPdfAttachment(it.uri) } }
+                ?: listOf(current)
         }
         val isGrouped = groupSiblings.size > 1
         val indexInGroup = remember(groupSiblings, current.id) {

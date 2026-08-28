@@ -14,17 +14,28 @@ import java.util.UUID
  */
 object AttachmentFileStore {
 
-    /** Copies [sourceUri]'s content into `filesDir/<dirName>/att_<uuid>.jpg`, returning the new
+    /** Copies [sourceUri]'s content into `filesDir/<dirName>/att_<uuid>.<ext>`, returning the new
      *  filename (not a path/URI — same convention as every other Vox image-attachment field). */
     fun stage(context: Context, sourceUri: Uri, dirName: String): String? = try {
         val dir = File(context.filesDir, dirName).apply { mkdirs() }
-        val fileName = "att_${UUID.randomUUID()}.jpg"
+        val fileName = "att_${UUID.randomUUID()}.${extensionFor(context, sourceUri)}"
         context.contentResolver.openInputStream(sourceUri)?.use { input ->
             File(dir, fileName).outputStream().use { output -> input.copyTo(output) }
         }
         fileName
     } catch (e: Exception) {
         null
+    }
+
+    /** The staged copy keeps the source's real type. There is no mime column anywhere — the
+     *  extension IS the suite's type record (voice_<uuid>.m4a set the precedent), and it's what
+     *  FileProvider.getType, ACTION_VIEW targets and the strip's own kind dispatch all read. */
+    private fun extensionFor(context: Context, uri: Uri): String {
+        val fromMime = context.contentResolver.getType(uri)
+            ?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        val fromPath = uri.lastPathSegment?.substringAfterLast('.', "")?.takeIf { it.isNotEmpty() }
+        val ext = (fromMime ?: fromPath ?: "jpg").lowercase()
+        return ext.takeIf { it.length in 1..5 && it.all { c -> c.isLetterOrDigit() } } ?: "jpg"
     }
 
     fun file(context: Context, dirName: String, fileName: String): File =
