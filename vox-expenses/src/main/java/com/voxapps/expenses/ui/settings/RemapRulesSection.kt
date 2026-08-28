@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.Button
@@ -24,13 +26,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +47,7 @@ import com.voxapps.expenses.ui.labelled
 import com.voxapps.datahygiene.RemapCondition
 import com.voxapps.datahygiene.RemapOp
 import com.voxapps.datahygiene.RemapValueKey
+import com.voxapps.design.VoxFullscreenSheet
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.design.settings.RuleCardsSection
 import com.voxapps.design.settings.TriggerCondition
@@ -415,11 +416,29 @@ private fun RemapRuleEditSheet(
     }
     var setValues by remember { mutableStateOf(RemapRuleJson.decode(initial.setJson)) }
     var alerting by remember { mutableStateOf(initial.alertEnabled) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var ruleEnabled by remember { mutableStateOf(initial.enabled) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    // A condition with nothing typed in it is not yet a condition, and an alternative left
+    // with none of them is not an alternative — both drop out before anything is stored.
+    val cleanGroups = groups.map { group ->
+        group.mapNotNull { c ->
+            RemapValueKey.normalize(c.value)?.let {
+                RemapCondition(c.fieldId, it, c.fuzz, RemapOp.of(c.op))
+            }
+        }
+    }.filter { it.isNotEmpty() }
+    val hasTrigger = cleanGroups.isNotEmpty()
+    val cleanSet = if (hasTrigger) setValues.filterValues { it.isNotBlank() } else emptyMap()
+
+    // Full-height so a rule with several alternatives edits without the sheet creeping upward as
+    // content grows; the form scrolls above a button row that stays put, and dragging the form
+    // down from its top is what dismisses.
+    VoxFullscreenSheet(onDismiss = onDismiss) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedTextField(
@@ -429,6 +448,23 @@ private fun RemapRuleEditSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // The same switch the list row carries, here where the rule is being read in full — a
+            // proposal reviewed in this editor gets enabled without a trip back to its row.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    languageManager.getString("remap_rule_enabled_label"),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = ruleEnabled,
+                    onCheckedChange = { ruleEnabled = it }
+                )
+            }
 
             Text(
                 languageManager.getString("remap_rule_when_fields_label"),
@@ -592,16 +628,6 @@ private fun RemapRuleEditSheet(
                 }
             }
 
-            // A condition with nothing typed in it is not yet a condition, and an alternative left
-            // with none of them is not an alternative — both drop out before anything is stored.
-            val cleanGroups = groups.map { group ->
-                group.mapNotNull { c ->
-                    RemapValueKey.normalize(c.value)?.let {
-                        RemapCondition(c.fieldId, it, c.fuzz, RemapOp.of(c.op))
-                    }
-                }
-            }.filter { it.isNotEmpty() }
-            val hasTrigger = cleanGroups.isNotEmpty()
             Text(
                 languageManager.getString("remap_rule_set_fields_label"),
                 style = MaterialTheme.typography.labelLarge,
@@ -654,7 +680,6 @@ private fun RemapRuleEditSheet(
                 )
             }
 
-            val cleanSet = if (hasTrigger) setValues.filterValues { it.isNotBlank() } else emptyMap()
             if (!hasTrigger || (cleanSet.isEmpty() && !alerting)) {
                 Text(
                     languageManager.getString("remap_rule_needs_both_warning"),
@@ -671,31 +696,35 @@ private fun RemapRuleEditSheet(
                     .map { it.id to languageManager.getString(it.labelKey) },
                 onPick = { setValues = setValues + (it to "") }
             )
+        }
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text(languageManager.getString("cancel"))
-                }
-                Button(
-                    onClick = {
-                        onSave(
-                            initial.copy(
-                                name = name.trim().ifEmpty { languageManager.getString("remap_rule_default_name") },
-                                matchJson = RemapConditionsJson.encode(cleanGroups),
-                                setJson = RemapRuleJson.encode(cleanSet),
-                                alertEnabled = alerting,
-                                // Each condition now carries the level it is compared at, so the
-                                // column that held one level per field has nothing left to say.
-                                fuzzJson = "{}",
-                                updatedAt = System.currentTimeMillis()
-                            )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                Text(languageManager.getString("cancel"))
+            }
+            Button(
+                onClick = {
+                    onSave(
+                        initial.copy(
+                            name = name.trim().ifEmpty { languageManager.getString("remap_rule_default_name") },
+                            matchJson = RemapConditionsJson.encode(cleanGroups),
+                            setJson = RemapRuleJson.encode(cleanSet),
+                            alertEnabled = alerting,
+                            enabled = ruleEnabled,
+                            // Each condition now carries the level it is compared at, so the
+                            // column that held one level per field has nothing left to say.
+                            fuzzJson = "{}",
+                            updatedAt = System.currentTimeMillis()
                         )
-                    },
-                    enabled = hasTrigger && (cleanSet.isNotEmpty() || alerting),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(languageManager.getString("done"))
-                }
+                    )
+                },
+                enabled = hasTrigger && (cleanSet.isNotEmpty() || alerting),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(languageManager.getString("done"))
             }
         }
     }

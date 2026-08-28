@@ -8,13 +8,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.VoxFullscreenSheet
 import com.voxapps.notes.state.SortMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,8 +33,8 @@ fun DateSortSheet(
         initialSelectedEndDateMillis = dateTo
     )
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+    VoxFullscreenSheet(onDismiss = onDismiss) {
+        Column(modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 20.dp, bottom = 24.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -51,7 +51,7 @@ fun DateSortSheet(
                 )
             }
 
-            DateRangePicker(state = rangeState, modifier = Modifier.padding(top = 8.dp))
+            DateRangePicker(state = rangeState, modifier = Modifier.weight(1f).padding(top = 8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),

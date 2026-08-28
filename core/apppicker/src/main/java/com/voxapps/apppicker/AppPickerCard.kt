@@ -29,12 +29,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.voxapps.design.VoxFullscreenSheet
 
 /**
  * Reusable app picker: a card whose header shows the current selection, tap to open a full-screen
@@ -128,8 +127,7 @@ fun AppPickerCard(
 
     if (sheetOpen) {
         var pendingSelection by remember { mutableStateOf(selectedApp) }
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(onDismissRequest = { sheetOpen = false }, sheetState = sheetState) {
+        VoxFullscreenSheet(onDismiss = { sheetOpen = false }) {
             Column(modifier = Modifier.fillMaxSize()) {
                 AppPickerList(
                     apps = apps,
@@ -236,9 +234,7 @@ fun AppPickerCard(
         var pendingSelected by remember { mutableStateOf(selectedPackages.toSet()) }
         var pendingDefault by remember { mutableStateOf(defaultPackage) }
         var pendingStarred by remember { mutableStateOf(starredPackages) }
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-        ModalBottomSheet(onDismissRequest = { sheetOpen = false }, sheetState = sheetState) {
+        VoxFullscreenSheet(onDismiss = { sheetOpen = false }) {
             Column(modifier = Modifier.fillMaxSize()) {
                 AppPickerListMulti(
                     apps = apps,
