@@ -31,13 +31,16 @@ class AmountlessCaptureTest {
     /**
      * The setting decides whether the capture is kept at all. Without it, an amount is still the
      * whole gate, which is what keeps a promotional message from becoming something to review.
+     * One more thing may widen it, and only one: the platform stating it withheld the body — the
+     * system's own fact, not this app's inference, and the only case where "no figure found" does
+     * not mean "no figure sent".
      */
     @Test
     fun `an amount is what makes a capture usable, unless the setting says otherwise`() {
         val text = flowSource()
         assertTrue(
-            "usability must widen only by the setting",
-            text.contains("usable = hasAmount || settings.captureAmountlessPayments")
+            "usability must widen only by the setting or the platform's own redaction",
+            text.contains("usable = hasAmount || input.redacted || settings.captureAmountlessPayments")
         )
     }
 

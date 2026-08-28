@@ -127,7 +127,17 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             else -> "$collapsedText\n$bigText"
         }
         val ticker = sbn.notification.tickerText?.toString()?.takeIf { it.isNotBlank() && it != title && it != text }
-        if (title.isNullOrBlank() && text.isNullOrBlank()) return
+        // What the platform's code-protection guard delivers to an unprivileged listener: the body
+        // withheld, the title kept or replaced with one fixed system sentence. The content is gone
+        // by design and nothing here can recover it — but the gutted shape is recognisable, and a
+        // capture recognised as gutted waits in review as a figure to fill in rather than
+        // vanishing without a trace.
+        val redactedMessage = redactedNotificationMessage()
+        val cleanTitle = title?.takeUnless { it == redactedMessage }
+        val cleanText = text?.takeUnless { it == redactedMessage }
+        val redacted = (redactedMessage != null && (title == redactedMessage || text == redactedMessage)) ||
+            (!cleanTitle.isNullOrBlank() && cleanText.isNullOrBlank())
+        if (!redacted && cleanTitle.isNullOrBlank() && cleanText.isNullOrBlank()) return
 
         // A refusal is not a transaction. Before any field is read, any template is looked up or any
         // sentence is sent anywhere: if the message carries a word from the stop list, this app has
@@ -168,9 +178,9 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // per-app while the text is per-transaction, and a wallet app relays cards from many banks
         // under one label. The label stays as the fallback for bank apps whose prose never names
         // themselves.
-        val fullText = listOfNotNull(text, ticker).joinToString("\n").ifBlank { null }
+        val fullText = listOfNotNull(cleanText, ticker).joinToString("\n").ifBlank { null }
         val preParse = com.voxapps.expenses.domain.llm.NotificationPreParse.parse(
-            title, fullText,
+            cleanTitle, fullText,
             com.voxapps.expenses.data.FieldVocabularies.vocabularies(applicationContext, settings),
             // What settles "lei" as RON rather than MDL: the currencies this device was already
             // told about, its own and its cards'.
@@ -183,7 +193,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // whether a human has already said what this exact sentence means. A hit suppresses
         // direction from the model the same way the other resolved fields are suppressed.
         val skeleton = com.voxapps.textmatch.extract.TemplateSkeleton.of(
-            title, fullText, listOfNotNull(preParse.vendor, preParse.bank)
+            cleanTitle, fullText, listOfNotNull(preParse.vendor, preParse.bank)
         )
         val templateHash = com.voxapps.textmatch.extract.TemplateSkeleton.hash(skeleton)
         val inheritedDirection = container.templateDirectionMemory.lookup(templateHash)
@@ -196,7 +206,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // asks. The promise that nothing leaves the device is kept inside it, before a prompt is
         // ever composed — see RecordFlowPolicy.
         val captured = com.voxapps.expenses.domain.llm.CapturedNotification(
-            title = title,
+            title = cleanTitle,
             text = fullText,
             amount = preParse.amount,
             vendor = preParse.vendor,
@@ -204,7 +214,9 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             currency = preParse.currency,
             templateHash = templateHash,
             direction = inheritedDirection,
-            knownPayment = paymentKnown
+            knownPayment = paymentKnown,
+            fromStarredBank = sbn.packageName in settings.bankingSourcePackages,
+            redacted = redacted
         )
         val flow = com.voxapps.expenses.domain.llm.NotificationExpenseFlow(applicationContext, container)
         val outcome = com.voxapps.recordflow.RecordFlow.dispatch(
@@ -224,6 +236,19 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             maybeDismiss(sbn.key, flow.kept, settings)
         }
     }
+
+    /**
+     * The sentence the platform substitutes for a notification its code-protection guard withheld,
+     * in the device's own locale — read from the system's resources so the comparison never chases
+     * translations or OEM rewordings. Null where this Android has no such string.
+     */
+    private fun redactedNotificationMessage(): String? =
+        android.content.res.Resources.getSystem()
+            .getIdentifier("redacted_notification_message", "string", "android")
+            .takeIf { it != 0 }
+            ?.let { id ->
+                runCatching { android.content.res.Resources.getSystem().getString(id) }.getOrNull()
+            }
 
     /**
      * Clears the source notification once its capture is safely somewhere, if that is what you asked
