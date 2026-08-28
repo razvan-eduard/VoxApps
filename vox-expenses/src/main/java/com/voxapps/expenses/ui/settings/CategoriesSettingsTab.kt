@@ -150,7 +150,10 @@ fun CategoriesSettingsTab(
                                 editing = null
                             },
                             onCancel = { editing = null },
-                            modifier = Modifier.padding(vertical = 6.dp)
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            // The editor's swatches wear what the list row wears: the fallback's
+                            // star, everyone else's circle.
+                            swatchShape = if (cat.isDefault) VoxSwatchShapes.Star else CircleShape
                         )
                     } else {
                         Row(

@@ -126,9 +126,25 @@ fun VoxColorSwatchPicker(
         if (index > 0) listState.scrollToItem(index)
     }
 
+    // A custom pick is not in the preset list, so without this it would be selected yet invisible:
+    // no swatch shows it and none wears the ring. It materializes as the row's first swatch — the
+    // pencil stays the way to edit it (the dialog already seeds from the current selection).
+    val customSelected = selectedColor.takeUnless { it in presetColors }
+
     // The two directions share their item content exactly; only the container and which axis the
     // spacing applies to differ, which is why one component can be both.
     val swatches: LazyListScope.() -> Unit = {
+        if (customSelected != null) {
+            item {
+                VoxColorSwatch(
+                    color = customSelected,
+                    selected = showSelectionRing,
+                    onClick = { onColorSelected(customSelected) },
+                    shape = shape,
+                    size = swatchSize
+                )
+            }
+        }
         items(presetColors) { color ->
             VoxColorSwatch(
                 color = color,
