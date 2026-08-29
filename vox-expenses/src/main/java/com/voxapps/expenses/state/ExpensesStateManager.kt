@@ -312,6 +312,14 @@ class ExpensesStateManager(
     )
 
     fun setCaptureAmountlessPayments(enabled: Boolean) { scope.launch { settingsRepo.setCaptureAmountlessPayments(enabled) } }
+    fun setGuardNotificationEnabled(enabled: Boolean) { scope.launch { settingsRepo.setGuardNotificationEnabled(enabled) } }
+    fun setPermanentNotificationEnabled(enabled: Boolean) { scope.launch { settingsRepo.setPermanentNotificationEnabled(enabled) } }
+    fun setNotifShowToday(enabled: Boolean) { scope.launch { settingsRepo.setNotifShowToday(enabled) } }
+    fun setNotifShowWeek(enabled: Boolean) { scope.launch { settingsRepo.setNotifShowWeek(enabled) } }
+    fun setNotifShowMonth(enabled: Boolean) { scope.launch { settingsRepo.setNotifShowMonth(enabled) } }
+    fun setNotifShowTodayCount(enabled: Boolean) { scope.launch { settingsRepo.setNotifShowTodayCount(enabled) } }
+    fun setNotifShowTodayIncome(enabled: Boolean) { scope.launch { settingsRepo.setNotifShowTodayIncome(enabled) } }
+    fun setNotifShowReviewCount(enabled: Boolean) { scope.launch { settingsRepo.setNotifShowReviewCount(enabled) } }
 
     // --- cards and accounts (see BankAccount) ---
 

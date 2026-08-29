@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reads no events and inspects no other app: the service exists only for its takeScreenshot and
+     global-action capabilities, invoked in response to a tap the person made. It declares the
+     narrowest possible surface — no event types, no packages, no window-content retrieval. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeNotificationStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:notificationTimeout="100"
+    android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
+    android:canPerformGestures="false"
+    android:description="@string/shade_reader_description" />

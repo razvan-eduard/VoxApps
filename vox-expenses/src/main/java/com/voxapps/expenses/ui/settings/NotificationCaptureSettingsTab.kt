@@ -210,6 +210,17 @@ fun NotificationCaptureSettingsTab(
 
     val pendingEntries by stateManager.pendingNotificationExpenses.collectAsStateWithLifecycle(initialValue = emptyList())
 
+    // Whether the shade reader is switched on in system accessibility settings — re-read every time
+    // this screen resumes, so returning from that settings page reflects the choice at once.
+    var shadeReaderEnabled by remember { mutableStateOf(isShadeReaderEnabled(context)) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) shadeReaderEnabled = isShadeReaderEnabled(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
     // This tab's caller (SettingsScreen) passes a plain Modifier.fillMaxSize() with no scroll of its
     // own, and this was the only settings tab whose content could ever exceed one screen's height —
     // confirmed on-device: the payment-source-apps picker's expanded search box + app list were being
@@ -426,6 +437,51 @@ fun NotificationCaptureSettingsTab(
                 Switch(
                     checked = captureAmountlessPayments,
                     onCheckedChange = { stateManager.setCaptureAmountlessPayments(it) }
+                )
+            }
+        }
+
+        SettingsSectionCard(languageManager.getString("guard_notification_label")) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    languageManager.getString("guard_notification_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = settings.guardNotificationEnabled,
+                    onCheckedChange = { stateManager.setGuardNotificationEnabled(it) }
+                )
+            }
+            // Only useful with the shade reader — the recovery reads the amount off the panel the
+            // person opens, which needs the accessibility service enabled. Shown only when the
+            // feature is on, and only while the service is still off.
+            if (settings.guardNotificationEnabled && !shadeReaderEnabled) {
+                Text(
+                    languageManager.getString("guard_accessibility_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "Couldn't open accessibility settings", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    Text(languageManager.getString("guard_enable_accessibility_button"))
+                }
+            } else if (settings.guardNotificationEnabled && shadeReaderEnabled) {
+                Text(
+                    languageManager.getString("guard_accessibility_active"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
         }
@@ -712,3 +768,18 @@ fun NotificationCaptureSettingsTab(
     }
 }
 
+
+/**
+ * Whether this app's shade reader is among the accessibility services the person has switched on —
+ * read straight from the secure setting the system stores, so it reflects the real state rather
+ * than a value the app tried to keep in step.
+ */
+private fun isShadeReaderEnabled(context: android.content.Context): Boolean {
+    val flat = android.provider.Settings.Secure.getString(
+        context.contentResolver,
+        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ).orEmpty()
+    return flat.split(':').any {
+        it.equals("${context.packageName}/com.voxapps.expenses.receiver.ShadeReaderService", ignoreCase = true)
+    }
+}

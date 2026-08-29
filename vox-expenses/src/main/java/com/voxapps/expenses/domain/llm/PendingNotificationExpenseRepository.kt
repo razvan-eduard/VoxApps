@@ -50,7 +50,17 @@ data class PendingNotificationExpense(
     val direction: TransactionDirection = TransactionDirection.OUTGOING,
     /** The notification's template identity — approving this entry confirms the direction against
      *  it; see [TemplateDirectionMemory]. */
-    val templateHash: String? = null
+    val templateHash: String? = null,
+    /**
+     * The platform withheld this capture's body (its code-protection guard), so the figure was
+     * never delivered — but the shade still renders the notification whole. An entry carrying this
+     * is recoverable from the screen itself, which is why its source notification is deliberately
+     * NOT dismissed: the shade copy is the last complete record of the payment.
+     */
+    val redactedStub: Boolean = false,
+    /** The source notification's [android.service.notification.StatusBarNotification.getKey] —
+     *  kept so a recovered stub can finally dismiss the notification it came from. */
+    val sourceKey: String? = null
 ) {
     /** The spelling this entry carries for the merchant: the one that was resolved, or the one being
      *  asked about. What a rename renames. */
@@ -80,6 +90,14 @@ class PendingNotificationExpenseRepository(context: Context) {
         dataStore.edit {
             val current = it[Keys.PENDING_ENTRIES]?.let { json -> decode(json) } ?: emptyList()
             it[Keys.PENDING_ENTRIES] = encode(current + entry)
+        }
+    }
+
+    /** Replaces the entry with the same id — how a recovered stub takes its figure. */
+    suspend fun updatePending(entry: PendingNotificationExpense) {
+        dataStore.edit {
+            val current = it[Keys.PENDING_ENTRIES]?.let { json -> decode(json) } ?: emptyList()
+            it[Keys.PENDING_ENTRIES] = encode(current.map { e -> if (e.id == entry.id) entry else e })
         }
     }
 
@@ -115,6 +133,8 @@ class PendingNotificationExpenseRepository(context: Context) {
             o.put("direction", e.direction.toJsonValue())
             o.put("capturedAt", e.capturedAt)
             e.templateHash?.let { o.put("templateHash", it) }
+            if (e.redactedStub) o.put("redactedStub", true)
+            e.sourceKey?.let { o.put("sourceKey", it) }
             array.put(o)
         }
         return array.toString()
@@ -139,7 +159,9 @@ class PendingNotificationExpenseRepository(context: Context) {
                 bank = if (o.has("bank")) o.optString("bank") else null,
                 direction = o.optTransactionDirection(),
                 capturedAt = o.optLong("capturedAt"),
-                templateHash = if (o.has("templateHash")) o.optString("templateHash") else null
+                templateHash = if (o.has("templateHash")) o.optString("templateHash") else null,
+                redactedStub = o.optBoolean("redactedStub", false),
+                sourceKey = if (o.has("sourceKey")) o.optString("sourceKey") else null
             )
         }
     } catch (e: Exception) {

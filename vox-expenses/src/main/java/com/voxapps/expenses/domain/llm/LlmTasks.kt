@@ -47,4 +47,10 @@ object LlmTasks {
      *  "$EXPENSE_ATTACHMENT_CAPTURE:$expenseId" — always an already-saved expense; a not-yet-saved
      *  record's attachments still use the older system-camera capture path, out of scope here. */
     const val EXPENSE_ATTACHMENT_CAPTURE = "EXPENSE_ATTACHMENT_CAPTURE"
+
+    /** A screenshot of the notification shade, OCR'd to recover the figures a redacted delivery
+     *  withheld — the fallback for when the accessibility tree comes up empty (see
+     *  [com.voxapps.expenses.receiver.RedactedStubRecovery]). Creates nothing: the recognised text
+     *  is matched back onto the waiting stubs, which stay in review. */
+    const val SHADE_OCR = "SHADE_OCR"
 }

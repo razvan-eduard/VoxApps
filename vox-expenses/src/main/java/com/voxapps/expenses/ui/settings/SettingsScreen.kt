@@ -13,6 +13,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import com.voxapps.design.settings.SettingsSectionCard
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -334,8 +339,12 @@ fun SettingsScreen(
                 ),
                 modifier = mod
             )
-            SettingsPage.NOTIFICATIONS -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+            SettingsPage.NOTIFICATIONS -> Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(pad).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 ExpensesNotificationCard(settings, stateManager, languageManager, pickSound, triggerPreview)
+                PermanentNotificationCard(settings, stateManager, languageManager)
             }
             SettingsPage.VOICE -> VoiceSettingsTab(
                 settings = settings,
@@ -501,6 +510,69 @@ fun SettingsScreen(
  * quietly divergent copy. [extra] is where that page's own on/off row goes — see
  * [com.voxapps.design.settings.NotificationSettingsCard].
  */
+/**
+ * The standing notification, configured: a master switch that runs (or stops) the presence service,
+ * and — because the notification is there anyway — a few switches for what it shows. Its real job is
+ * keeping the app alive so payments are caught live; the dashboard is the use it is put to meanwhile.
+ */
+@Composable
+private fun PermanentNotificationCard(
+    settings: ExpensesSettings,
+    stateManager: ExpensesStateManager,
+    languageManager: com.voxapps.expenses.domain.localization.LanguageManager
+) {
+    val context = LocalContext.current
+    SettingsSectionCard(languageManager.getString("permanent_notif_label")) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                languageManager.getString("permanent_notif_desc"),
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = settings.permanentNotificationEnabled,
+                onCheckedChange = {
+                    stateManager.setPermanentNotificationEnabled(it)
+                    if (it) com.voxapps.expenses.receiver.RescanGuard.start(context)
+                    else com.voxapps.expenses.receiver.RescanGuard.stop(context)
+                }
+            )
+        }
+        if (settings.permanentNotificationEnabled) {
+            NotifContentRow(languageManager.getString("permanent_notif_today"), settings.notifShowToday) {
+                stateManager.setNotifShowToday(it)
+            }
+            NotifContentRow(languageManager.getString("permanent_notif_count"), settings.notifShowTodayCount) {
+                stateManager.setNotifShowTodayCount(it)
+            }
+            NotifContentRow(languageManager.getString("permanent_notif_income"), settings.notifShowTodayIncome) {
+                stateManager.setNotifShowTodayIncome(it)
+            }
+            NotifContentRow(languageManager.getString("permanent_notif_week"), settings.notifShowWeek) {
+                stateManager.setNotifShowWeek(it)
+            }
+            NotifContentRow(languageManager.getString("permanent_notif_month"), settings.notifShowMonth) {
+                stateManager.setNotifShowMonth(it)
+            }
+            NotifContentRow(languageManager.getString("permanent_notif_review"), settings.notifShowReviewCount) {
+                stateManager.setNotifShowReviewCount(it)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotifContentRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
 @Composable
 private fun ExpensesNotificationCard(
     settings: ExpensesSettings,

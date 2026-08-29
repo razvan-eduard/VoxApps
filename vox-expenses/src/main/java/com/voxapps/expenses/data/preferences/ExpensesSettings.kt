@@ -125,6 +125,20 @@ data class ExpensesSettings(
      * and not worth it otherwise.
      */
     val captureAmountlessPayments: Boolean = false,
+    /** Enables shade recovery: a redacted capture keeps its source and waits as a stub the standing
+     *  notification can rescan. The rescan surface itself is the permanent notification below. */
+    val guardNotificationEnabled: Boolean = false,
+    /** The standing (foreground-service) notification: keeps the app and its listener alive, and
+     *  shows a small dashboard. The presence is why it exists; the dashboard is what it shows since
+     *  it must show something. Off by default. */
+    val permanentNotificationEnabled: Boolean = false,
+    /** What the standing notification shows, each independently. */
+    val notifShowToday: Boolean = true,
+    val notifShowWeek: Boolean = false,
+    val notifShowMonth: Boolean = false,
+    val notifShowTodayCount: Boolean = false,
+    val notifShowTodayIncome: Boolean = false,
+    val notifShowReviewCount: Boolean = true,
     /**
      * Whether a card or account read out of a capture becomes a record by itself.
      *

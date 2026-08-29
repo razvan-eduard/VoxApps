@@ -186,7 +186,11 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             // told about, its own and its cards'.
             settings.knownCurrencies(
                 container.expensesRepository.bankAccounts.first().map { it.currencyCode }
-            )
+            ),
+            // A starred banking source is already known to be a payment, so a title-shaped merchant
+            // with no designator or card to anchor it — "Café", "37,00 RON" — may take the figure as
+            // its anchor. Never for an unstarred source, where the figure is too weak a signal.
+            amountAnchorsVendor = sbn.packageName in settings.bankingSourcePackages
         )
         val bankName = preParse.bank ?: knownBankName
         // The template axis: reduce the message to its template's byte-shape and ask the memory
@@ -216,7 +220,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             direction = inheritedDirection,
             knownPayment = paymentKnown,
             fromStarredBank = sbn.packageName in settings.bankingSourcePackages,
-            redacted = redacted
+            redacted = redacted,
+            sourceKey = sbn.key
         )
         val flow = com.voxapps.expenses.domain.llm.NotificationExpenseFlow(applicationContext, container)
         val outcome = com.voxapps.recordflow.RecordFlow.dispatch(
@@ -233,7 +238,16 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // must stay eligible for the next attempt.
         if (outcome !is com.voxapps.recordflow.RecordFlow.Outcome.Asked) {
             processedKeys.markProcessed(sbn.key)
-            maybeDismiss(sbn.key, flow.kept, settings)
+            // A gutted capture must NOT clear its source when recovery is on: the shade copy is the
+            // last complete record of the payment, and the one thing the stub can still be
+            // recovered from. Off, there is nothing to recover it with, so it dismisses as usual.
+            if (redacted && flow.kept == com.voxapps.expenses.domain.llm.NotificationExpenseFlow.Kept.REVIEW &&
+                settings.guardNotificationEnabled
+            ) {
+                RescanGuard.stubQueued(applicationContext)
+            } else {
+                maybeDismiss(sbn.key, flow.kept, settings)
+            }
         }
     }
 
