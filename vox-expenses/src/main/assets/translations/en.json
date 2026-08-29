@@ -716,7 +716,7 @@
   "hint_recurring_title": "Recurring payments",
   "hint_recurring_body": "Payments that keep coming back are proposed here rather than declared by you. Confirming one shows its next arrival as a dotted row and reminds you before it is due.",
   "hint_backup_title": "Backup and restore",
-  "hint_backup_body": "A backup carries your records, categories, cards and rules. Restoring offers three modes; the safest one deletes only what existed when the backup was taken.",
+  "hint_backup_body": "A backup carries your records, categories, cards, recipients and rules. Restoring offers three modes; the safest one deletes only what existed when the backup was taken.",
   "remap_rule_or": "OR",
   "remap_rule_add_alternative": "Add alternative",
   "remap_rule_suggestions_label": "Also true of these records",

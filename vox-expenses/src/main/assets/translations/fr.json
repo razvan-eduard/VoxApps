@@ -716,7 +716,7 @@
   "hint_recurring_title": "Paiements récurrents",
   "hint_recurring_body": "Les paiements qui reviennent sont proposés ici plutôt que déclarés par vous. En confirmer un affiche la prochaine échéance en ligne pointillée et vous rappelle avant.",
   "hint_backup_title": "Sauvegarde et restauration",
-  "hint_backup_body": "Une sauvegarde emporte vos enregistrements, catégories, cartes et règles. La restauration propose trois modes ; le plus sûr ne supprime que ce qui existait lors de la sauvegarde.",
+  "hint_backup_body": "Une sauvegarde emporte vos enregistrements, catégories, cartes, destinataires et règles. La restauration propose trois modes ; le plus sûr ne supprime que ce qui existait lors de la sauvegarde.",
   "remap_rule_or": "OU",
   "remap_rule_add_alternative": "Ajouter une alternative",
   "remap_rule_suggestions_label": "Vrai aussi pour ces enregistrements",

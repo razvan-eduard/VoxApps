@@ -596,7 +596,10 @@ fun NotificationCaptureSettingsTab(
                     typed,
                     settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency }
                 )
-            }
+            },
+            // This screen already shows its own "Capturing payments" hint; the card's would be a
+            // second dialog on the same entrance.
+            showHint = false
         )
 
         // The one vocabulary that stays here: a refusal is a thing a notification says, and this

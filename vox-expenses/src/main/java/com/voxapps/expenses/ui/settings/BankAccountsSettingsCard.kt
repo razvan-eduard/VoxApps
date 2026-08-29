@@ -68,17 +68,22 @@ fun BankAccountsSettingsCard(
     /** Every bank the recogniser knows — reachable by searching, never listed outright. */
     knownBanks: List<String>,
     onAddBank: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Whether this card owns the screen's one hint. Off where it is embedded under a host that
+     *  already shows its own — the notifications screen — so a person is not met with two dialogs. */
+    showHint: Boolean = true
 ) {
     val languageManager = LocalLanguageManager.current
-    com.voxapps.onboarding.VoxHintDialog(
-        store = (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.voxapps.expenses.ExpensesApplication).container.hintStore,
-        hintKey = com.voxapps.onboarding.VoxHintKeys.BANK_ACCOUNTS,
-        title = languageManager.getString("hint_bank_accounts_title"),
-        body = languageManager.getString("hint_bank_accounts_body"),
-        okLabel = languageManager.getString("hint_ok"),
-        dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
-    )
+    if (showHint) {
+        com.voxapps.onboarding.VoxHintDialog(
+            store = (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.voxapps.expenses.ExpensesApplication).container.hintStore,
+            hintKey = com.voxapps.onboarding.VoxHintKeys.BANK_ACCOUNTS,
+            title = languageManager.getString("hint_bank_accounts_title"),
+            body = languageManager.getString("hint_bank_accounts_body"),
+            okLabel = languageManager.getString("hint_ok"),
+            dontShowAgainLabel = languageManager.getString("hint_dont_show_again")
+        )
+    }
     var editing by remember { mutableStateOf<BankAccount?>(null) }
     var pendingDelete by remember { mutableStateOf<BankAccount?>(null) }
     var adding by remember { mutableStateOf(false) }

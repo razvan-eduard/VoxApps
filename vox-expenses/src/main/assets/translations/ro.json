@@ -720,7 +720,7 @@
   "hint_recurring_title": "Plăți recurente",
   "hint_recurring_body": "Plățile care revin sunt propuse aici, nu declarate de tine. Confirmarea uneia îi arată următoarea sosire ca rând punctat și îți amintește înainte să fie scadentă.",
   "hint_backup_title": "Copie de siguranță",
-  "hint_backup_body": "O copie conține înregistrările, categoriile, cardurile și regulile. Restaurarea oferă trei moduri; cel mai sigur șterge doar ce exista când a fost făcută copia.",
+  "hint_backup_body": "O copie conține înregistrările, categoriile, cardurile, destinatarii și regulile. Restaurarea oferă trei moduri; cel mai sigur șterge doar ce exista când a fost făcută copia.",
   "remap_rule_or": "SAU",
   "remap_rule_add_alternative": "Adaugă alternativă",
   "remap_rule_suggestions_label": "Valabil și pentru aceste înregistrări",

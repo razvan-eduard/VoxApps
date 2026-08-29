@@ -716,7 +716,7 @@
   "hint_recurring_title": "Wiederkehrende Zahlungen",
   "hint_recurring_body": "Zahlungen, die wiederkommen, werden hier vorgeschlagen statt von dir erklärt. Bestätigst du eine, erscheint die nächste als gepunktete Zeile und erinnert dich vor Fälligkeit.",
   "hint_backup_title": "Sicherung und Wiederherstellung",
-  "hint_backup_body": "Eine Sicherung trägt Einträge, Kategorien, Karten und Regeln. Die Wiederherstellung bietet drei Modi; der sicherste löscht nur, was bei der Sicherung vorhanden war.",
+  "hint_backup_body": "Eine Sicherung trägt Einträge, Kategorien, Karten, Empfänger und Regeln. Die Wiederherstellung bietet drei Modi; der sicherste löscht nur, was bei der Sicherung vorhanden war.",
   "remap_rule_or": "ODER",
   "remap_rule_add_alternative": "Alternative hinzufügen",
   "remap_rule_suggestions_label": "Trifft auch auf diese Einträge zu",
