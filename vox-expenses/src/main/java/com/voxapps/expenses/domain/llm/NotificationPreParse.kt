@@ -31,9 +31,12 @@ object NotificationPreParse {
         title: String?,
         text: String?,
         vocabularies: List<VocabularyClassifier.Vocabulary>,
-        knownCurrencies: Set<String> = emptySet()
+        knownCurrencies: Set<String> = emptySet(),
+        /** Passed on to [TwoFieldPreParse.parse] — true only for a starred banking source, where the
+         *  figure alone may name a title-shaped merchant with no designator or card to anchor it. */
+        amountAnchorsVendor: Boolean = false
     ): TwoFieldPreParse.Result =
-        TwoFieldPreParse.parse(title, text, vocabularies, ROLES, knownCurrencies)
+        TwoFieldPreParse.parse(title, text, vocabularies, ROLES, knownCurrencies, amountAnchorsVendor)
 
     /**
      * `Vendor Category`, or whichever half is known. Composed rather than modelled: with the

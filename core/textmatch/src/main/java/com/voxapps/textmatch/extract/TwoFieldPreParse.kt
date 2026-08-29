@@ -75,7 +75,17 @@ object TwoFieldPreParse {
         roles: Roles,
         /** The currencies this app already deals in. A spelling that names one currency ignores
          *  them; one that names several resolves only against these — see [CurrencyCodes.codeOf]. */
-        knownCurrencies: Set<String> = emptySet()
+        knownCurrencies: Set<String> = emptySet(),
+        /**
+         * Whether the figure alone may anchor the leftover vendor. Off, a merchant is named only
+         * when a bank token, a legal designator or a known name pins it — a bare "Café / 37 RON"
+         * yields no vendor, because nothing structural says the title is a shop. On, the field
+         * carrying the figure is taken as the transaction detail and the other short field as the
+         * merchant, the same shape the bank token anchors. Only a caller that already knows the
+         * message is a payment (a starred banking source) should pass true; for anything else the
+         * figure is too weak a signal and would name a generic title.
+         */
+        amountAnchorsVendor: Boolean = false
     ): Result {
         val fields = listOf(title?.trim().orEmpty(), text?.trim().orEmpty())
         val findings = VocabularyClassifier.classifyFields(fields, vocabularies)
@@ -137,11 +147,19 @@ object TwoFieldPreParse {
         }
 
         val vendor = vendorFromFullerName ?: vendorFromLegal ?: run {
-            // The leftover rule: a bank claimed one field and nothing claimed the other — the
-            // other is the vendor, when it is name-shaped rather than a sentence.
-            if (namedFields.isEmpty() && legalFields.isEmpty() && bankFields.size == 1) {
-                nameOrNull(fields[1 - bankFields.single()])
-            } else null
+            when {
+                // The leftover rule: a bank claimed one field and nothing claimed the other — the
+                // other is the vendor, when it is name-shaped rather than a sentence.
+                namedFields.isEmpty() && legalFields.isEmpty() && bankFields.size == 1 ->
+                    nameOrNull(fields[1 - bankFields.single()])
+                // The same shape with the figure as the anchor instead of a bank token — only for a
+                // caller that already knows this is a payment (see [amountAnchorsVendor]). Requires
+                // the figure in exactly one field and no bank token anywhere, so it never overrides
+                // the bank-anchored reading above.
+                amountAnchorsVendor && namedFields.isEmpty() && legalFields.isEmpty() && bankFields.isEmpty() ->
+                    amountFieldIndex(fields)?.let { nameOrNull(fields[1 - it]) }
+                else -> null
+            }
         }
 
         return Result(
@@ -189,5 +207,14 @@ object TwoFieldPreParse {
         val values = fields.flatMap { f -> CurrencyMarkedAmounts.find(f) }
             .map { it.value }.distinct()
         return values.singleOrNull()?.takeIf { it > 0.0 }
+    }
+
+    /**
+     * The index of the one field that carries a currency-marked figure, or null when neither does or
+     * both do — so the amount anchors a vendor only when it unambiguously belongs to one side.
+     */
+    private fun amountFieldIndex(fields: List<String>): Int? {
+        val withAmount = fields.indices.filter { CurrencyMarkedAmounts.find(fields[it]).isNotEmpty() }
+        return withAmount.singleOrNull()
     }
 }
