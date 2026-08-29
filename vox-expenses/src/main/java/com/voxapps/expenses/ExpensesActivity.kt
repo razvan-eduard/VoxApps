@@ -77,6 +77,12 @@ class ExpensesActivity : FragmentActivity() {
         super.onResume()
         // Re-lock if the session window expired while we were backgrounded (return from Recent Apps).
         container.expensesStateManager.recheckLock()
+        // From here the app is unambiguously foreground, so a foreground-service start is allowed —
+        // the reliable moment to (re)raise the presence service after an OEM kill left it down, since
+        // Application.onCreate can run before the process is TOP and be refused.
+        if (container.settingsRepository.getSnapshot().permanentNotificationEnabled) {
+            com.voxapps.expenses.receiver.RescanGuard.start(this)
+        }
     }
 
     private fun promptUnlock() {

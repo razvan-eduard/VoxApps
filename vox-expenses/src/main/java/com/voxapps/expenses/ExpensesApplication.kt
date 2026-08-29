@@ -52,6 +52,12 @@ class ExpensesApplication : Application(), VoxLlmQueueHost {
         SpendingLimitScheduler.ensureScheduled(this)
         ArchivePurgeScheduler.ensureScheduled(this)
         RecurringPaymentScheduler.ensureScheduled(this)
+        // The presence service that keeps this app (and its notification listener) alive against OEM
+        // hibernation — brought up on every process start when the person has opted in, since a
+        // background capture can't reliably start a foreground service itself on Android 12+.
+        if (settingsSnapshot.permanentNotificationEnabled) {
+            com.voxapps.expenses.receiver.RescanGuard.start(this)
+        }
         PendingLlmRequestScheduler.ensureScheduled(this)
         WidgetMidnightRefreshScheduler.ensureScheduled(this)
 

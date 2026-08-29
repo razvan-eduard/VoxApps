@@ -63,7 +63,10 @@ data class CapturedNotification(
     val fromStarredBank: Boolean = false,
     /** The system delivered this notification with its body withheld (its code-protection guard).
      *  There was never a text to read — a different fact from a text that carried no figure. */
-    val redacted: Boolean = false
+    val redacted: Boolean = false,
+    /** The source notification's key, carried so a redacted stub can point back at the shade copy
+     *  it will be recovered from — and dismiss it once recovered. */
+    val sourceKey: String? = null
 )
 
 /**
@@ -416,7 +419,11 @@ class NotificationExpenseFlow(
                 // The queue's own default, and the thing approving the entry confirms. A starting
                 // position for the reviewer, not a claim about the message.
                 direction = f?.direction ?: TransactionDirection.OUTGOING,
-                templateHash = f?.templateHash
+                templateHash = f?.templateHash,
+                // A capture the platform delivered gutted keeps its link to the shade copy — the
+                // one place the payment still exists whole, and the place it can be recovered from.
+                redactedStub = f?.redacted == true,
+                sourceKey = f?.sourceKey.takeIf { f?.redacted == true }
             )
         )
         kept = Kept.REVIEW

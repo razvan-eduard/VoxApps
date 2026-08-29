@@ -37,6 +37,13 @@
          while backgrounded, silently missing payment notifications posted during the gap. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- The opt-in "recover payments hidden by the system" presence service (RescanGuardService) —
+         a foreground service whose sole purpose is to keep this app, and its notification listener,
+         alive against OEM background-hibernation, so payments are caught live rather than only
+         recovered redacted from the shade. specialUse because it fits no media/location/etc. type. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <!--
         The COMMAND/LLM_RESULT/OCR_RESULT/LLM_PROCESS signature permissions guarding the receivers
         below are declared once in :core:ipc's own manifest (shared across every Vox app) and folded
@@ -135,6 +142,23 @@
             </intent-filter>
         </service>
 
+        <!-- Optional recovery path for notifications the platform delivers with their body withheld
+             (its code-protection guard). Reads the amount off the shade the person opens; does
+             nothing until they enable it in From Notifications and tap Rescan. BIND_ACCESSIBILITY_
+             SERVICE restricts binding to the system. -->
+        <service
+            android:name=".receiver.ShadeReaderService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/shade_reader_config" />
+        </service>
+
         <!-- Grants Hub temporary read access to a zipped bundle of receipt photos during export
              (see VoxResult.attachmentUri) — mirrors vox-vision's identical FileProvider setup for
              the same reason (sharing a locally-built file across app processes). -->
@@ -147,6 +171,23 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Notification-action taps (Rescan) and the build-time shade-capture probe. Not exported:
+             the Rescan PendingIntent is created in-process, and the probe is fired via adb with the
+             app's own uid. -->
+        <receiver
+            android:name=".receiver.ExpenseActionReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".receiver.RescanGuardService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the payment-notification reader alive and shows the running expense total with a recovery action for notifications the system hid." />
+        </service>
 
         <receiver
             android:name=".ui.widget.ExpensesWidgetReceiver"

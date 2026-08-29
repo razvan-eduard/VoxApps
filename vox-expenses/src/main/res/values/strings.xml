@@ -4,4 +4,7 @@
          assets/translations/*.json, loaded via LanguageManager (see utils/Strings.kt). -->
     <string name="app_name">Vox Expenses</string>
     <string name="expenses_widget_label">Vox Expenses</string>
+    <!-- Shown on the system accessibility-settings screen for this service. Kept in the
+         Android-required resource because the OS reads it before the app's own strings load. -->
+    <string name="shade_reader_description">Lets Vox Expenses read a payment amount off the notification shade you open, for notifications the system delivered with their content hidden. It reads nothing on its own and acts only when you tap Rescan.</string>
 </resources>

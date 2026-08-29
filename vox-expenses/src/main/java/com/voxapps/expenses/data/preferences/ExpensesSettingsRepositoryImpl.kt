@@ -39,6 +39,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val NOTIFICATION_MODEL_USE = stringPreferencesKey("notification_model_use")
         val NOTIFICATION_ASSUMED_DIRECTION = stringPreferencesKey("notification_assumed_direction")
         val CAPTURE_AMOUNTLESS_PAYMENTS = booleanPreferencesKey("capture_amountless_payments")
+        val GUARD_NOTIFICATION_ENABLED = booleanPreferencesKey("guard_notification_enabled")
+        val PERMANENT_NOTIFICATION_ENABLED = booleanPreferencesKey("permanent_notification_enabled")
+        val NOTIF_SHOW_TODAY = booleanPreferencesKey("notif_show_today")
+        val NOTIF_SHOW_WEEK = booleanPreferencesKey("notif_show_week")
+        val NOTIF_SHOW_MONTH = booleanPreferencesKey("notif_show_month")
+        val NOTIF_SHOW_TODAY_COUNT = booleanPreferencesKey("notif_show_today_count")
+        val NOTIF_SHOW_TODAY_INCOME = booleanPreferencesKey("notif_show_today_income")
+        val NOTIF_SHOW_REVIEW_COUNT = booleanPreferencesKey("notif_show_review_count")
         val AUTO_CREATE_ACCOUNTS_SCANS = booleanPreferencesKey("auto_create_accounts_scans")
         val AUTO_CREATE_ACCOUNTS_NOTIFICATIONS = booleanPreferencesKey("auto_create_accounts_notifications")
         val LEARN_NAMES_NOTIFICATIONS = booleanPreferencesKey("learn_names_from_notifications")
@@ -142,6 +150,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
                 ?.takeIf { it in ExpensesSettings.ASSUMED_DIRECTION_CHOICES }
                 ?: ExpensesSettings.ASSUME_NOTHING,
             captureAmountlessPayments = prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] ?: false,
+            guardNotificationEnabled = prefs[Keys.GUARD_NOTIFICATION_ENABLED] ?: false,
+            permanentNotificationEnabled = prefs[Keys.PERMANENT_NOTIFICATION_ENABLED] ?: false,
+            notifShowToday = prefs[Keys.NOTIF_SHOW_TODAY] ?: true,
+            notifShowWeek = prefs[Keys.NOTIF_SHOW_WEEK] ?: false,
+            notifShowMonth = prefs[Keys.NOTIF_SHOW_MONTH] ?: false,
+            notifShowTodayCount = prefs[Keys.NOTIF_SHOW_TODAY_COUNT] ?: false,
+            notifShowTodayIncome = prefs[Keys.NOTIF_SHOW_TODAY_INCOME] ?: false,
+            notifShowReviewCount = prefs[Keys.NOTIF_SHOW_REVIEW_COUNT] ?: true,
             autoCreateAccountsFromScans = prefs[Keys.AUTO_CREATE_ACCOUNTS_SCANS] ?: false,
             autoCreateAccountsFromNotifications = prefs[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] ?: false,
             learnNamesFromNotifications = prefs[Keys.LEARN_NAMES_NOTIFICATIONS] ?: true,
@@ -344,6 +360,21 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setCaptureAmountlessPayments(enabled: Boolean) {
         dataStore.edit { it[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = enabled }
     }
+
+    override suspend fun setGuardNotificationEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.GUARD_NOTIFICATION_ENABLED] = enabled }
+    }
+
+    override suspend fun setPermanentNotificationEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.PERMANENT_NOTIFICATION_ENABLED] = enabled }
+    }
+
+    override suspend fun setNotifShowToday(enabled: Boolean) { dataStore.edit { it[Keys.NOTIF_SHOW_TODAY] = enabled } }
+    override suspend fun setNotifShowWeek(enabled: Boolean) { dataStore.edit { it[Keys.NOTIF_SHOW_WEEK] = enabled } }
+    override suspend fun setNotifShowMonth(enabled: Boolean) { dataStore.edit { it[Keys.NOTIF_SHOW_MONTH] = enabled } }
+    override suspend fun setNotifShowTodayCount(enabled: Boolean) { dataStore.edit { it[Keys.NOTIF_SHOW_TODAY_COUNT] = enabled } }
+    override suspend fun setNotifShowTodayIncome(enabled: Boolean) { dataStore.edit { it[Keys.NOTIF_SHOW_TODAY_INCOME] = enabled } }
+    override suspend fun setNotifShowReviewCount(enabled: Boolean) { dataStore.edit { it[Keys.NOTIF_SHOW_REVIEW_COUNT] = enabled } }
 
     override suspend fun setAutoCreateAccountsFromScans(enabled: Boolean) {
         dataStore.edit { it[Keys.AUTO_CREATE_ACCOUNTS_SCANS] = enabled }
@@ -646,6 +677,14 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.NOTIFICATION_MODEL_USE] = settings.notificationModelUse
             prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION] = settings.notificationAssumedDirection
             prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = settings.captureAmountlessPayments
+            prefs[Keys.GUARD_NOTIFICATION_ENABLED] = settings.guardNotificationEnabled
+            prefs[Keys.PERMANENT_NOTIFICATION_ENABLED] = settings.permanentNotificationEnabled
+            prefs[Keys.NOTIF_SHOW_TODAY] = settings.notifShowToday
+            prefs[Keys.NOTIF_SHOW_WEEK] = settings.notifShowWeek
+            prefs[Keys.NOTIF_SHOW_MONTH] = settings.notifShowMonth
+            prefs[Keys.NOTIF_SHOW_TODAY_COUNT] = settings.notifShowTodayCount
+            prefs[Keys.NOTIF_SHOW_TODAY_INCOME] = settings.notifShowTodayIncome
+            prefs[Keys.NOTIF_SHOW_REVIEW_COUNT] = settings.notifShowReviewCount
             prefs[Keys.AUTO_CREATE_ACCOUNTS_SCANS] = settings.autoCreateAccountsFromScans
             prefs[Keys.AUTO_CREATE_ACCOUNTS_NOTIFICATIONS] = settings.autoCreateAccountsFromNotifications
             prefs[Keys.LEARN_NAMES_NOTIFICATIONS] = settings.learnNamesFromNotifications

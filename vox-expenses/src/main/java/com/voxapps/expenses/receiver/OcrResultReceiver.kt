@@ -76,6 +76,19 @@ class OcrResultReceiver : BroadcastReceiver() {
         val isBatchReply = (isAttachmentCapture || isPendingScanCreate || isPendingFileCreate || isGroupRescan) &&
             result.rawText == null
 
+        // The shade-recovery fallback: recognised text off a notification-shade screenshot, matched
+        // back onto the redacted stubs waiting in review. Creates no record, so it never joins the
+        // scan-cleanup machinery below — it fills what it can and lets go of the staged image.
+        if (baseTask == LlmTasks.SHADE_OCR) {
+            if (result.status == VoxOcrResult.STATUS_SUCCESS) {
+                RedactedStubRecovery.fillFromOcrText(context, result.rawText)
+            } else {
+                Logger.w(TAG, "shade OCR failed: ${result.error}")
+                ShadeOcrBridge.cleanup(context)
+            }
+            return
+        }
+
         if (baseTask != LlmTasks.EXPENSE_SCAN_CLEANUP && baseTask != LlmTasks.EXPENSE_LINEITEMS_RESCAN && !isAttachmentCapture) {
             Logger.d(TAG, "Ignoring unknown OCR task: ${result.task}")
             return
