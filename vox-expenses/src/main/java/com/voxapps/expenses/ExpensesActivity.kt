@@ -80,9 +80,7 @@ class ExpensesActivity : FragmentActivity() {
         // From here the app is unambiguously foreground, so a foreground-service start is allowed —
         // the reliable moment to (re)raise the presence service after an OEM kill left it down, since
         // Application.onCreate can run before the process is TOP and be refused.
-        if (container.settingsRepository.getSnapshot().permanentNotificationEnabled) {
-            com.voxapps.expenses.receiver.RescanGuard.start(this)
-        }
+        com.voxapps.expenses.receiver.RescanGuard.startIfNeeded(this)
     }
 
     private fun promptUnlock() {

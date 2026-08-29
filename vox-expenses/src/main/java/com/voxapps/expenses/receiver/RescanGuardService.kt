@@ -59,6 +59,13 @@ class RescanGuardService : Service() {
             ) { expenses, pending, settings -> Triple(expenses, pending, settings) }
                 .collect { (expenses, pending, settings) ->
                     val content = compute(container, expenses, pending, settings)
+                    // One notification, present only while it has a reason to be: the standing
+                    // dashboard the person asked for, or a redacted payment waiting to be rescanned.
+                    // When neither holds, the service takes itself (and its notification) down.
+                    if (!settings.permanentNotificationEnabled && content.redactedStubs == 0) {
+                        stopForegroundAndSelf()
+                        return@collect
+                    }
                     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, build(content))
                 }
         }
@@ -121,12 +128,17 @@ class RescanGuardService : Service() {
         // Each line is independent — the person chose which of them earn a place. The rescan line is
         // not one of those: it is an action waiting, and it shows itself whenever something waits.
         val lines = buildList {
-            if (settings.notifShowToday) add(lang.getString("guard_fg_today").format(money(c.today)))
-            if (settings.notifShowTodayCount) add(lang.counted("guard_fg_count", c.todayCount))
-            if (settings.notifShowTodayIncome) add(lang.getString("guard_fg_income").format(money(c.todayIncome)))
-            if (settings.notifShowWeek) add(lang.getString("guard_fg_week").format(money(c.week)))
-            if (settings.notifShowMonth) add(lang.getString("guard_fg_month").format(money(c.month)))
-            if (settings.notifShowReviewCount && c.reviewCount > 0) add(lang.counted("guard_fg_review", c.reviewCount))
+            // The dashboard lines belong to the standing notification the person turned on. When it
+            // is off and the notification is here only to carry a pending rescan, none of them show
+            // — just the one line that is the reason it appeared.
+            if (settings.permanentNotificationEnabled) {
+                if (settings.notifShowToday) add(lang.getString("guard_fg_today").format(money(c.today)))
+                if (settings.notifShowTodayCount) add(lang.counted("guard_fg_count", c.todayCount))
+                if (settings.notifShowTodayIncome) add(lang.getString("guard_fg_income").format(money(c.todayIncome)))
+                if (settings.notifShowWeek) add(lang.getString("guard_fg_week").format(money(c.week)))
+                if (settings.notifShowMonth) add(lang.getString("guard_fg_month").format(money(c.month)))
+                if (settings.notifShowReviewCount && c.reviewCount > 0) add(lang.counted("guard_fg_review", c.reviewCount))
+            }
             if (c.redactedStubs > 0) add(lang.counted("rescan_persistent_body", c.redactedStubs))
         }
         val body = lines.joinToString("\n").ifBlank { lang.getString("guard_fg_idle") }
@@ -150,6 +162,12 @@ class RescanGuardService : Service() {
             builder.addAction(0, lang.getString("rescan_action"), rescan)
         }
         return builder.build()
+    }
+
+    private fun stopForegroundAndSelf() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+        else @Suppress("DEPRECATION") stopForeground(true)
+        stopSelf()
     }
 
     private fun startForegroundCompat(notification: android.app.Notification) {
