@@ -534,42 +534,51 @@ private fun PermanentNotificationCard(
                 checked = settings.permanentNotificationEnabled,
                 onCheckedChange = {
                     stateManager.setPermanentNotificationEnabled(it)
+                    // On, raise it now (we are foreground). Off, leave it to the service: it keeps
+                    // running while a redacted stub still needs rescanning and takes itself down
+                    // only once there is nothing left to show.
                     if (it) com.voxapps.expenses.receiver.RescanGuard.start(context)
-                    else com.voxapps.expenses.receiver.RescanGuard.stop(context)
                 }
             )
         }
-        if (settings.permanentNotificationEnabled) {
-            NotifContentRow(languageManager.getString("permanent_notif_today"), settings.notifShowToday) {
-                stateManager.setNotifShowToday(it)
-            }
-            NotifContentRow(languageManager.getString("permanent_notif_count"), settings.notifShowTodayCount) {
-                stateManager.setNotifShowTodayCount(it)
-            }
-            NotifContentRow(languageManager.getString("permanent_notif_income"), settings.notifShowTodayIncome) {
-                stateManager.setNotifShowTodayIncome(it)
-            }
-            NotifContentRow(languageManager.getString("permanent_notif_week"), settings.notifShowWeek) {
-                stateManager.setNotifShowWeek(it)
-            }
-            NotifContentRow(languageManager.getString("permanent_notif_month"), settings.notifShowMonth) {
-                stateManager.setNotifShowMonth(it)
-            }
-            NotifContentRow(languageManager.getString("permanent_notif_review"), settings.notifShowReviewCount) {
-                stateManager.setNotifShowReviewCount(it)
-            }
+        // Always shown, but reading off (and non-interactive) while the master is off — the stored
+        // choice is untouched, so turning the master back on brings each row back exactly as it was.
+        val on = settings.permanentNotificationEnabled
+        NotifContentRow(languageManager.getString("permanent_notif_today"), on && settings.notifShowToday, on) {
+            stateManager.setNotifShowToday(it)
+        }
+        NotifContentRow(languageManager.getString("permanent_notif_count"), on && settings.notifShowTodayCount, on) {
+            stateManager.setNotifShowTodayCount(it)
+        }
+        NotifContentRow(languageManager.getString("permanent_notif_income"), on && settings.notifShowTodayIncome, on) {
+            stateManager.setNotifShowTodayIncome(it)
+        }
+        NotifContentRow(languageManager.getString("permanent_notif_week"), on && settings.notifShowWeek, on) {
+            stateManager.setNotifShowWeek(it)
+        }
+        NotifContentRow(languageManager.getString("permanent_notif_month"), on && settings.notifShowMonth, on) {
+            stateManager.setNotifShowMonth(it)
+        }
+        NotifContentRow(languageManager.getString("permanent_notif_review"), on && settings.notifShowReviewCount, on) {
+            stateManager.setNotifShowReviewCount(it)
         }
     }
 }
 
 @Composable
-private fun NotifContentRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun NotifContentRow(label: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+        Text(
+            label,
+            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            color = if (enabled) androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+            else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.weight(1f)
+        )
+        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
     }
 }
 

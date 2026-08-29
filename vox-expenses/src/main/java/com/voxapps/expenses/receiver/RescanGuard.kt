@@ -41,9 +41,25 @@ object RescanGuard {
     }
 
     /**
-     * A payment came in hidden: say so once. The standing notification, if the person runs it,
-     * shows the rescan line on its own off the pending flow — this does not force the service up,
-     * so a stub still waits visibly in review even for someone who keeps no permanent notification.
+     * Brings the one notification up if it has a reason to exist: the standing dashboard the person
+     * asked for, or a redacted payment waiting to be rescanned. The place to call it whenever the
+     * app is unambiguously foreground (launch, resume), since a background start can be refused.
+     */
+    fun startIfNeeded(context: Context) {
+        val app = context.applicationContext as ExpensesApplication
+        CoroutineScope(Dispatchers.IO).launch {
+            val settings = app.container.settingsRepository.getSnapshot()
+            val hasStubs = app.container.pendingNotificationExpenseRepository.snapshot().any { it.redactedStub }
+            if (settings.permanentNotificationEnabled || (settings.guardNotificationEnabled && hasStubs)) {
+                start(context)
+            }
+        }
+    }
+
+    /**
+     * A payment came in hidden: say so once, and bring the one notification up to carry the rescan
+     * line. A background start can be refused on Android 12+, in which case the toast still lands
+     * and the notification appears the next time the app is opened (see [startIfNeeded] on resume).
      */
     fun stubQueued(context: Context) {
         val app = context.applicationContext as ExpensesApplication
@@ -54,6 +70,7 @@ object RescanGuard {
                     context, lang.getString("rescan_stub_toast"), android.widget.Toast.LENGTH_LONG
                 ).show()
             }
+            start(context)
         }
     }
 }
