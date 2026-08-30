@@ -1,5 +1,7 @@
 package com.voxapps.calendarapp.domain.llm
 
+import android.content.Context
+import android.widget.Toast
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.ipc.VoxSatelliteSchema
@@ -9,7 +11,9 @@ import com.voxapps.recordflow.FieldWeight
 import com.voxapps.recordflow.FlowSupport
 import com.voxapps.recordflow.RecordFlowSpec
 import com.voxapps.recordflow.RecordSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 /**
  * A spoken utterance becoming a calendar entry.
@@ -19,11 +23,14 @@ import kotlinx.coroutines.flow.first
  * "in a fortnight". The deterministic extractor this app uses for scanned pages settles digits and
  * declines everything else, which is right for a page and useless for a sentence.
  *
- * So the question is the whole of it, written as a template because Commander is what hears the
- * words. [read] does receive the sentence on both routes and settles nothing from it — the sentence
- * survives the round trip so that a rule *could* be applied here, not because one may be.
+ * So the full rung's question is the whole of it, written as a template because Commander is what
+ * hears the words, and the committed entry keeps the sentence as its description. The offline rung
+ * asks nothing and settles nothing: the sentence lands as a dateless to-do in the review list —
+ * [queueForReview] — because an entry filed on a guessed day is worse than one visibly waiting to
+ * be filed. A reply that cannot be used lands in the same place.
  */
 class CalendarVoiceFlow(
+    private val context: Context,
     private val container: CalendarContainer
 ) : RecordFlowSpec<String, String, CalendarEventParseResultParser.Parsed> {
 
@@ -56,14 +63,48 @@ class CalendarVoiceFlow(
         applies: (FieldWeight) -> Boolean
     ): Long? {
         val answer = parsed ?: return null
-        com.voxapps.calendarapp.receiver.LlmResultReceiver().routeParsed(container, answer)
+        // A reply landing at a rung that accepts nothing back is filed, not written — the level
+        // moved to the offline rung while this question was in flight.
+        if (!applies(FieldWeight.HEAD)) {
+            queueForReview(reading, parsed)
+            return null
+        }
+        com.voxapps.calendarapp.receiver.LlmResultReceiver().routeParsed(
+            container, answer, transcript = reading?.fields?.takeIf { it.isNotBlank() }
+        )
         return null
     }
 
-    /** A spoken entry the model could not read leaves no record: the speaker still knows what they
-     *  said, and this app keeps no list of half-heard things. */
+    /**
+     * The words, kept where a person will file them: a dateless to-do in a dedicated review list,
+     * created on first use. The list is found by its localized title, so changing the app language
+     * starts a fresh list under the new name — the old one keeps its items. Reached from the
+     * offline rung at dispatch and from a reply that could not be read.
+     */
     override suspend fun queueForReview(
         reading: DeterministicReading<String>?,
         parsed: CalendarEventParseResultParser.Parsed?
-    ) = Unit
+    ) {
+        val transcript = reading?.fields?.takeIf { it.isNotBlank() } ?: return
+        val title = container.languageManager.getString("voice_review_list_title")
+        val listId = container.toDoRepository.lists.first()
+            .firstOrNull { it.title.equals(title, ignoreCase = true) }?.id
+            ?: run {
+                val settings = container.settingsRepository.getSnapshot()
+                val layers = container.calendarRepository.layersSnapshot()
+                val layerId = settings.defaultLayerId
+                    ?: layers.firstOrNull { it.isDefault }?.id
+                    ?: layers.firstOrNull()?.id
+                    ?: return // no layer at all: nothing this could be filed under
+                container.toDoRepository.createList(title, layerId)
+            }
+        container.toDoRepository.addItem(listId, transcript)
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                context,
+                container.languageManager.getString("voice_queued_for_review"),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 }

@@ -8,7 +8,9 @@ package com.voxapps.notes.domain.llm
  * name, not to decide the final category.
  */
 object NoteScanCleanupPromptBuilder {
-    fun build(rawText: String, existingCategories: List<String>, languageCode: String): String {
+    /** The same question with the text left out, for the transport that supplies it — the voice
+     *  flow's promptTemplate. [build] is this with the text put in, so the two can never drift. */
+    fun buildTemplate(existingCategories: List<String>, languageCode: String): String {
         val categoriesLine = if (existingCategories.isEmpty()) {
             "No categories exist yet."
         } else {
@@ -30,7 +32,11 @@ object NoteScanCleanupPromptBuilder {
             Respond in the "$languageCode" language. Return ONLY a JSON object of the shape
             {"title": "...", "category": "...", "text": "..."}, no prose, no markdown.
 
-            OCR text: $rawText
+            OCR text: ${com.voxapps.ipc.VoxSatelliteSchema.INPUT_PLACEHOLDER}
         """.trimIndent()
     }
+
+    fun build(rawText: String, existingCategories: List<String>, languageCode: String): String =
+        buildTemplate(existingCategories, languageCode)
+            .replace(com.voxapps.ipc.VoxSatelliteSchema.INPUT_PLACEHOLDER, rawText)
 }

@@ -37,6 +37,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val AUTO_CREATE_VOICE_CATEGORY = booleanPreferencesKey("auto_create_voice_category")
         val SCAN_MODEL_USE = stringPreferencesKey("scan_model_use")
         val NOTIFICATION_MODEL_USE = stringPreferencesKey("notification_model_use")
+        val VOICE_MODEL_USE = stringPreferencesKey("voice_model_use")
         val NOTIFICATION_ASSUMED_DIRECTION = stringPreferencesKey("notification_assumed_direction")
         val CAPTURE_AMOUNTLESS_PAYMENTS = booleanPreferencesKey("capture_amountless_payments")
         val GUARD_NOTIFICATION_ENABLED = booleanPreferencesKey("guard_notification_enabled")
@@ -146,6 +147,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             notificationModelUse = prefs[Keys.NOTIFICATION_MODEL_USE]
                 ?.takeIf { it in ExpensesSettings.NOTIFICATION_MODEL_CHOICES }
                 ?: ExpensesSettings.NOTIFICATION_MODEL_FULL,
+            voiceModelUse = prefs[Keys.VOICE_MODEL_USE]
+                ?: ExpensesSettings.VOICE_FLOW_SUPPORT.default.name,
             notificationAssumedDirection = prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION]
                 ?.takeIf { it in ExpensesSettings.ASSUMED_DIRECTION_CHOICES }
                 ?: ExpensesSettings.ASSUME_NOTHING,
@@ -314,6 +317,11 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setNotificationModelUse(mode: String) {
         if (mode !in ExpensesSettings.NOTIFICATION_MODEL_CHOICES) return
         dataStore.edit { it[Keys.NOTIFICATION_MODEL_USE] = mode }
+    }
+
+    override suspend fun setVoiceModelUse(mode: String) {
+        if (ExpensesSettings.VOICE_FLOW_SUPPORT.supported.none { it.name == mode }) return
+        dataStore.edit { it[Keys.VOICE_MODEL_USE] = mode }
     }
 
     override suspend fun setWidgetBudgetMode(mode: String) {
@@ -675,6 +683,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.AUTO_CREATE_VOICE_CATEGORY] = settings.autoCreateVoiceCategory
             prefs[Keys.SCAN_MODEL_USE] = settings.scanModelUse
             prefs[Keys.NOTIFICATION_MODEL_USE] = settings.notificationModelUse
+            prefs[Keys.VOICE_MODEL_USE] = settings.voiceModelUse
             prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION] = settings.notificationAssumedDirection
             prefs[Keys.CAPTURE_AMOUNTLESS_PAYMENTS] = settings.captureAmountlessPayments
             prefs[Keys.GUARD_NOTIFICATION_ENABLED] = settings.guardNotificationEnabled

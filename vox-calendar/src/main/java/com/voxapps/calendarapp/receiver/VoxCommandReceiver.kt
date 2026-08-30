@@ -69,10 +69,11 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         // Through the flow rather than composing here: the same entry every other
                         // capture in this app goes through, leaving this receiver only the question
                         // of how a request travels.
+                        val settings = container.settingsRepository.getSnapshot()
                         RecordFlow.dispatch(
-                            spec = CalendarVoiceFlow(container),
+                            spec = CalendarVoiceFlow(context.applicationContext, container),
                             input = spoken,
-                            level = CalendarSettings.VOICE_FLOW_SUPPORT.default,
+                            level = CalendarSettings.voiceLevelOf(settings.voiceLlmLevel),
                             send = { task, prompt ->
                                 CalendarEventParseRequestSender.send(
                                     context = context.applicationContext,
@@ -90,20 +91,21 @@ class VoxCommandReceiver : BroadcastReceiver() {
             }
 
             VoxIpc.OP_GET_SCHEMA -> {
-                // See the collapsed voice-command plan: Commander fetches and caches this once
-                // (Integrations' Refresh button), not per voice command.
+                // Commander fetches and caches this (Integrations' Refresh button and the pushed
+                // updates in CalendarApplication), not per voice command. asksModel mirrors the
+                // chosen voice rung: at the offline one Commander sends the words as they are and
+                // the flow files them for review.
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settings = container.settingsRepository.getSnapshot()
-                        val layerNames = container.calendarRepository.layers.first().map { it.name }
-                        val todoListNames = container.toDoRepository.lists.first().map { it.title }
                         // Derived from the flow rather than restated: what this app tells Commander
                         // and what it does locally are then one declaration.
-                        val flow = com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow(container)
+                        val flow = com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow(context.applicationContext, container)
+                        val level = CalendarSettings.voiceLevelOf(settings.voiceLlmLevel)
                         val schema = VoxSatelliteSchema.of(
-                            asksModel = !flow.support.default.staysOnDevice,
-                            promptTemplate = flow.promptTemplate(flow.support.default.asks),
+                            asksModel = !level.staysOnDevice,
+                            promptTemplate = flow.promptTemplate(level.asks),
                             taskId = flow.taskId,
                             fieldSchemaVersion = GeneratedParsedSchema.VERSION
                         )

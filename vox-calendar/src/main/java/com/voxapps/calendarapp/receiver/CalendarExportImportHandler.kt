@@ -270,9 +270,16 @@ private fun CalendarSettings.toJson(): JSONObject =
 /** Returns Room/DataStore defaults for [CalendarSettings] if [this] isn't valid JSON for it (e.g. a
  *  corrupt/foreign import file) — Gson's reflection deserializer can't throw its way past a
  *  structurally-valid-but-wrong-shape JSON object, so this fails safe to the all-defaults instance
- *  rather than a partially-null one. */
+ *  rather than a partially-null one. [scanLlmLevel]/[voiceLlmLevel] get an extra null-coalesce —
+ *  Gson leaves them genuinely null when an older payload is missing the key entirely (see
+ *  [VoxSettingsRoundTrip]'s doc), and restore writes them into DataStore non-null. */
 private fun JSONObject.toCalendarSettings(): CalendarSettings =
-    VoxSettingsRoundTrip.parseOrDefault(toString(), CalendarSettings::class.java, CalendarSettings())
+    VoxSettingsRoundTrip.parseOrDefault(toString(), CalendarSettings::class.java, CalendarSettings()) { parsed ->
+        parsed.copy(
+            scanLlmLevel = parsed.scanLlmLevel ?: CalendarSettings().scanLlmLevel,
+            voiceLlmLevel = parsed.voiceLlmLevel ?: CalendarSettings().voiceLlmLevel
+        )
+    }
 
 private fun CalendarLayer.toJson(): JSONObject = JSONObject().apply {
     put("id", id)

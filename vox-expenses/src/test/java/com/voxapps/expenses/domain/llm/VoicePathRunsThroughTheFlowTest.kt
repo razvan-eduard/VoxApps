@@ -1,6 +1,10 @@
 package com.voxapps.expenses.domain.llm
 
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.recordflow.Decision
+import com.voxapps.recordflow.DeterministicReading
+import com.voxapps.recordflow.LlmLevel
+import com.voxapps.recordflow.RecordFlowPolicy
 import com.voxapps.recordflow.RecordSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -65,19 +69,72 @@ class VoicePathRunsThroughTheFlowTest {
         )
     }
 
+    /** The flow's statements only, same filter as [source] — the invariants below are properties
+     *  of the code rather than of a run. */
+    private fun flowSource(): String =
+        listOf(
+            "src/main/java/com/voxapps/expenses/domain/llm/ExpenseVoiceFlow.kt",
+            "vox-expenses/src/main/java/com/voxapps/expenses/domain/llm/ExpenseVoiceFlow.kt"
+        ).map(::File).first { it.exists() }.readText()
+            .lineSequence()
+            .filterNot { line ->
+                val t = line.trim()
+                t.startsWith("import ") || t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")
+            }
+            .joinToString("\n")
+
     /**
-     * One rung, declared as one rung.
+     * Two rungs, and the offline one only queues.
      *
-     * Not for want of the sentence — it now survives the round trip on both routes. For want of a
-     * safe rule: the only field a rule could settle is the amount, and a single currency-marked
-     * figure may be a per-unit price rather than a total. Asserted rather than left to be noticed,
-     * because the sentence being available again is exactly what would tempt the widening.
+     * The sentence survives the round trip, but no rule may prove it: the one field a rule could
+     * settle is the amount, and a single currency-marked figure may be a per-unit price rather than
+     * a total. So the offline rung lands the words in review instead of writing a record — the
+     * policy's own reading of a usable, unproven sentence — and the fullest rung stays the default
+     * an untouched install keeps.
      */
     @Test
-    fun `voice offers the fullest rung and nothing narrower`() {
+    fun `voice offers two rungs and the offline one only queues`() {
         val support = ExpensesSettings.VOICE_FLOW_SUPPORT
         assertEquals(RecordSource.VOICE, support.source)
-        assertEquals(setOf(support.default), support.supported)
-        assertFalse("a rung that asks nothing cannot make an expense from speech", support.default.staysOnDevice)
+        assertEquals(setOf(LlmLevel.NONE, LlmLevel.FULL), support.supported)
+        assertEquals(LlmLevel.FULL, support.default)
+        assertEquals(LlmLevel.FULL, ExpensesSettings.voiceLevelOf(ExpensesSettings().voiceModelUse))
+        assertEquals(
+            Decision.QUEUE_FOR_REVIEW,
+            RecordFlowPolicy.decide(
+                LlmLevel.NONE,
+                DeterministicReading("said out loud", usable = true, complete = false)
+            )
+        )
+    }
+
+    /** No rule may prove a spoken sentence, so the flow's reading declares itself incomplete. */
+    @Test
+    fun `the voice reading never proves itself`() {
+        assertTrue("read() must establish nothing", flowSource().contains("complete = false"))
+    }
+
+    /** A reply that cannot be used still lands somewhere a person will see it. */
+    @Test
+    fun `a failed reply queues the utterance for review`() {
+        assertTrue(
+            "the failure branch files the sentence",
+            source("LlmResultReceiver").contains("spec.queueForReview(")
+        )
+        assertTrue(
+            "the review landing is a stub the record list surfaces",
+            flowSource().contains("isStub = true")
+        )
+    }
+
+    /** Both halves of the round trip honour the chosen rung, not the declaration's default. */
+    @Test
+    fun `both receivers read the chosen rung`() {
+        val command = source("VoxCommandReceiver")
+        val reply = source("LlmResultReceiver")
+        assertTrue(command.contains("voiceLevelOf("))
+        assertTrue(reply.contains("voiceLevelOf("))
+        assertFalse("the setting, not the default", command.contains("VOICE_FLOW_SUPPORT.default"))
+        assertFalse("the setting, not the default", reply.contains("VOICE_FLOW_SUPPORT.default"))
     }
 }

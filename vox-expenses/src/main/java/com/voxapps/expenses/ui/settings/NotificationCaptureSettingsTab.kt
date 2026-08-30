@@ -58,6 +58,8 @@ import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.receiver.PaymentNotificationListenerService
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
+import com.voxapps.recordflow.ui.RecordFlowLevelCard
+import com.voxapps.recordflow.ui.RecordFlowStrings
 import com.voxapps.expenses.ui.formatAmount
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -390,40 +392,27 @@ fun NotificationCaptureSettingsTab(
 
         }
 
-        SettingsSectionCard(languageManager.getString("notification_model_use_label")) {
-            Text(
-                languageManager.getString("notification_model_use_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val notificationModes = listOf(
-                ExpensesSettings.NOTIFICATION_MODEL_FULL to "notification_model_full",
-                ExpensesSettings.NOTIFICATION_MODEL_NONE to "notification_model_none"
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                for ((mode, key) in notificationModes) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { stateManager.setNotificationModelUse(mode) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = notificationModelUse == mode,
-                            onClick = { stateManager.setNotificationModelUse(mode) }
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                languageManager.getString(key + "_desc"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        // The shared level card rather than hand-rolled radios: the same control scan and voice
+        // use, reading NOTIFICATION_FLOW_SUPPORT so what the UI offers and what the flow honours
+        // are one declaration. The stored value stays a rung name notificationLevelOf reads back.
+        RecordFlowLevelCard(
+            support = ExpensesSettings.NOTIFICATION_FLOW_SUPPORT,
+            level = ExpensesSettings.notificationLevelOf(notificationModelUse),
+            strings = RecordFlowStrings(
+                title = languageManager.getString("notification_model_use_label"),
+                sendNothing = languageManager.getString("flow_send_nothing"),
+                sendNothingDesc = languageManager.getString("notification_model_none_desc"),
+                sendMissing = languageManager.getString("flow_send_missing"),
+                sendMissingDesc = languageManager.getString("flow_send_missing_desc"),
+                sendHead = languageManager.getString("flow_send_head"),
+                sendHeadDesc = languageManager.getString("flow_send_head_desc"),
+                sendEverything = languageManager.getString("flow_send_everything"),
+                sendEverythingDesc = languageManager.getString("notification_model_full_desc"),
+                fillHead = languageManager.getString("scan_fill_head"),
+                cannotSuggest = languageManager.getString("flow_cannot_suggest")
+            ),
+            onLevelChange = { stateManager.setNotificationModelUse(it.name) }
+        )
 
         SettingsSectionCard(languageManager.getString("capture_amountless_label")) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -488,7 +477,7 @@ fun NotificationCaptureSettingsTab(
 
         // Only where it can act. With the text going to a model, the model answers the direction
         // and this never runs — showing it there would offer a choice with no effect.
-        if (notificationModelUse == ExpensesSettings.NOTIFICATION_MODEL_NONE) {
+        if (ExpensesSettings.notificationLevelOf(notificationModelUse).staysOnDevice) {
             SettingsSectionCard(languageManager.getString("notification_assumed_direction_label")) {
                 Text(
                     languageManager.getString("notification_assumed_direction_desc"),

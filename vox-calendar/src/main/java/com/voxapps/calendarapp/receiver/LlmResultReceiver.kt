@@ -91,20 +91,26 @@ class LlmResultReceiver : BroadcastReceiver() {
                         val spokenInput = result.input?.takeIf { it.isNotBlank() }
                             ?: container.pendingLlmRequestQueue.originalInput(requestId)
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        // Through the flow, same as a scanned page: reading the answer and
+                        // deciding what becomes of it is the flow's, and marking the request
+                        // handled is this receiver's.
+                        val spec = CalendarVoiceFlow(context, container)
                         if (succeeded) {
-                            // Through the flow, same as a scanned page: reading the answer and
-                            // deciding what becomes of it is the flow's, and marking the request
-                            // handled is this receiver's.
-                            val spec = CalendarVoiceFlow(container)
                             RecordFlow.deliver(
                                 spec = spec,
                                 // Re-read rather than carried: what a rule settles from a sentence is
                                 // the same on both sides of the round trip, so the sentence is what
                                 // has to survive it. Here that settles nothing — see the flow.
                                 reading = spokenInput?.let { spec.read(it) },
-                                level = CalendarSettings.VOICE_FLOW_SUPPORT.default,
+                                level = CalendarSettings.voiceLevelOf(
+                                    container.settingsRepository.getSnapshot().voiceLlmLevel
+                                ),
                                 reply = rawJson!!
                             )
+                        } else {
+                            // The reply could not be used; what was spoken still lands where a
+                            // person decides — a dateless to-do in the review list.
+                            spec.queueForReview(spokenInput?.let { spec.read(it) }, null)
                         }
                     } finally {
                         pending.finish()
@@ -167,16 +173,24 @@ class LlmResultReceiver : BroadcastReceiver() {
     /** Also the write point for [com.voxapps.calendarapp.domain.llm.CalendarScanFlow], so a scanned
      *  entry is created the one way whether or not a model answered — same arrangement expenses uses
      *  for its own createExpenseFromParsed. */
-    internal suspend fun routeParsed(container: CalendarContainer, parsed: CalendarEventParseResultParser.Parsed) {
+    internal suspend fun routeParsed(
+        container: CalendarContainer,
+        parsed: CalendarEventParseResultParser.Parsed,
+        /** The spoken sentence behind [parsed], kept as the entry's description so a misheard time
+         *  can be checked against what was said. The scan path passes nothing — its offline branch
+         *  writes the page text itself. A to-do item has no description to keep it in. */
+        transcript: String? = null
+    ) {
         when (parsed.kind) {
             ParsedKind.TODO -> createTodoItemFromParsed(container, parsed)
-            ParsedKind.EVENT, ParsedKind.TASK -> createEntryFromParsed(container, parsed)
+            ParsedKind.EVENT, ParsedKind.TASK -> createEntryFromParsed(container, parsed, transcript)
         }
     }
 
     private suspend fun createEntryFromParsed(
         container: CalendarContainer,
-        parsed: CalendarEventParseResultParser.Parsed
+        parsed: CalendarEventParseResultParser.Parsed,
+        transcript: String? = null
     ) {
         val settings = container.settingsRepository.getSnapshot()
         // Learned spelling corrections apply only on this LLM-capture path — subscribed-calendar
@@ -191,7 +205,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             title = com.voxapps.textmatch.extract.FieldCorrections.apply(
                 FieldCleaner.cleanRequired(parsed.title, parsed.title, "title", "CalendarEntry"), corrections
             ) ?: parsed.title,
-            description = null,
+            description = transcript?.trim()?.takeIf { it.isNotEmpty() },
             location = null,
             // Non-null enforced by CalendarEventParseResultParser.parse() for EVENT/TASK kinds.
             startMillis = parsed.startMillis!!,

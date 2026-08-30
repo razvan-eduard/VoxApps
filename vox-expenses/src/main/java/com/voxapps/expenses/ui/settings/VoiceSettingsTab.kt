@@ -24,6 +24,8 @@ import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import com.voxapps.design.settings.SettingsSectionCard
+import com.voxapps.recordflow.ui.RecordFlowLevelCard
+import com.voxapps.recordflow.ui.RecordFlowStrings
 
 /** Category-resolution defaults for expenses created via Commander's LLM pipeline — both voice
  *  ("Vox, add expense...") and scan cleanup share this same resolution logic (see
@@ -41,6 +43,26 @@ fun VoiceSettingsTab(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // --- How much of a spoken sentence the model is asked to read ---
+        RecordFlowLevelCard(
+            support = ExpensesSettings.VOICE_FLOW_SUPPORT,
+            level = ExpensesSettings.voiceLevelOf(settings.voiceModelUse),
+            strings = RecordFlowStrings(
+                title = languageManager.getString("voice_model_use"),
+                sendNothing = languageManager.getString("flow_send_nothing"),
+                sendNothingDesc = languageManager.getString("voice_send_nothing_desc"),
+                sendMissing = languageManager.getString("flow_send_missing"),
+                sendMissingDesc = languageManager.getString("flow_send_missing_desc"),
+                sendHead = languageManager.getString("flow_send_head"),
+                sendHeadDesc = languageManager.getString("flow_send_head_desc"),
+                sendEverything = languageManager.getString("flow_send_everything"),
+                sendEverythingDesc = languageManager.getString("voice_send_everything_desc"),
+                fillHead = languageManager.getString("scan_fill_head"),
+                cannotSuggest = languageManager.getString("flow_cannot_suggest")
+            ),
+            onLevelChange = { stateManager.setVoiceModelUse(it.name) }
+        )
+
         // --- Toast on voice save ---
         SettingsSectionCard(languageManager.getString("voice_save_toast")) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

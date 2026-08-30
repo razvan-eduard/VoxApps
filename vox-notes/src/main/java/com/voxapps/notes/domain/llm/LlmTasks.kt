@@ -9,6 +9,11 @@ package com.voxapps.notes.domain.llm
 object LlmTasks {
     const val CATEGORY_DEDUPLICATION = "CATEGORY_DEDUPLICATION"
     const val NOTE_SCAN_CLEANUP = "NOTE_SCAN_CLEANUP"
+
+    /** A spoken note sent for the same cleanup a scan gets (title/category/tidied text) — its own
+     *  task rather than [NOTE_SCAN_CLEANUP] because the two reply paths part ways on failure: an
+     *  unreadable voice reply commits the raw transcript, a scan one manages its retained photo. */
+    const val NOTE_PARSE = "NOTE_PARSE"
     const val NOTE_DEDUPLICATION = "NOTE_DEDUPLICATION"
 
     /** Live Vision capture for an "add an attachment" action (single/stitch/batch — see

@@ -4,6 +4,7 @@ import android.app.Application
 import com.voxapps.ipc.PendingLlmRequestScheduler
 import com.voxapps.ipc.VoxLlmQueueHost
 import com.voxapps.ipc.VoxLlmRequestQueue
+import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.di.CalendarContainer
 import com.voxapps.calendarapp.domain.llm.CalendarEventParsePromptBuilder
 import com.voxapps.calendarapp.domain.llm.GeneratedParsedSchema
@@ -59,20 +60,35 @@ class CalendarApplication : Application(), VoxLlmQueueHost {
             .drop(1)
             .map { it.map { l -> l.name } }
             .distinctUntilChanged()
-            .onEach {
-                // Composed by the flow, exactly as the on-demand fetch composes it — a pushed schema
-                // and a fetched one describing different arrangements is the failure this one
-                // declaration exists to prevent. The layer list is what changed; the flow reads the
-                // current one itself.
-                val flow = com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow(container)
-                val schema = VoxSatelliteSchema.of(
-                    asksModel = !flow.support.default.staysOnDevice,
-                    promptTemplate = flow.promptTemplate(flow.support.default.asks),
-                    taskId = flow.taskId,
-                    fieldSchemaVersion = GeneratedParsedSchema.VERSION
-                )
-                VoxDataTransferClient.pushSchemaChanged(this, schema)
-            }
+            .onEach { pushVoiceSchema() }
             .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+
+        // The same push when the chosen voice rung changes: asksModel and the template both follow
+        // it, and Commander acts on whichever schema it last cached.
+        container.settingsRepository.settingsFlow
+            .map { it.voiceLlmLevel }
+            .distinctUntilChanged()
+            .drop(1)
+            .onEach { pushVoiceSchema() }
+            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    }
+
+    /**
+     * Composed by the flow, exactly as the on-demand fetch composes it — a pushed schema and a
+     * fetched one describing different arrangements is the failure this one declaration exists to
+     * prevent. The flow reads the current layer and list names itself; the rung comes from the
+     * setting.
+     */
+    private suspend fun pushVoiceSchema() {
+        val settings = container.settingsRepository.getSnapshot()
+        val level = CalendarSettings.voiceLevelOf(settings.voiceLlmLevel)
+        val flow = com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow(this, container)
+        val schema = VoxSatelliteSchema.of(
+            asksModel = !level.staysOnDevice,
+            promptTemplate = flow.promptTemplate(level.asks),
+            taskId = flow.taskId,
+            fieldSchemaVersion = GeneratedParsedSchema.VERSION
+        )
+        VoxDataTransferClient.pushSchemaChanged(this, schema)
     }
 }

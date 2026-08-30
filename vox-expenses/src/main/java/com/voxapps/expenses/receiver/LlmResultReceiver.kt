@@ -156,7 +156,9 @@ class LlmResultReceiver : BroadcastReceiver() {
                                     // sentence is the same on both sides of the round trip, so the
                                     // sentence is what has to survive it, not the reading.
                                     reading = spokenInput?.let { spec.read(it) },
-                                    level = ExpensesSettings.VOICE_FLOW_SUPPORT.default,
+                                    level = ExpensesSettings.voiceLevelOf(
+                                        container.settingsRepository.getSnapshot().voiceModelUse
+                                    ),
                                     reply = rawJson!!
                                 )
                                 (outcome as? RecordFlow.Outcome.Committed)?.recordId ?: 0L
@@ -202,6 +204,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 Toast.makeText(context, "${container.languageManager.getString("manual_review_required")} ($errorMsg)", Toast.LENGTH_LONG).show()
                             }
                             launchExpensesForEdit(context.applicationContext, id)
+                        } else if (baseTask == LlmTasks.EXPENSE_PARSE) {
+                            // The reply could not be used; what was spoken still lands where a
+                            // person decides — a stub whose comments carry the sentence.
+                            Logger.w(TAG, "Voice parse failed, queueing the utterance for review. Error: ${result.error}")
+                            val spec = ExpenseVoiceFlow(context.applicationContext, container)
+                            spec.queueForReview(spokenInput?.let { spec.read(it) }, null)
                         } else {
                             Logger.w(TAG, "${result.task} failed and no recovery possible. Error: ${result.error}")
                             withContext(Dispatchers.Main) {
@@ -478,6 +486,9 @@ class LlmResultReceiver : BroadcastReceiver() {
          * it, which is every spoken one.
          */
         sourceText: String? = null,
+        /** The sentence the capture came from, kept on the record so a misheard figure can be
+         *  checked against what was said. Only the voice flow passes it. */
+        comments: String? = null,
         /** Where each field came from, from whoever assembled [parsed] — see [ExpenseOrigins]. */
         origins: Map<com.voxapps.recordflow.FieldOrigin, Set<String>> = emptyMap(),
         /** An account already resolved by the caller — see [ScanPreParse.bankAccountId]. Takes
@@ -532,7 +543,7 @@ class LlmResultReceiver : BroadcastReceiver() {
             vendor = FieldCleaner.clean(parsed.vendor, "vendor", "Expense"),
             bank = FieldCleaner.clean(parsed.bank, "bank", "Expense"),
             location = location,
-            comments = null,
+            comments = comments,
             dateTime = mergeDateTime(parsed.date, parsed.time),
             spokenCategory = FieldCleaner.clean(parsed.category, "category", "Expense"),
             defaultCategoryId = settings.defaultVoiceCategoryId,

@@ -1,0 +1,36 @@
+package com.voxapps.notes.domain.llm
+
+import android.content.Context
+import com.voxapps.ipc.VoxAppsDiscovery.COMMANDER_PACKAGE
+import com.voxapps.ipc.VoxLlmRequestQueue
+import com.voxapps.logging.Logger
+
+private const val TAG = "NoteParseRequestSender"
+
+/**
+ * Gets a spoken-note cleanup question to Commander and no further.
+ *
+ * What to ask is [NoteVoiceFlow]'s, and arrives already composed; this only knows how it travels —
+ * durably and retryably through [VoxLlmRequestQueue], since the reply comes back much later via
+ * [com.voxapps.notes.receiver.LlmResultReceiver] and the queued row is what still holds the
+ * transcript if the reply arrives without it.
+ */
+object NoteParseRequestSender {
+    suspend fun send(
+        context: Context,
+        queue: VoxLlmRequestQueue,
+        task: String,
+        promptText: String,
+        rawText: String
+    ) {
+        Logger.d(TAG, "Sending ACTION_LLM_PROCESS to $COMMANDER_PACKAGE for voice-note cleanup")
+        queue.enqueueAndSend(
+            context = context,
+            sourcePackage = context.packageName,
+            task = task,
+            promptText = promptText,
+            targetPackage = COMMANDER_PACKAGE,
+            data = listOf(rawText)
+        )
+    }
+}

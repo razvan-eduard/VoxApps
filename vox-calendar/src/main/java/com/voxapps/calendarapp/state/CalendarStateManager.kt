@@ -153,6 +153,7 @@ class CalendarStateManager(
     fun setAutoCreateLayer(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateLayer(enabled) } }
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanLlmLevel(level: String) { scope.launch { settingsRepo.setScanLlmLevel(level) } }
+    fun setVoiceLlmLevel(level: String) { scope.launch { settingsRepo.setVoiceLlmLevel(level) } }
     fun setDebugLoggingEnabled(enabled: Boolean) {
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }

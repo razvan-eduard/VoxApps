@@ -1,6 +1,8 @@
 package com.voxapps.expenses.domain.llm
 
 import android.content.Context
+import android.widget.Toast
+import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.di.ExpensesContainer
 import com.voxapps.recordflow.AskScope
@@ -11,7 +13,9 @@ import com.voxapps.recordflow.FieldWeight
 import com.voxapps.recordflow.FlowSupport
 import com.voxapps.recordflow.RecordFlowSpec
 import com.voxapps.recordflow.RecordSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 private const val TAG = "ExpenseVoiceFlow"
 
@@ -21,21 +25,18 @@ private const val TAG = "ExpenseVoiceFlow"
  * Unlike a note, a sentence is only half an expense: an amount can be spoken plainly, but which
  * merchant a name refers to and which category a purchase belongs to are judgements. So this flow
  * does have something to ask, and its question is written as a *template* rather than a sentence —
- * Commander hears the words and puts them in, which is why [promptTemplate] exists at all.
+ * Commander hears the words and puts them in, which is why [promptTemplate] exists at all. The
+ * sentence reaches [read] on both routes — this app's own queue holds it when this app asked, and
+ * `VoxLlmResult.input` carries it back when Commander asked from a cached template.
  *
- * The sentence does reach [read] on both routes — this app's own queue holds it when this app asked,
- * and `VoxLlmResult.input` carries it back when Commander asked from a cached template. It is still
- * read for nothing, and that is the honest state rather than an oversight.
- *
- * The one thing a rule could settle is the amount, and it cannot. A single currency-marked figure is
- * not the total: in "three loaves at ten each" the marked figure is the per-unit price, and telling
- * that from a cumulative one is the distributive/cumulative distinction — see
- * [DistributiveCumulativeRule], which is most of what this prompt teaches. That distinction is
- * carried by language, so a rule for it would need per-language markers, and a rule with a known
- * mislabel class is a guess wearing a rule's clothes. Hence one rung.
- *
- * What the recovered sentence is good for is checking rather than extracting: a figure the answer
- * reports that nobody spoke was invented. That is a guard for every rung, not a rung of its own.
+ * Two rungs. At the full one the model answers, and the record carries the sentence in its
+ * comments, so a misheard figure can be checked against what was said. At the offline one nothing
+ * is extracted, because no rule safely can: the one candidate is the amount, and a single
+ * currency-marked figure is not the total — in "three loaves at ten each" the marked figure is the
+ * per-unit price, and telling that from a cumulative one is the distributive/cumulative distinction
+ * (see [DistributiveCumulativeRule]), carried by language rather than arithmetic. So the offline
+ * rung files the sentence as a stub awaiting review — [queueForReview] — and never writes a
+ * finished record on its own.
  */
 class ExpenseVoiceFlow(
     private val context: Context,
@@ -71,12 +72,19 @@ class ExpenseVoiceFlow(
         applies: (FieldWeight) -> Boolean
     ): Long? {
         val answer = parsed ?: return null
+        // A reply landing at a rung that accepts nothing back is filed, not written — the level
+        // moved to the offline rung while this question was in flight.
+        if (!applies(FieldWeight.HEAD)) {
+            queueForReview(reading, parsed)
+            return null
+        }
         return com.voxapps.expenses.receiver.LlmResultReceiver().createExpenseFromParsed(
             appContext = context.applicationContext,
             container = container,
             parsed = answer,
             imageName = null,
             preParse = null,
+            comments = reading?.fields?.takeIf { it.isNotBlank() },
             // Nothing here was proved by anything: a sentence spoken aloud carries no arithmetic to
             // check it against, so every field the record has is the model's reading of it.
             origins = mapOf(
@@ -96,12 +104,33 @@ class ExpenseVoiceFlow(
     }
 
     /**
-     * Nothing said out loud is kept unfinished: a spoken expense the model could not read leaves no
-     * record, and the speaker is the one who knows what they said. The failure is announced where it
-     * happens rather than filed here.
+     * The words, kept where a person will finish them: a stub expense whose comments carry the
+     * sentence. Reached from the offline rung at dispatch and from a reply that could not be read.
      */
     override suspend fun queueForReview(
         reading: DeterministicReading<String>?,
         parsed: ExpenseParseResultParser.Parsed?
-    ) = Unit
+    ) {
+        val transcript = reading?.fields?.takeIf { it.isNotBlank() } ?: return
+        val settings = container.settingsRepository.getSnapshot()
+        container.expensesRepository.addExpense(
+            title = container.languageManager.getString("manual_review_required"),
+            totalAmount = 0.0,
+            currencyCode = settings.defaultCurrency,
+            vendor = null,
+            location = null,
+            dateTime = System.currentTimeMillis(),
+            comments = transcript,
+            categoryId = settings.defaultVoiceCategoryId,
+            isStub = true,
+            source = ExpenseSource.VOICE
+        )
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                context,
+                container.languageManager.getString("manual_review_required"),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 }

@@ -293,6 +293,7 @@ class ExpensesStateManager(
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanModelUse(mode: String) { scope.launch { settingsRepo.setScanModelUse(mode) } }
     fun setNotificationModelUse(mode: String) { scope.launch { settingsRepo.setNotificationModelUse(mode) } }
+    fun setVoiceModelUse(mode: String) { scope.launch { settingsRepo.setVoiceModelUse(mode) } }
     /**
      * The tour runs again, and every settings page explains itself again.
      *
