@@ -135,6 +135,7 @@ class NotesStateManager(
     fun setAttachPhotoOnScan(enabled: Boolean) { scope.launch { settingsRepo.setAttachPhotoOnScan(enabled) } }
     fun setScanImageRetention(mode: String) { scope.launch { settingsRepo.setScanImageRetention(mode) } }
     fun setScanLlmLevel(level: String) { scope.launch { settingsRepo.setScanLlmLevel(level) } }
+    fun setVoiceLlmLevel(level: String) { scope.launch { settingsRepo.setVoiceLlmLevel(level) } }
 
     // --- Attachments (generic per-note photos, both the scan-kept one and manually-added ones) ---
     fun observeAttachments(noteId: Long): Flow<List<AttachmentEntity>> =

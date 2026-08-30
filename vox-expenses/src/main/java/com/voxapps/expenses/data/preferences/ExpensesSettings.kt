@@ -104,6 +104,12 @@ data class ExpensesSettings(
      */
     val notificationModelUse: String = NOTIFICATION_MODEL_FULL,
     /**
+     * How much of a spoken expense the model is asked to do — a [LlmLevel] name from
+     * [VOICE_FLOW_SUPPORT]. At the offline rung the sentence stays on the device and is kept as a
+     * stub expense awaiting review; at the full rung it is sent for interpretation.
+     */
+    val voiceModelUse: String = VOICE_FLOW_SUPPORT.default.name,
+    /**
      * Which way to assume the money went when no model is asked and no template has been taught —
      * see [ASSUME_NOTHING] and its siblings.
      *
@@ -539,21 +545,28 @@ data class ExpensesSettings(
         /**
          * What this app can do with a spoken expense.
          *
-         * One rung, and the limit is not the transport — the utterance now comes back with the answer
-         * (`VoxLlmResult.input`), so a rule on the device could read it. The limit is that no rule
-         * safely can. The only candidate is the amount, and a single currency-marked figure does not
-         * mean the total: in "three loaves at ten each" the one marked figure is the per-unit price.
-         * Telling those apart is the distributive/cumulative distinction — see
-         * [com.voxapps.expenses.domain.llm.DistributiveCumulativeRule], which is most of what the
-         * prompt teaches — and it is carried by language, not by arithmetic. A rule with a known
-         * mislabel class is a guess, so there is nothing below the fullest rung to offer.
+         * Two rungs. At [LlmLevel.FULL] the sentence is sent for interpretation. At [LlmLevel.NONE]
+         * nothing leaves the device: the sentence is kept as a stub expense awaiting review, never
+         * written as a finished record, because no rule can settle it alone. The one candidate is
+         * the amount, and a single currency-marked figure does not mean the total: in "three loaves
+         * at ten each" the marked figure is the per-unit price. Telling those apart is the
+         * distributive/cumulative distinction — see
+         * [com.voxapps.expenses.domain.llm.DistributiveCumulativeRule] — and it is carried by
+         * language, not by arithmetic. So the offline rung only queues what was said; a person
+         * finishes it.
          */
         val VOICE_FLOW_SUPPORT = FlowSupport(
             source = RecordSource.VOICE,
-            supported = setOf(LlmLevel.FULL),
+            supported = setOf(LlmLevel.NONE, LlmLevel.FULL),
             default = LlmLevel.FULL,
             weights = setOf(FieldWeight.HEAD)
         )
+
+        /** The stored setting as a rung; an unreadable value reads as the fullest behaviour. */
+        fun voiceLevelOf(stored: String): LlmLevel =
+            LlmLevel.entries.firstOrNull { it.name == stored }
+                ?.takeIf { it in VOICE_FLOW_SUPPORT.supported }
+                ?: LlmLevel.FULL
 
         /** The stored setting as a rung. The two values predate the scale and map exactly. */
         fun notificationLevelOf(stored: String): LlmLevel = when (stored) {

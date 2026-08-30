@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import com.voxapps.logging.Logger
+import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.ipc.VoxLlmResult
@@ -13,6 +14,7 @@ import com.voxapps.notes.data.preferences.NotesSettings
 import com.voxapps.notes.domain.llm.CategoryMergeMappingParser
 import com.voxapps.recordflow.RecordFlow
 import com.voxapps.notes.domain.llm.NoteScanFlow
+import com.voxapps.notes.domain.llm.NoteVoiceFlow
 import com.voxapps.notes.domain.llm.LlmTasks
 import com.voxapps.notes.domain.llm.NoteDeduplicationResultParser
 import kotlinx.coroutines.CoroutineScope
@@ -100,6 +102,46 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 level = NotesSettings.scanLevelOf(settings.scanLlmLevel),
                                 reply = reply
                             )
+                        }
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
+
+            LlmTasks.NOTE_PARSE -> {
+                // A spoken note's cleanup reply. Success lands through the flow at the chosen rung;
+                // anything else falls back to the untouched transcript, so the note exists either way.
+                val rawJson = result.rawJson
+                val succeeded = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
+                if (!succeeded) Logger.w(TAG, "Voice note cleanup failed: ${result.error}")
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        // The utterance this reply is about, from whichever side still has it: the
+                        // reply itself when Commander composed the request from a cached template,
+                        // and this app's own queue when it composed the request. Read before
+                        // markFulfilled, which deletes the row that holds it.
+                        val spokenInput = result.input?.takeIf { it.isNotBlank() }
+                            ?: container.pendingLlmRequestQueue.originalInput(requestId)
+                        if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
+                        val spec = NoteVoiceFlow(container)
+                        // Rebuilt as the command shape read() expects — Commander's collapsed route
+                        // carries no title or category for this task, so the words are the whole of
+                        // what there is to rebuild.
+                        val reading = spokenInput?.let {
+                            spec.read(VoxCommand(op = VoxIpc.OP_CREATE, text = it))
+                        }
+                        val settings = container.settingsRepository.getSnapshot()
+                        if (succeeded) {
+                            RecordFlow.deliver(
+                                spec = spec,
+                                reading = reading,
+                                level = NotesSettings.voiceLevelOf(settings.voiceLlmLevel),
+                                reply = rawJson!!
+                            )
+                        } else {
+                            spec.queueForReview(reading, null)
                         }
                     } finally {
                         pending.finish()

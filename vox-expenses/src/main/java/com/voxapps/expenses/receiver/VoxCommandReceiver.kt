@@ -26,10 +26,11 @@ import kotlinx.coroutines.launch
 
 /**
  * The satellite's entry point for Commander's command bus — NO NLU here either, just a `when(op)`
- * (mirrors vox-notes' VoxCommandReceiver). Unlike Notes, `create` never inserts synchronously: a raw
- * spoken utterance needs real structured extraction (amount/vendor/items), so it only fires the
- * generic-LLM-hook parse request (see [ExpenseParseRequestSender]) — the actual insert happens later
- * in [LlmResultReceiver] once the async reply arrives.
+ * (mirrors vox-notes' VoxCommandReceiver). Unlike Notes, `create` never writes a finished record
+ * synchronously: a raw spoken utterance needs real structured extraction (amount/vendor/items). At
+ * the full voice rung it fires the generic-LLM-hook parse request (see [ExpenseParseRequestSender])
+ * and the insert happens later in [LlmResultReceiver] once the async reply arrives; at the offline
+ * rung the flow files the sentence as a stub awaiting review instead.
  *
  * Guarded by the shared `com.voxapps.vox.permission.COMMAND` custom permission (declared once in
  * `:core:ipc`'s manifest).
@@ -61,10 +62,11 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         // other capture in this app goes through, and what it decides — whether
                         // there is anything to ask at all — is the rung's business, not this
                         // receiver's. All that is left here is how the question travels.
+                        val settings = container.settingsRepository.getSnapshot()
                         RecordFlow.dispatch(
                             spec = ExpenseVoiceFlow(context.applicationContext, container),
                             input = text,
-                            level = ExpensesSettings.VOICE_FLOW_SUPPORT.default,
+                            level = ExpensesSettings.voiceLevelOf(settings.voiceModelUse),
                             send = { task, prompt ->
                                 ExpenseParseRequestSender.send(
                                     context = context.applicationContext,
@@ -82,21 +84,23 @@ class VoxCommandReceiver : BroadcastReceiver() {
             }
 
             VoxIpc.OP_GET_SCHEMA -> {
-                // See the collapsed voice-command plan: Commander fetches and caches this once
-                // (Integrations' Refresh button), not per voice command. needsExtractionPass=true
-                // because a raw utterance needs real distributive/cumulative-price reasoning that
-                // Commander's own classification call isn't positioned to resolve.
+                // Commander fetches and caches this (Integrations' Refresh button and the pushed
+                // updates in ExpensesApplication), not per voice command. asksModel mirrors the
+                // chosen voice rung: at the full one a raw utterance needs real
+                // distributive/cumulative-price reasoning that Commander's own classification call
+                // isn't positioned to resolve; at the offline one Commander sends the words as they
+                // are and the flow files them for review.
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settings = container.settingsRepository.getSnapshot()
-                        val categoryNames = container.expensesRepository.categories.first().map { it.name }
                         // Derived from the flow rather than restated: what this app tells Commander
                         // and what it does locally are then one declaration.
                         val flow = com.voxapps.expenses.domain.llm.ExpenseVoiceFlow(context, container)
+                        val level = ExpensesSettings.voiceLevelOf(settings.voiceModelUse)
                         val schema = VoxSatelliteSchema.of(
-                            asksModel = !flow.support.default.staysOnDevice,
-                            promptTemplate = flow.promptTemplate(flow.support.default.asks),
+                            asksModel = !level.staysOnDevice,
+                            promptTemplate = flow.promptTemplate(level.asks),
                             taskId = flow.taskId,
                             fieldSchemaVersion = GeneratedParsedSchema.VERSION
                         )

@@ -51,6 +51,9 @@ data class CalendarSettings(
     /** How far a model is let into making an entry from a scan — see [SCAN_FLOW_SUPPORT]. Stored as
      *  the rung's name; defaults to the fullest behaviour, which is what installs had before. */
     val scanLlmLevel: String = "FULL",
+    /** How far a model is let into making an entry from a spoken sentence — see
+     *  [VOICE_FLOW_SUPPORT]. Stored as the rung's name; defaults to the fullest behaviour. */
+    val voiceLlmLevel: String = "FULL",
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val language: String = DEFAULT_LANGUAGE,
@@ -121,14 +124,19 @@ data class CalendarSettings(
         /**
          * What this app can do with a spoken entry.
          *
-         * One rung. An entry needs a moment in time, and "next Tuesday at nine" is exactly the kind
-         * of phrase [com.voxapps.textmatch.extract.DateTimeExtractor] declines to read — it settles
-         * digits, not language. So there is nothing here the device could settle on its own, and the
-         * scale says one thing honestly rather than four things loosely.
+         * Two rungs. At [LlmLevel.FULL] the sentence is sent for interpretation. At [LlmLevel.NONE]
+         * nothing leaves the device — and nothing is settled on it either: an entry needs a moment
+         * in time, and "next Tuesday at nine" is exactly the kind of phrase
+         * [com.voxapps.textmatch.extract.DateTimeExtractor] declines to read — it settles digits,
+         * not language. So the offline rung files the sentence as a dateless to-do in the review
+         * list — see [com.voxapps.calendarapp.domain.llm.CalendarVoiceFlow.queueForReview] — rather
+         * than an entry on a guessed day.
+         *
+         * The rungs in between are absent for want of anywhere to put a proposal.
          */
         val VOICE_FLOW_SUPPORT = FlowSupport(
             source = RecordSource.VOICE,
-            supported = setOf(LlmLevel.FULL),
+            supported = setOf(LlmLevel.NONE, LlmLevel.FULL),
             default = LlmLevel.FULL,
             weights = setOf(FieldWeight.HEAD)
         )
@@ -136,6 +144,13 @@ data class CalendarSettings(
         /** The stored rung, or the fullest behaviour where the value is unreadable. */
         fun scanLevelOf(stored: String): LlmLevel =
             LlmLevel.entries.firstOrNull { it.name == stored } ?: LlmLevel.FULL
+
+        /** The stored rung clamped to what voice supports, or the fullest behaviour where the
+         *  value is unreadable. */
+        fun voiceLevelOf(stored: String): LlmLevel =
+            LlmLevel.entries.firstOrNull { it.name == stored }
+                ?.takeIf { it in VOICE_FLOW_SUPPORT.supported }
+                ?: LlmLevel.FULL
 
         const val TIMEOUT_30M = 30
         const val TIMEOUT_1H = 60

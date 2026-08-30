@@ -117,18 +117,19 @@ becomes "when the OS feels like it", which for a phone in a pocket abroad can be
 |---------------------|-----------------------------------------------------------------------------------|
 | receipt scan        | a **stub** appears with the photo and the proved figures, marked in the list        |
 | notification capture| the capture is staged in the review queue, visible in Settings → From Notifications |
-| **voice**           | **nothing appears at all** — the queue row exists, the UI says nothing              |
+| **voice**           | the capture always lands somewhere visible — Expenses files a **stub** with the sentence in its comments, Calendar a dateless to-do in the "To review" list, Notes the raw transcript as the note |
 
-> **Verdict.** Two of the three paths degrade gracefully, and the offline rungs (`LlmLevel.NONE`
-> upward) mean a person who chose them never depended on a model in the first place.
+> **Verdict.** All three paths degrade gracefully, and the offline rungs (`LlmLevel.NONE`
+> upward) mean a person who chose them never depended on a model in the first place — voice
+> included, whose offline rung files the sentence for review instead of asking anything.
 >
 > **What was done about it.** The queue is read for display now: a strip above the list, and a line
 > in the widget, saying how many captures are waiting for an answer. It is absent when nothing is
 > waiting rather than present and empty, and it opens onto the captures themselves — what each one
 > is, when it was sent, how many times it has been re-sent — with a way to ask for them to be tried
-> again now instead of at the worker's next turn. Voice still produces no record until the answer arrives —
-> that is correct, since nothing about a sentence is certain before it is read — but the person can
-> now see that it is being worked on rather than wonder whether they were heard.
+> again now instead of at the worker's next turn. A voice capture whose reply never arrives is the
+> queue strip's to show; one whose reply arrives unreadable lands in the same review places the
+> table above names, with the sentence kept on the record.
 
 ## 6. Reading in place — LiveView on a moving hand
 

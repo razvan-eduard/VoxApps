@@ -28,6 +28,8 @@ interface NotesSettingsRepository {
     suspend fun setScanImageRetention(mode: String)
     /** See [NotesSettings.scanLlmLevel]; a rung this app cannot honour is ignored. */
     suspend fun setScanLlmLevel(level: String)
+    /** See [NotesSettings.voiceLlmLevel]; unknown values are ignored rather than stored. */
+    suspend fun setVoiceLlmLevel(level: String)
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)

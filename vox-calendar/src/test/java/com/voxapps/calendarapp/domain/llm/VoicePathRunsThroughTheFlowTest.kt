@@ -1,6 +1,10 @@
 package com.voxapps.calendarapp.domain.llm
 
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
+import com.voxapps.recordflow.Decision
+import com.voxapps.recordflow.DeterministicReading
+import com.voxapps.recordflow.LlmLevel
+import com.voxapps.recordflow.RecordFlowPolicy
 import com.voxapps.recordflow.RecordSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -64,15 +68,72 @@ class VoicePathRunsThroughTheFlowTest {
         )
     }
 
+    /** The flow's statements only, same filter as [source] — the invariants below are properties
+     *  of the code rather than of a run. */
+    private fun flowSource(): String =
+        listOf(
+            "src/main/java/com/voxapps/calendarapp/domain/llm/CalendarVoiceFlow.kt",
+            "vox-calendar/src/main/java/com/voxapps/calendarapp/domain/llm/CalendarVoiceFlow.kt"
+        ).map(::File).first { it.exists() }.readText()
+            .lineSequence()
+            .filterNot { line ->
+                val t = line.trim()
+                t.startsWith("import ") || t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")
+            }
+            .joinToString("\n")
+
     /**
-     * One rung, declared as one rung: an entry needs a moment, spoken time is language, and the
-     * deterministic reader this app uses for pages settles digits and declines everything else.
+     * Two rungs, and the offline one only queues.
+     *
+     * An entry needs a moment, spoken time is language, and the deterministic reader this app uses
+     * for pages settles digits and declines everything else. So the offline rung lands the words as
+     * a dateless to-do in the review list instead of an entry on a guessed day — the policy's own
+     * reading of a usable, unproven sentence — and the fullest rung stays the default an untouched
+     * install keeps.
      */
     @Test
-    fun `voice offers the fullest rung and nothing narrower`() {
+    fun `voice offers two rungs and the offline one only queues`() {
         val support = CalendarSettings.VOICE_FLOW_SUPPORT
         assertEquals(RecordSource.VOICE, support.source)
-        assertEquals(setOf(support.default), support.supported)
-        assertFalse("a rung that asks nothing cannot make an entry from speech", support.default.staysOnDevice)
+        assertEquals(setOf(LlmLevel.NONE, LlmLevel.FULL), support.supported)
+        assertEquals(LlmLevel.FULL, support.default)
+        assertEquals(LlmLevel.FULL, CalendarSettings.voiceLevelOf(CalendarSettings().voiceLlmLevel))
+        assertEquals(
+            Decision.QUEUE_FOR_REVIEW,
+            RecordFlowPolicy.decide(
+                LlmLevel.NONE,
+                DeterministicReading("said out loud", usable = true, complete = false)
+            )
+        )
+    }
+
+    /** No rule may prove a spoken date, so the flow's reading declares itself incomplete. */
+    @Test
+    fun `the voice reading never proves itself`() {
+        assertTrue("read() must establish nothing", flowSource().contains("complete = false"))
+    }
+
+    /** A reply that cannot be used still lands somewhere a person will see it. */
+    @Test
+    fun `a failed reply queues the utterance for review`() {
+        assertTrue(
+            "the failure branch files the sentence",
+            source("LlmResultReceiver").contains("spec.queueForReview(")
+        )
+        assertTrue(
+            "the review landing is a to-do item in the review list",
+            flowSource().contains("addItem(")
+        )
+    }
+
+    /** Both halves of the round trip honour the chosen rung, not the declaration's default. */
+    @Test
+    fun `both receivers read the chosen rung`() {
+        val command = source("VoxCommandReceiver")
+        val reply = source("LlmResultReceiver")
+        assertTrue(command.contains("voiceLevelOf("))
+        assertTrue(reply.contains("voiceLevelOf("))
+        assertFalse("the setting, not the default", command.contains("VOICE_FLOW_SUPPORT.default"))
+        assertFalse("the setting, not the default", reply.contains("VOICE_FLOW_SUPPORT.default"))
     }
 }

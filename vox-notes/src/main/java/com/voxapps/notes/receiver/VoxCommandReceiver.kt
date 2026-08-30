@@ -52,15 +52,28 @@ class VoxCommandReceiver : BroadcastReceiver() {
                         // Read inside the coroutine — getSnapshot() blocks on DataStore until its
                         // cache warms, and a broadcast can be what cold-starts this process.
                         val settings = container.settingsRepository.getSnapshot()
-                        // The same template every other capture runs through; for a spoken note it
-                        // decides only one thing, but it decides it in the one place.
+                        // The same template every other capture runs through. At the offline rung
+                        // it commits the transcript on the spot; at the full one it sends the words
+                        // for the same cleanup a scan gets, and the reply lands in LlmResultReceiver.
                         var resolved: com.voxapps.notes.data.VoiceNoteResult? = null
-                        com.voxapps.recordflow.RecordFlow.dispatch(
+                        val outcome = com.voxapps.recordflow.RecordFlow.dispatch(
                             spec = com.voxapps.notes.domain.llm.NoteVoiceFlow(container) { resolved = it },
                             input = command,
-                            level = com.voxapps.notes.data.preferences.NotesSettings.VOICE_FLOW_SUPPORT.default
-                        ) { _, _ -> }
-                        if (settings.voiceSaveToastEnabled) {
+                            level = com.voxapps.notes.data.preferences.NotesSettings
+                                .voiceLevelOf(settings.voiceLlmLevel)
+                        ) { task, prompt ->
+                            com.voxapps.notes.domain.llm.NoteParseRequestSender.send(
+                                context = context.applicationContext,
+                                queue = container.pendingLlmRequestQueue,
+                                task = task,
+                                promptText = prompt,
+                                rawText = text
+                            )
+                        }
+                        // Announced only for a note that exists: the full rung's save happens when
+                        // the reply lands, and that path shows the note itself.
+                        val committed = outcome is com.voxapps.recordflow.RecordFlow.Outcome.Committed
+                        if (committed && settings.voiceSaveToastEnabled) {
                             val label = command.title?.takeIf { it.isNotBlank() } ?: text
                             val template = container.languageManager.getString("toast_note_saved")
                             val msg = String.format(template, label) +
@@ -77,15 +90,26 @@ class VoxCommandReceiver : BroadcastReceiver() {
 
             VoxIpc.OP_GET_SCHEMA -> {
                 // Derived from the flow rather than restated here: what this app tells Commander and
-                // what it actually does are then one declaration. Notes asks nothing — the raw
-                // transcript IS the note body — so what Commander is handed says exactly that.
-                val flow = com.voxapps.notes.domain.llm.NoteVoiceFlow(container)
-                val schema = VoxSatelliteSchema.of(
-                    asksModel = !flow.support.default.staysOnDevice,
-                    promptTemplate = null,
-                    taskId = flow.taskId
-                )
-                setResult(Activity.RESULT_OK, VoxResult(ok = true, text = schema.toJson()).toJson(), null)
+                // what it actually does are then one declaration. asksModel mirrors the chosen voice
+                // rung — at the offline one the raw transcript IS the note body, so Commander is
+                // told to send the words as they are.
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val settings = container.settingsRepository.getSnapshot()
+                        val flow = com.voxapps.notes.domain.llm.NoteVoiceFlow(container)
+                        val level = com.voxapps.notes.data.preferences.NotesSettings
+                            .voiceLevelOf(settings.voiceLlmLevel)
+                        val schema = VoxSatelliteSchema.of(
+                            asksModel = !level.staysOnDevice,
+                            promptTemplate = if (level.staysOnDevice) null else flow.promptTemplate(level.asks),
+                            taskId = flow.taskId
+                        )
+                        pending.setResultData(VoxResult(ok = true, text = schema.toJson()).toJson())
+                    } finally {
+                        pending.finish()
+                    }
+                }
             }
 
             VoxIpc.OP_READ -> {

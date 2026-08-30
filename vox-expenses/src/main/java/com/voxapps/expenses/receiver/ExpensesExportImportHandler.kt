@@ -559,17 +559,18 @@ private fun ExpensesSettings.toJson(): JSONObject =
     JSONObject(VoxSettingsRoundTrip.toJson(copy(appCacheJson = null, onboardingCompleted = false)))
 
 /** Returns Room/DataStore defaults for [ExpensesSettings] if [this] isn't valid JSON for it (e.g. a
- *  corrupt/foreign import file). [paymentSourcePackages]/[bankingSourcePackages]/[locationCacheTtl]
- *  get an extra null-coalesce afterward — Gson leaves these genuinely null (not their data class
- *  defaults) when an old/foreign payload is missing that key entirely, the same failure mode
- *  [com.voxapps.commander.receiver.CommanderExportHandler.parsePortableSettings] already guards
- *  against for its own fields. */
+ *  corrupt/foreign import file). [paymentSourcePackages]/[bankingSourcePackages]/[locationCacheTtl]/
+ *  [voiceModelUse] get an extra null-coalesce afterward — Gson leaves these genuinely null (not
+ *  their data class defaults) when an old/foreign payload is missing that key entirely, the same
+ *  failure mode [com.voxapps.commander.receiver.CommanderExportHandler.parsePortableSettings]
+ *  already guards against for its own fields. */
 private fun JSONObject.toExpensesSettings(): ExpensesSettings =
     VoxSettingsRoundTrip.parseOrDefault(toString(), ExpensesSettings::class.java, ExpensesSettings()) { parsed ->
         parsed.copy(
             paymentSourcePackages = parsed.paymentSourcePackages ?: emptySet(),
             bankingSourcePackages = parsed.bankingSourcePackages ?: emptySet(),
-            locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY"
+            locationCacheTtl = parsed.locationCacheTtl ?: "ONE_DAY",
+            voiceModelUse = parsed.voiceModelUse ?: ExpensesSettings().voiceModelUse
         )
     }
 

@@ -14,6 +14,7 @@ import com.voxapps.expenses.domain.llm.ExpenseDeduplicationScheduler
 import com.voxapps.expenses.domain.llm.ExpenseParsePromptBuilder
 import com.voxapps.expenses.domain.llm.GeneratedParsedSchema
 import com.voxapps.expenses.domain.llm.LlmTasks
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.domain.widget.WidgetMidnightRefreshScheduler
 import com.voxapps.ipc.VoxDataTransferClient
 import com.voxapps.ipc.VoxSatelliteSchema
@@ -98,20 +99,34 @@ class ExpensesApplication : Application(), VoxLlmQueueHost {
             .drop(1)
             .map { it.map { c -> c.name } }
             .distinctUntilChanged()
-            .onEach {
-                // Composed by the flow, exactly as the on-demand fetch composes it — a pushed
-                // schema and a fetched one describing different arrangements is the failure this
-                // one declaration exists to prevent. The category list is what changed; the flow
-                // reads the current one itself.
-                val flow = com.voxapps.expenses.domain.llm.ExpenseVoiceFlow(this, container)
-                val schema = VoxSatelliteSchema.of(
-                    asksModel = !flow.support.default.staysOnDevice,
-                    promptTemplate = flow.promptTemplate(flow.support.default.asks),
-                    taskId = flow.taskId,
-                    fieldSchemaVersion = GeneratedParsedSchema.VERSION
-                )
-                VoxDataTransferClient.pushSchemaChanged(this, schema)
-            }
+            .onEach { pushVoiceSchema() }
             .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+
+        // The same push when the chosen voice rung changes: asksModel and the template both follow
+        // it, and Commander acts on whichever schema it last cached.
+        container.settingsRepository.settingsFlow
+            .map { it.voiceModelUse }
+            .distinctUntilChanged()
+            .drop(1)
+            .onEach { pushVoiceSchema() }
+            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    }
+
+    /**
+     * Composed by the flow, exactly as the on-demand fetch composes it — a pushed schema and a
+     * fetched one describing different arrangements is the failure this one declaration exists to
+     * prevent. The flow reads the current categories itself; the rung comes from the setting.
+     */
+    private suspend fun pushVoiceSchema() {
+        val settings = container.settingsRepository.getSnapshot()
+        val level = ExpensesSettings.voiceLevelOf(settings.voiceModelUse)
+        val flow = com.voxapps.expenses.domain.llm.ExpenseVoiceFlow(this, container)
+        val schema = VoxSatelliteSchema.of(
+            asksModel = !level.staysOnDevice,
+            promptTemplate = flow.promptTemplate(level.asks),
+            taskId = flow.taskId,
+            fieldSchemaVersion = GeneratedParsedSchema.VERSION
+        )
+        VoxDataTransferClient.pushSchemaChanged(this, schema)
     }
 }

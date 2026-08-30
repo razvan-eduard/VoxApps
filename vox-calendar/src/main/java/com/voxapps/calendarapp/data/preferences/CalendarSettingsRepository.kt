@@ -20,6 +20,8 @@ interface CalendarSettingsRepository {
     suspend fun setAttachPhotoOnScan(enabled: Boolean)
     /** See [CalendarSettings.scanLlmLevel]; a rung this app cannot honour is ignored. */
     suspend fun setScanLlmLevel(level: String)
+    /** See [CalendarSettings.voiceLlmLevel]; unknown values are ignored rather than stored. */
+    suspend fun setVoiceLlmLevel(level: String)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
     suspend fun setDebugToastsEnabled(enabled: Boolean)
     suspend fun setThemeDarkMode(mode: String)

@@ -108,6 +108,25 @@ fun GeneralSettingsTab(
             onLevelChange = { stateManager.setScanLlmLevel(it.name) }
         )
 
+        RecordFlowLevelCard(
+            support = NotesSettings.VOICE_FLOW_SUPPORT,
+            level = NotesSettings.voiceLevelOf(settings.voiceLlmLevel),
+            strings = RecordFlowStrings(
+                title = languageManager.getString("voice_llm_level"),
+                sendNothing = languageManager.getString("flow_send_nothing"),
+                sendNothingDesc = languageManager.getString("voice_send_nothing_desc"),
+                sendMissing = languageManager.getString("flow_send_missing"),
+                sendMissingDesc = languageManager.getString("flow_send_missing_desc"),
+                sendHead = languageManager.getString("flow_send_head"),
+                sendHeadDesc = languageManager.getString("flow_send_head_desc"),
+                sendEverything = languageManager.getString("flow_send_everything"),
+                sendEverythingDesc = languageManager.getString("voice_send_everything_desc"),
+                fillHead = languageManager.getString("notes_fill_head"),
+                cannotSuggest = languageManager.getString("flow_cannot_suggest")
+            ),
+            onLevelChange = { stateManager.setVoiceLlmLevel(it.name) }
+        )
+
         SettingsSectionCard(languageManager.getString("zone_capture")) {
             // --- Attach photo to AI on scan (opt-in; costs real LLM tokens on top of free OCR text,
             // and only takes effect when Vision's own "send photo to AI" setting also provided one). ---

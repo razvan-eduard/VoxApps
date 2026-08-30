@@ -52,6 +52,9 @@ data class NotesSettings(
      * before the setting existed.
      */
     val scanLlmLevel: String = "FULL",
+    /** How far a model is let into tidying a spoken note — see [VOICE_FLOW_SUPPORT]. Stored as the
+     *  rung's name; defaults to the offline rung, where the transcript is the note untouched. */
+    val voiceLlmLevel: String = "NONE",
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val defaultVoiceCategoryId: Long? = null,
@@ -120,15 +123,18 @@ data class NotesSettings(
         )
 
         /**
-         * What this app can do with a spoken note: one rung, because there is nothing to ask.
+         * What this app can do with a spoken note.
          *
-         * The words are the note. Declaring a single level is not a limitation admitted reluctantly
-         * — it is the honest shape of a flow where a model has no question to answer, and it is what
-         * this app already told Commander through its `needsExtractionPass = false`.
+         * Two rungs, the same pair the scan offers and for the same reason: a note's body *is* its
+         * text, so the offline rung is not a reduced version of anything — the words become the
+         * note exactly as they were heard, which is what an untouched install keeps doing. What a
+         * model adds at the full rung is the same thing it adds to a scan: a tidied body, a title
+         * and a category — judgements, not content. A reply that cannot be used falls back to the
+         * raw transcript, so nothing spoken is ever lost.
          */
         val VOICE_FLOW_SUPPORT = FlowSupport(
             source = RecordSource.VOICE,
-            supported = setOf(LlmLevel.NONE),
+            supported = setOf(LlmLevel.NONE, LlmLevel.FULL),
             default = LlmLevel.NONE,
             weights = setOf(FieldWeight.HEAD)
         )
@@ -136,6 +142,13 @@ data class NotesSettings(
         /** The stored rung, or the fullest behaviour where the value is unreadable. */
         fun scanLevelOf(stored: String): LlmLevel =
             LlmLevel.entries.firstOrNull { it.name == stored } ?: LlmLevel.FULL
+
+        /** The stored rung clamped to what voice supports. Falls back to the offline rung — the
+         *  default here is also the privacy-preserving reading of an unreadable value. */
+        fun voiceLevelOf(stored: String): LlmLevel =
+            LlmLevel.entries.firstOrNull { it.name == stored }
+                ?.takeIf { it in VOICE_FLOW_SUPPORT.supported }
+                ?: LlmLevel.NONE
 
         const val TIMEOUT_30M = 30
         const val TIMEOUT_1H = 60
