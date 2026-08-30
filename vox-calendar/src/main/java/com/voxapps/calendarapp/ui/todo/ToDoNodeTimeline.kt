@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -121,10 +120,6 @@ private val DRAG_HANDLE_COLUMN_WIDTH = 32.dp
 /** Fixed tint for the "done" checkmark (both the node's inline check and the chip's trailing one) —
  *  always this green regardless of the item's own color, rather than a contrast-derived color. */
 private val DONE_CHECK_COLOR = VoxSemanticColors.done
-
-/** Fixed amber tint for the "important" star badge — same fixed-color-regardless-of-item-hue
- *  treatment as [DONE_CHECK_COLOR]. */
-private val IMPORTANT_STAR_COLOR = VoxSemanticColors.important
 
 /** 5-point star silhouette an important [TimelineNode] is shaped as (instead of a plain circle with a
  *  corner badge) — drawn as a closed [androidx.compose.ui.graphics.Path] alternating between the outer
@@ -217,9 +212,6 @@ private fun glowColorFor(colorArgb: Long): Color {
 private fun contrastingTextColor(background: Color): Color =
     if (background.luminance() > 0.5f) Color(0xFF1A1A1A) else Color.White
 
-/** Blends [color] toward its own luminance-gray by [amount] (0 = unchanged, 1 = fully gray) — the
- *  "washed out" look for past/done items, on top of (not instead of) their row's own alpha reduction,
- *  so a faded item reads as genuinely behind-us rather than just a dimmer copy of the same hue. */
 /**
  * The tone a task renders in: its own colour, pressed deeper when it is important — and flat grey
  * once it is done, whatever colour it was given and whether or not it is important.
@@ -241,15 +233,6 @@ internal fun itemTone(colorArgb: Long, done: Boolean, important: Boolean): Color
 internal fun itemBorderColor(tone: Color, done: Boolean): Color =
     if (done) VoxSemanticColors.doneOutline else toneBorderColor(tone)
 
-internal fun desaturate(color: Color, amount: Float = 0.55f): Color {
-    val gray = color.luminance()
-    return Color(
-        red = color.red + (gray - color.red) * amount,
-        green = color.green + (gray - color.green) * amount,
-        blue = color.blue + (gray - color.blue) * amount,
-        alpha = color.alpha
-    )
-}
 
 /**
  * A vertical sequence of colored circular nodes (one per [items]) connected by a line — solid in view
@@ -340,7 +323,6 @@ fun ToDoNodeTimeline(
                             done = item.done,
                             emphasized = isNext,
                             isImportant = item.isImportant,
-                            ghosted = !isEditing && isPastItem(item, isNext, now),
                             onClick = { if (!isEditing) onToggleDone(item) }
                         )
                     }
@@ -429,14 +411,12 @@ private fun DateGroupHeader(date: LocalDate, today: LocalDate) {
 
 /** Trailing time label shown when a task has [dueMillis] — red once overdue and not [done],
  *  tappable when [onClick] is given (edit mode's quick date/time re-edit; view mode passes none).
- *  [showDate] prefixes the date (edit mode, where the day-group headers are hidden); [emphasized]
- *  bolds it for the "next up" item. */
+ *  [showDate] prefixes the date (edit mode, where the day-group headers are hidden). */
 @Composable
 private fun TimeLabel(
     dueMillis: Long?,
     done: Boolean,
     showDate: Boolean = false,
-    emphasized: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     if (dueMillis == null) return
@@ -451,7 +431,7 @@ private fun TimeLabel(
     Text(
         text = text,
         color = color,
-        style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Normal),
+        style = MaterialTheme.typography.labelMedium,
         modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
     )
 }
@@ -480,9 +460,9 @@ private fun DefaultTimelineRow(
         // Always clickable (not gated on isEditing, which is always false for this row's one caller,
         // the view-mode timeline) — tapping the chip opens the task's edit dialog directly, without
         // going through the card's own tap-anywhere-to-flip-into-edit-mode handler underneath it.
-        TaskChip(item = item, clickable = true, onClick = { onTaskClick(item) }, emphasized = isNext, ghosted = ghosted)
+        TaskChip(item = item, clickable = true, onClick = { onTaskClick(item) }, emphasized = isNext)
         Spacer(Modifier.weight(1f))
-        TimeLabel(dueMillis = item.dueMillis, done = item.done, emphasized = isNext)
+        TimeLabel(dueMillis = item.dueMillis, done = item.done)
     }
 }
 
@@ -492,8 +472,7 @@ fun TaskChip(
     clickable: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    emphasized: Boolean = false,
-    ghosted: Boolean = false
+    emphasized: Boolean = false
 ) {
     val languageManager = LocalLanguageManager.current
     // Same per-entry observation CalendarScreen's agenda row uses — a to-do item IS a CalendarEntry,
@@ -504,38 +483,30 @@ fun TaskChip(
         (context.applicationContext as CalendarApplication).container.attachmentDao
             .observeFor(CalendarAttachments.RECORD_TYPE, item.id)
     }.collectAsState(initial = emptyList())
-    val tone = itemTone(item.colorArgb, item.done, item.isImportant)
-    val background = if (ghosted && !item.done) desaturate(tone) else tone
+    val background = itemTone(item.colorArgb, item.done, item.isImportant)
     val textColor = contrastingTextColor(background)
     val isEmpty = item.text.isEmpty()
     val elevation = if (emphasized) GLOW_ELEVATION_NEXT else GLOW_ELEVATION
-    // Outline weight belongs to IMPORTANCE alone — "up next" keeps its glow/size emphasis but must
-    // never borrow the important items' thick contour.
-    val borderWidth = if (item.isImportant) NODE_BORDER_WIDTH_NEXT else NODE_BORDER_WIDTH
     Box(
         modifier = modifier
             .shadow(elevation, RoundedCornerShape(50), ambientColor = glowColorFor(item.colorArgb), spotColor = glowColorFor(item.colorArgb))
             .clip(RoundedCornerShape(50))
             .background(background)
-            .border(borderWidth, itemBorderColor(background, item.done), RoundedCornerShape(50))
+            .border(NODE_BORDER_WIDTH, itemBorderColor(background, item.done), RoundedCornerShape(50))
             .then(if (clickable) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (item.isImportant) {
-                Icon(Icons.Filled.Star, contentDescription = null, tint = IMPORTANT_STAR_COLOR, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(4.dp))
-            }
             Text(
                 if (isEmpty) languageManager.getString("todo_new_item_hint") else item.text,
                 color = if (isEmpty) textColor.copy(alpha = 0.6f) else textColor,
-                style = when {
-                    item.done -> MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                    emphasized -> MaterialTheme.typography.bodyMedium.copy(
+                style = if (emphasized) {
+                    MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = FontWeight.Bold,
                         fontSize = MaterialTheme.typography.bodyMedium.fontSize * 1.15f
                     )
-                    else -> MaterialTheme.typography.bodyMedium
+                } else {
+                    MaterialTheme.typography.bodyMedium
                 }
             )
             // Done shows on the NODE alone — a second check in the pill said the same thing twice.
@@ -549,24 +520,22 @@ fun TaskChip(
 
 /** [emphasized] ("next up") nodes render bigger than regular ones, but always centered inside the
  *  same [NODE_SLOT_SIZE] slot the connector lines are centered on — so growing the circle expands it
- *  evenly in both directions instead of shifting its center off the line. [ghosted] desaturates the
- *  node toward gray for past/done items; [isImportant] renders the node as a star silhouette (instead
- *  of a circle) rather than adding a separate corner badge. [emphasized] also draws a soft pulsing
- *  glow behind the node — self-contained animation, independent of the app's `animationsEnabled`
- *  setting. Public so [com.voxapps.calendarapp.ui.CalendarScreen] can reuse the exact same bullet
- *  (color/size/shape) for a to-do-flavored entry that's bleeding into the calendar grid — same visual
- *  identity as its own row in the to-do list, so it's unmistakably a task there too. */
+ *  evenly in both directions instead of shifting its center off the line. [isImportant] renders the
+ *  node as a star silhouette (instead of a circle) rather than adding a separate corner badge.
+ *  [emphasized] also draws a soft pulsing glow behind the node — self-contained animation, independent
+ *  of the app's `animationsEnabled` setting. Public so [com.voxapps.calendarapp.ui.CalendarScreen] can
+ *  reuse the exact same bullet (color/size/shape) for a to-do-flavored entry that's bleeding into the
+ *  calendar grid — same visual identity as its own row in the to-do list, so it's unmistakably a task
+ *  there too. */
 @Composable
 fun TimelineNode(
     colorArgb: Long,
     done: Boolean,
     onClick: () -> Unit,
     emphasized: Boolean = false,
-    ghosted: Boolean = false,
     isImportant: Boolean = false
 ) {
-    val tone = itemTone(colorArgb, done, isImportant)
-    val color = if (ghosted && !done) desaturate(tone) else tone
+    val color = itemTone(colorArgb, done, isImportant)
     val baseSize = if (emphasized) NODE_SIZE_NEXT else NODE_SIZE
     val size = if (isImportant) baseSize * IMPORTANT_NODE_SCALE else baseSize
     val elevation = if (emphasized) GLOW_ELEVATION_NEXT else GLOW_ELEVATION
@@ -886,7 +855,6 @@ fun ToDoNodeTimelineEditable(
                             colorArgb = item.colorArgb,
                             done = item.done,
                             emphasized = !isEditingThis && isNext,
-                            ghosted = ghosted,
                             isImportant = item.isImportant,
                             onClick = { onToggleDone(item) }
                         )
@@ -899,15 +867,13 @@ fun ToDoNodeTimelineEditable(
                             clickable = true,
                             onClick = { onTaskClick(item) },
                             modifier = Modifier.shadow(elevation, RoundedCornerShape(50)),
-                            emphasized = isNext,
-                            ghosted = ghosted
+                            emphasized = isNext
                         )
                         Spacer(Modifier.weight(1f))
                         TimeLabel(
                             dueMillis = item.dueMillis,
                             done = item.done,
                             showDate = true,
-                            emphasized = isNext,
                             onClick = { onQuickEditDate(item) }
                         )
                         }
