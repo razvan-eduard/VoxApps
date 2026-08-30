@@ -330,6 +330,8 @@
   "voice_send_everything_desc": "Propoziția merge la motor, care citește titlul, ziua și ora.",
   "voice_review_list_title": "De revizuit",
   "voice_queued_for_review": "Păstrat în lista De revizuit",
+  "editor_fullscreen": "Editează pe tot ecranul",
+  "editor_exit_fullscreen": "Ieși din ecran complet",
   "scan_no_date_offline": "Nicio dată pe pagină, deci nu s-a creat nicio intrare.",
   "tutorial_skip": "Sari peste",
   "tutorial_back": "Înapoi",

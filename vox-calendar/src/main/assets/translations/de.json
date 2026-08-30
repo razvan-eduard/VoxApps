@@ -330,6 +330,8 @@
   "voice_send_everything_desc": "Der Satz geht an die Engine, die Titel, Tag und Uhrzeit liest.",
   "voice_review_list_title": "Zu prüfen",
   "voice_queued_for_review": "In der Liste „Zu prüfen“ aufbewahrt",
+  "editor_fullscreen": "Im Vollbild bearbeiten",
+  "editor_exit_fullscreen": "Vollbild verlassen",
   "scan_no_date_offline": "Kein Datum auf der Seite — kein Eintrag erstellt.",
   "tutorial_skip": "Überspringen",
   "tutorial_back": "Zurück",

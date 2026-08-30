@@ -330,6 +330,8 @@
   "voice_send_everything_desc": "The sentence goes to the engine, which reads the title, the day and the time.",
   "voice_review_list_title": "To review",
   "voice_queued_for_review": "Kept in the To review list",
+  "editor_fullscreen": "Edit fullscreen",
+  "editor_exit_fullscreen": "Exit fullscreen",
   "scan_no_date_offline": "No date on the page, so no entry was created.",
   "tutorial_skip": "Skip",
   "tutorial_back": "Back",
