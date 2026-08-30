@@ -12,11 +12,15 @@ import androidx.core.app.NotificationCompat
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.ui.formatAmount
+import com.voxapps.widget.WidgetMidnightRefresh
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -36,29 +40,42 @@ import java.time.ZoneId
 class RescanGuardService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var observing = false
+    private var lastContent = Content(0.0, 0.0, 0.0, 0.0, 0, "", 0, 0)
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Foreground within the grant window, then let the ledger fill the real content in.
-        startForegroundCompat(build(Content(0.0, 0.0, 0.0, 0.0, 0, "", 0, 0)))
+        // Foreground within the grant window. A re-delivered start (every resume nudges this
+        // service) re-posts whatever was last drawn rather than a zeroed panel, and the ledger
+        // fills the real content in from the one standing collector below.
+        startForegroundCompat(build(lastContent))
         observe()
         return START_STICKY
     }
 
     private fun observe() {
+        // Every nudge lands here — launch, resume, a stub arriving, the midnight worker — and one
+        // collector is the contract: stacking a new one per nudge would redraw the same panel N
+        // times per change and never let the extras go.
+        if (observing) return
+        observing = true
         val container = (applicationContext as ExpensesApplication).container
         scope.launch {
             // Settings ride in the combine too, so flipping a content switch redraws the panel at
-            // once rather than waiting for the ledger to move next. The sums convert in the
-            // collector (a suspend context), so the transform stays a plain function.
+            // once rather than waiting for the ledger to move next. The midnight tick rides along
+            // for the opposite reason: the ledger being quiet overnight is exactly when "today"
+            // moves out from under a figure computed yesterday. The sums convert in the collector
+            // (a suspend context), so the transform stays a plain function.
             combine(
                 container.expensesRepository.expenses,
                 container.pendingNotificationExpenseRepository.pendingFlow,
-                container.settingsRepository.settingsFlow
-            ) { expenses, pending, settings -> Triple(expenses, pending, settings) }
+                container.settingsRepository.settingsFlow,
+                midnightTicks()
+            ) { expenses, pending, settings, _ -> Triple(expenses, pending, settings) }
                 .collect { (expenses, pending, settings) ->
                     val content = compute(container, expenses, pending, settings)
+                    lastContent = content
                     // One notification, present only while it has a reason to be: the standing
                     // dashboard the person asked for, or a redacted payment waiting to be rescanned.
                     // When neither holds, the service takes itself (and its notification) down.
@@ -68,6 +85,20 @@ class RescanGuardService : Service() {
                     }
                     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, build(content))
                 }
+        }
+    }
+
+    /**
+     * A tick at each local midnight, so the day/week/month windows recompute the moment they move.
+     * Emits once immediately (combine waits for every source's first value), then re-measures the
+     * distance to midnight each day — a DST or timezone shift is wrong for at most one tick. The
+     * small cushion puts the recompute safely past the boundary.
+     */
+    private fun midnightTicks(): Flow<Unit> = flow {
+        emit(Unit)
+        while (true) {
+            delay(WidgetMidnightRefresh.millisUntilNextMidnight() + 250)
+            emit(Unit)
         }
     }
 
