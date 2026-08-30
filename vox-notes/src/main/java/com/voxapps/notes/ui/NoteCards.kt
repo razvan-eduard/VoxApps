@@ -107,6 +107,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
@@ -428,14 +429,13 @@ fun NoteEditorCard(
                 }
     }
 
+    val editorCardColor = cardColor(selectedCategory, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
             .border(2.dp, borderColor, MaterialTheme.shapes.medium),
-        colors = CardDefaults.cardColors(
-            containerColor = cardColor(selectedCategory, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        )
+        colors = CardDefaults.cardColors(containerColor = editorCardColor)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Top row. Delete sits alone on the left, where destroying something should not
@@ -499,7 +499,12 @@ fun NoteEditorCard(
             onDismissRequest = { isFullscreen = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+            // The room keeps the note's own color: the category tint composited over the theme
+            // surface, so fullscreen is the card grown large rather than a generic white page.
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = editorCardColor.compositeOver(MaterialTheme.colorScheme.surface)
+            ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     EditorTopRow(
                         fullscreen = true,
