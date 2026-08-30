@@ -34,6 +34,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -58,6 +59,7 @@ import com.voxapps.hub.domain.sync.PairedPeer
 import com.voxapps.hub.domain.sync.PairingEvent
 import com.voxapps.hub.domain.sync.PairingEvents
 import com.voxapps.hub.domain.sync.PairingResult
+import com.voxapps.hub.domain.sync.SyncAlarmScheduler
 import com.voxapps.hub.domain.sync.SyncOrchestrator
 import com.voxapps.hub.domain.sync.SyncPeerStore
 import com.voxapps.hub.domain.sync.SyncSessionResult
@@ -87,11 +89,12 @@ private fun requiredBluetoothPermissions(): Array<String> =
     }
 
 /**
- * Pair a new device over NFC (see NfcPairingReader/PairingHceService), trigger an on-demand sync with
- * an already-paired one (see SyncOrchestrator — the "forced trigger from the menu" path), and toggle
- * per-peer scheduled auto-sync (ScheduledSyncWorker picks this up in the background, "de comun acord"
- * on both phones independently enabling it). Doesn't yet expose per-app category/layer scope
- * checklists — PairedPeer.scopeNamesByApp exists for that but has no UI control here.
+ * Pair a new device over NFC (see NfcPairingReader/PairingHceService), name this device (what the
+ * peer's lists show as provenance), trigger an on-demand sync with an already-paired one (see
+ * SyncOrchestrator), toggle per-peer aligned auto-sync (SyncAlarmScheduler; both phones must enable
+ * it, and the same interval on both is what makes their slots coincide), and open the per-peer
+ * shared-containers checklist (SyncScopeScreen). Each peer card also carries the recovery actions
+ * for a lost Bluetooth address — re-advertise on the listening side, re-scan on the connecting side.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,18 +228,43 @@ fun SyncScreen(
         }
     }
 
+    // The discoverability dance: become discoverable under the advertised name long enough for the
+    // other phone's scan to resolve this adapter's MAC, then restore the original Bluetooth name.
+    // Shared between the tap event below and the per-peer "advertise" button (the recovery path for
+    // a pairing whose window was missed — e.g. this screen wasn't open on the tapped phone).
+    suspend fun runAdvertiseWindow() {
+        discoverableLauncher.launch(BluetoothPeerResolver.buildDiscoverableIntent())
+        val originalName = BluetoothPeerResolver.advertiseAs(context, peerStore.localPeerId)
+        delay(DISCOVERY_WINDOW_MS)
+        BluetoothPeerResolver.restoreName(context, originalName)
+    }
+
+    // The client-role recovery twin: re-scan for the peer's advertised name and cache its MAC —
+    // the same resolution pairing runs, offered again for a peer stuck without an address.
+    fun runFindDevice(peer: PairedPeer) {
+        uiState = PairingUiState.ResolvingBluetooth
+        BluetoothPeerResolver.resolveMac(context, peer.peerId) { mac ->
+            if (mac != null) {
+                peerStore.getPeer(peer.peerId)?.let { peerStore.upsertPeer(it.copy(bluetoothMac = mac)) }
+            }
+            refreshPeers()
+            uiState = if (mac != null) {
+                PairingUiState.Success(peerStore.getPeer(peer.peerId) ?: peer)
+            } else {
+                PairingUiState.Error(languageManager.getString("sync_bluetooth_not_found"))
+            }
+        }
+    }
+
     // The passive/HCE ("card") side of a tap: PairingHceService already persisted the peer by the
     // time this fires — all that's left is the discoverability dance so the *other* phone's discovery
-    // scan can resolve our MAC, then restore our original Bluetooth name once that window closes.
+    // scan can resolve our MAC.
     LaunchedEffect(Unit) {
         PairingEvents.events.collect { event ->
             when (event) {
                 is PairingEvent.ReceivedAsServer -> {
                     uiState = PairingUiState.ResolvingBluetooth
-                    discoverableLauncher.launch(BluetoothPeerResolver.buildDiscoverableIntent())
-                    val originalName = BluetoothPeerResolver.advertiseAs(context, peerStore.localPeerId)
-                    delay(DISCOVERY_WINDOW_MS)
-                    BluetoothPeerResolver.restoreName(context, originalName)
+                    runAdvertiseWindow()
                     refreshPeers()
                     uiState = PairingUiState.Success(event.peer)
                 }
@@ -269,6 +297,20 @@ fun SyncScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            // The name this phone introduces itself by — what the other device's lists show as a
+            // record's provenance. Saved as typed; reaches the peer at the next tap or session.
+            var deviceName by remember { mutableStateOf(peerStore.localDeviceName) }
+            OutlinedTextField(
+                value = deviceName,
+                onValueChange = {
+                    deviceName = it
+                    peerStore.localDeviceName = it
+                },
+                label = { Text(languageManager.getString("sync_device_name_label")) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+            )
+
             when (val state = uiState) {
                 is PairingUiState.Idle -> {
                     Button(onClick = {
@@ -344,6 +386,15 @@ fun SyncScreen(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        // The manual choreography has an order: the listening side
+                                        // must start first — say which side this phone is.
+                                        Text(
+                                            languageManager.getString(
+                                                if (peer.isServerRole) "sync_role_server_hint" else "sync_role_client_hint"
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = { requestSyncNow(peer) }) {
@@ -385,6 +436,22 @@ fun SyncScreen(
                                                 },
                                                 modifier = Modifier.padding(top = 8.dp)
                                             )
+                                            // The count alone can't say WHICH app failed or why —
+                                            // an app locked behind biometrics reads completely
+                                            // differently from a transport error, and the per-app
+                                            // summary is where that difference lives.
+                                            result.appResults.forEach { app ->
+                                                Text(
+                                                    "${app.label}: ${app.summary}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = if (app.success) {
+                                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                                    } else {
+                                                        MaterialTheme.colorScheme.error
+                                                    },
+                                                    modifier = Modifier.padding(top = 2.dp)
+                                                )
+                                            }
                                         }
                                         is SyncSessionResult.Failure -> Text(
                                             result.reason,
@@ -394,6 +461,21 @@ fun SyncScreen(
                                         )
                                     }
                                     null -> {}
+                                }
+
+                                // Recovery for a pairing whose discovery window was missed, and for
+                                // an address gone stale: the listening side re-advertises, the
+                                // connecting side re-scans — the same resolution pairing runs.
+                                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                                    if (peer.isServerRole) {
+                                        TextButton(onClick = { scope.launch { runAdvertiseWindow() } }) {
+                                            Text(languageManager.getString("sync_advertise_button"))
+                                        }
+                                    } else {
+                                        TextButton(onClick = { runFindDevice(peer) }) {
+                                            Text(languageManager.getString("sync_find_device_button"))
+                                        }
+                                    }
                                 }
 
                                 Row(
@@ -406,6 +488,9 @@ fun SyncScreen(
                                         checked = peer.autoSyncEnabled,
                                         onCheckedChange = { enabled ->
                                             peerStore.upsertPeer(peer.copy(autoSyncEnabled = enabled))
+                                            // The aligned alarm chain follows the enabled set —
+                                            // re-arm (or cancel) it the moment that set changes.
+                                            SyncAlarmScheduler.ensureScheduled(context)
                                             refreshPeers()
                                         }
                                     )
@@ -420,6 +505,7 @@ fun SyncScreen(
                                                 selected = peer.autoSyncIntervalMinutes == minutes,
                                                 onClick = {
                                                     peerStore.upsertPeer(peer.copy(autoSyncIntervalMinutes = minutes))
+                                                    SyncAlarmScheduler.ensureScheduled(context)
                                                     refreshPeers()
                                                 },
                                                 label = { Text(String.format(languageManager.getString("sync_interval_minutes"), minutes)) }

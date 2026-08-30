@@ -44,6 +44,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
         val SCAN_IMAGE_RETENTION = stringPreferencesKey("scan_image_retention")
         val SCAN_LLM_LEVEL = stringPreferencesKey("scan_llm_level")
         val VOICE_LLM_LEVEL = stringPreferencesKey("voice_llm_level")
+        val SYNC_LEVEL = stringPreferencesKey("sync_level")
         val TODAY_EFFECT = stringPreferencesKey("today_effect")
         val TODAY_EFFECT_STYLE = stringPreferencesKey("today_effect_style")
         val TODAY_EFFECT_COLOR = longPreferencesKey("today_effect_color")
@@ -84,6 +85,7 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
             scanImageRetention = prefs[Keys.SCAN_IMAGE_RETENTION] ?: NotesSettings.RETENTION_ON_FAILURE,
             scanLlmLevel = prefs[Keys.SCAN_LLM_LEVEL] ?: NotesSettings.SCAN_FLOW_SUPPORT.default.name,
             voiceLlmLevel = prefs[Keys.VOICE_LLM_LEVEL] ?: NotesSettings.VOICE_FLOW_SUPPORT.default.name,
+            syncLevel = prefs[Keys.SYNC_LEVEL] ?: com.voxapps.datahygiene.SyncLevel.MANUAL.name,
             todayEffect = prefs[Keys.TODAY_EFFECT] ?: TodayEffect.NONE.name,
             todayEffectStyle = prefs[Keys.TODAY_EFFECT_STYLE] ?: TodayEffectStyle.RING.name,
             todayEffectColor = prefs[Keys.TODAY_EFFECT_COLOR] ?: NotesSettings.TODAY_EFFECT_DEFAULT_COLOR,
@@ -191,6 +193,11 @@ class NotesSettingsRepositoryImpl(appContext: Context) : NotesSettingsRepository
     override suspend fun setVoiceLlmLevel(level: String) {
         if (NotesSettings.VOICE_FLOW_SUPPORT.supported.none { it.name == level }) return
         dataStore.edit { it[Keys.VOICE_LLM_LEVEL] = level }
+    }
+
+    override suspend fun setSyncLevel(level: String) {
+        if (com.voxapps.datahygiene.SyncLevel.entries.none { it.name == level }) return
+        dataStore.edit { it[Keys.SYNC_LEVEL] = level }
     }
 
     override suspend fun setTodayEffect(effect: String) {

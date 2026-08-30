@@ -83,6 +83,9 @@ import com.voxapps.design.SpeedDialFab
 import com.voxapps.design.effects.TodayEffect
 import com.voxapps.design.effects.TodayEffectStyle
 import com.voxapps.ipc.VoxAppsDiscovery
+import androidx.compose.runtime.rememberCoroutineScope
+import com.voxapps.ipc.VoxDataTransferClient
+import kotlinx.coroutines.launch
 import com.voxapps.ipc.VoxIpc
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.calendarapp.domain.llm.LlmTasks
@@ -147,6 +150,10 @@ fun CalendarScreen(
     var showBulkDeleteConfirm by remember { mutableStateOf(false) }
     var showMoveExistingPicker by remember { mutableStateOf(false) }
     var showMoveNewForm by remember { mutableStateOf(false) }
+    var showDevicePicker by remember { mutableStateOf(false) }
+    // Null while the ask to Hub is in flight — the sheet reads that as "loading", an empty list as
+    // "nothing paired".
+    var syncDevices by remember { mutableStateOf<List<com.voxapps.design.picklist.VoxSyncDevice>?>(null) }
 
     val effectiveOnItemClick: (EntryCalendarItem) -> Unit = { item ->
         selection.tap(item.entryWithTags.entry.id) { onEditEntry(item) }
@@ -208,7 +215,8 @@ fun CalendarScreen(
                     onClose = { selection.clear() },
                     onDelete = { showBulkDeleteConfirm = true },
                     onMoveExisting = { showMoveExistingPicker = true },
-                    onMoveNew = { showMoveNewForm = true }
+                    onMoveNew = { showMoveNewForm = true },
+                    onSyncWithDevice = { showDevicePicker = true }
                 )
             } else {
                 TopAppBar(
@@ -343,13 +351,21 @@ fun CalendarScreen(
                             todayEffectPrimaryColor = todayEffectPrimaryColor,
                             todayEffectSecondaryColor = todayEffectSecondaryColor,
                             todayEffectSpeed = todayEffectSpeed,
-                            itemContent = { item ->
+                            // The multi-select grammar itself lives in CalendarView (see
+                            // CalendarSelection); this app supplies the key, keeps its own
+                            // subscribed-calendar exclusion, and draws its own row.
+                            selection = com.voxapps.calendar.CalendarSelection(selection) {
+                                it.entryWithTags.entry.id
+                            },
+                            itemContent = { item, sel ->
+                                val entry = item.entryWithTags.entry
+                                val selectable = layerById[entry.layerId]?.kind != CalendarLayerKind.SUBSCRIBED
                                 EntryRow(
                                     item = item,
-                                    layer = layerById[item.entryWithTags.entry.layerId],
-                                    onClick = { effectiveOnItemClick(item) },
-                                    isSelected = item.entryWithTags.entry.id in selection,
-                                    onLongClick = { effectiveOnItemLongClick(item) }
+                                    layer = layerById[entry.layerId],
+                                    onClick = { sel?.onClick { onEditEntry(item) } ?: effectiveOnItemClick(item) },
+                                    isSelected = sel?.selected == true,
+                                    onLongClick = { if (selectable) sel?.onLongClick() }
                                 )
                             }
                         )
@@ -434,6 +450,48 @@ fun CalendarScreen(
             onEditEntry = {
                 daySummaryFor = null
                 onEditEntry(it)
+            }
+        )
+    }
+
+    if (showDevicePicker) {
+        val pushScope = rememberCoroutineScope()
+        // Fetched on open, not held live: the paired devices live in Vox Hub and change rarely.
+        LaunchedEffect(Unit) {
+            syncDevices = VoxDataTransferClient.requestSyncPeers(context)
+                ?.takeIf { it.ok }
+                ?.let { com.voxapps.design.picklist.parseVoxSyncDevices(it.text) }
+                ?: emptyList()
+        }
+        com.voxapps.design.picklist.VoxDevicePickerSheet(
+            title = languageManager.getString("sync_with_device_title"),
+            devices = syncDevices.orEmpty(),
+            emptyText = languageManager.getString(
+                if (syncDevices == null) "sync_devices_loading" else "sync_no_paired_devices"
+            ),
+            onPick = { device ->
+                val ids = selection.ids.toList()
+                showDevicePicker = false
+                syncDevices = null
+                pushScope.launch {
+                    val uids = stateManager.entryUidsFor(ids)
+                    val queued = uids.isNotEmpty() && VoxDataTransferClient.enqueueSyncPush(
+                        context, device.peerId, context.packageName, uids
+                    )?.ok == true
+                    android.widget.Toast.makeText(
+                        context,
+                        String.format(
+                            languageManager.getString(if (queued) "sync_push_queued" else "sync_push_failed"),
+                            device.label
+                        ),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    if (queued) selection.clear()
+                }
+            },
+            onDismiss = {
+                showDevicePicker = false
+                syncDevices = null
             }
         )
     }

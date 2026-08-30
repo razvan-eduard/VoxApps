@@ -7,9 +7,12 @@ import com.voxapps.calendarapp.data.CalendarEntryType
 import com.voxapps.calendarapp.data.CalendarEntryWithTags
 import com.voxapps.calendarapp.data.CalendarLayer
 import com.voxapps.calendarapp.data.CalendarRepository
+import com.voxapps.calendarapp.data.ToDoRepository
 import com.voxapps.calendarapp.data.preferences.CalendarSettings
 import com.voxapps.calendarapp.data.preferences.CalendarSettingsRepository
 import com.voxapps.calendarapp.state.SessionManager
+import com.voxapps.ipc.VoxCommand
+import com.voxapps.ipc.VoxIpc
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -21,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -29,6 +33,7 @@ class CalendarSyncHandlerTest {
     private lateinit var settingsRepo: CalendarSettingsRepository
     private lateinit var sessionManager: SessionManager
     private lateinit var calendarRepo: CalendarRepository
+    private lateinit var toDoRepo: ToDoRepository
     private lateinit var handler: CalendarSyncHandler
 
     @Before
@@ -36,13 +41,21 @@ class CalendarSyncHandlerTest {
         settingsRepo = mockk()
         sessionManager = mockk()
         calendarRepo = mockk()
-        handler = CalendarSyncHandler(settingsRepo, sessionManager, calendarRepo, "The calendar is locked. Unlock the app.")
+        toDoRepo = mockk()
+        handler = CalendarSyncHandler(settingsRepo, sessionManager, calendarRepo, toDoRepo, "The calendar is locked. Unlock the app.")
 
         every { settingsRepo.getSnapshot() } returns CalendarSettings(isBiometricRequired = false)
         every { calendarRepo.layers } returns flowOf(emptyList())
+        every { toDoRepo.lists } returns flowOf(emptyList())
         coEvery { calendarRepo.entriesSnapshot() } returns emptyList()
         coEvery { calendarRepo.tombstonesSince(any()) } returns emptyList()
     }
+
+    private fun exportCommand(since: Long? = null, scopeNames: List<String>? = null, uids: List<String>? = null) =
+        VoxCommand(op = VoxIpc.OP_SYNC_EXPORT, since = since, scopeNames = scopeNames, uids = uids)
+
+    private fun mergeCommand(payload: String, deviceId: String? = null, deviceName: String? = null) =
+        VoxCommand(op = VoxIpc.OP_SYNC_MERGE, text = payload, sourceDeviceId = deviceId, sourceDeviceName = deviceName)
 
     private fun entry(uid: String, updatedAt: Long, title: String = "title", layerId: Long = 1) = CalendarEntry(
         uid = uid,
@@ -59,6 +72,11 @@ class CalendarSyncHandlerTest {
         tags.map { name -> CalendarEntryTag(entryId = entry.id, tagName = name) }
     )
 
+    private fun exportedUids(resultText: String?): List<String> =
+        JSONObject(resultText).getJSONArray("entries").let { arr ->
+            (0 until arr.length()).map { arr.getJSONObject(it).getString("uid") }
+        }
+
     // --- export ---
 
     @Test
@@ -68,12 +86,9 @@ class CalendarSyncHandlerTest {
             withTags(entry(uid = "new", updatedAt = 2000L))
         )
 
-        val result = handler.export(since = 1000L, scopeNames = null)
-        val uids = JSONObject(result.text).getJSONArray("entries").let { arr ->
-            (0 until arr.length()).map { arr.getJSONObject(it).getString("uid") }
-        }
+        val result = handler.export(exportCommand(since = 1000L))
 
-        assertEquals(listOf("new"), uids)
+        assertEquals(listOf("new"), exportedUids(result.text))
     }
 
     @Test
@@ -86,19 +101,45 @@ class CalendarSyncHandlerTest {
             withTags(entry(uid = "other-layer", updatedAt = 100L, layerId = 2))
         )
 
-        val result = handler.export(since = 0L, scopeNames = listOf("work"))
-        val uids = JSONObject(result.text).getJSONArray("entries").let { arr ->
-            (0 until arr.length()).map { arr.getJSONObject(it).getString("uid") }
-        }
+        val result = handler.export(exportCommand(since = 0L, scopeNames = listOf("work")))
 
-        assertEquals(listOf("in-scope"), uids)
+        assertEquals(listOf("in-scope"), exportedUids(result.text))
+    }
+
+    @Test
+    fun `export with an empty scope list exports no entries at all`() = runTest {
+        every { calendarRepo.layers } returns flowOf(
+            listOf(CalendarLayer(id = 1, name = "Work", colorArgb = 0, createdAt = 0))
+        )
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(
+            withTags(entry(uid = "changed", updatedAt = 100L, layerId = 1))
+        )
+
+        val result = handler.export(exportCommand(since = 0L, scopeNames = emptyList()))
+
+        assertEquals(emptyList<String>(), exportedUids(result.text))
+    }
+
+    @Test
+    fun `forced uids travel despite an empty scope and an already-passed watermark`() = runTest {
+        every { calendarRepo.layers } returns flowOf(
+            listOf(CalendarLayer(id = 1, name = "Work", colorArgb = 0, createdAt = 0))
+        )
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(
+            withTags(entry(uid = "pushed", updatedAt = 100L, layerId = 1)),
+            withTags(entry(uid = "unrelated", updatedAt = 100L, layerId = 1))
+        )
+
+        val result = handler.export(exportCommand(since = 5000L, scopeNames = emptyList(), uids = listOf("pushed")))
+
+        assertEquals(listOf("pushed"), exportedUids(result.text))
     }
 
     @Test
     fun `export includes tombstones since the watermark`() = runTest {
         coEvery { calendarRepo.tombstonesSince(1000L) } returns listOf(CalendarEntryTombstone("deleted-uid", 1500L))
 
-        val result = handler.export(since = 1000L, scopeNames = null)
+        val result = handler.export(exportCommand(since = 1000L))
         val tombstone = JSONObject(result.text).getJSONArray("tombstones").getJSONObject(0)
 
         assertEquals("deleted-uid", tombstone.getString("uid"))
@@ -110,7 +151,7 @@ class CalendarSyncHandlerTest {
         every { settingsRepo.getSnapshot() } returns CalendarSettings(isBiometricRequired = true)
         every { sessionManager.isSessionValid(any()) } returns false
 
-        val result = handler.export(since = 0L, scopeNames = null)
+        val result = handler.export(exportCommand(since = 0L))
 
         assertFalse(result.ok)
         coVerify(exactly = 0) { calendarRepo.entriesSnapshot() }
@@ -123,7 +164,7 @@ class CalendarSyncHandlerTest {
         coEvery { calendarRepo.insertSyncedEntry(any(), any()) } returns 1L
 
         val payload = """{"entries":[{"uid":"a","type":"EVENT","title":"hi","startMillis":0,"createdAt":100,"updatedAt":100}],"tombstones":[]}"""
-        handler.merge(payload)
+        handler.merge(mergeCommand(payload))
 
         coVerify(exactly = 1) { calendarRepo.insertSyncedEntry(match { it.uid == "a" && it.title == "hi" }, any()) }
     }
@@ -135,7 +176,7 @@ class CalendarSyncHandlerTest {
         coEvery { calendarRepo.updateSyncedEntry(any(), any()) } just Runs
 
         val payload = """{"entries":[{"uid":"a","type":"EVENT","title":"updated","startMillis":0,"createdAt":100,"updatedAt":200}],"tombstones":[]}"""
-        handler.merge(payload)
+        handler.merge(mergeCommand(payload))
 
         coVerify(exactly = 1) { calendarRepo.updateSyncedEntry(match { it.id == 42L && it.uid == "a" && it.title == "updated" }, any()) }
         coVerify(exactly = 0) { calendarRepo.insertSyncedEntry(any(), any()) }
@@ -146,7 +187,7 @@ class CalendarSyncHandlerTest {
         coEvery { calendarRepo.entriesSnapshot() } returns listOf(withTags(entry(uid = "a", updatedAt = 500L)))
 
         val payload = """{"entries":[{"uid":"a","type":"EVENT","title":"stale","startMillis":0,"createdAt":100,"updatedAt":100}],"tombstones":[]}"""
-        handler.merge(payload)
+        handler.merge(mergeCommand(payload))
 
         coVerify(exactly = 0) { calendarRepo.insertSyncedEntry(any(), any()) }
         coVerify(exactly = 0) { calendarRepo.updateSyncedEntry(any(), any()) }
@@ -158,7 +199,7 @@ class CalendarSyncHandlerTest {
         coEvery { calendarRepo.deleteEntryByUid("a") } just Runs
 
         val payload = """{"entries":[],"tombstones":[{"uid":"a","deletedAt":9999}]}"""
-        handler.merge(payload)
+        handler.merge(mergeCommand(payload))
 
         coVerify(exactly = 1) { calendarRepo.deleteEntryByUid("a") }
     }
@@ -170,15 +211,91 @@ class CalendarSyncHandlerTest {
         coEvery { calendarRepo.insertSyncedEntry(any(), any()) } returns 1L
 
         val payload = """{"entries":[{"uid":"a","type":"EVENT","title":"hi","startMillis":0,"createdAt":100,"updatedAt":100,"layerName":"Travel"}],"tombstones":[]}"""
-        handler.merge(payload)
+        handler.merge(mergeCommand(payload))
 
         coVerify(exactly = 1) { calendarRepo.addLayer("Travel", any(), any(), any()) }
         coVerify(exactly = 1) { calendarRepo.insertSyncedEntry(match { it.layerId == 7L }, any()) }
     }
 
     @Test
+    fun `merge resolves an unknown list name by creating it through the app's own create flow`() = runTest {
+        coEvery { toDoRepo.createList("Groceries", any()) } returns 9L
+        coEvery { calendarRepo.insertSyncedEntry(any(), any()) } returns 1L
+
+        val payload = """{"entries":[{"uid":"a","type":"TASK","title":"milk","listName":"Groceries","createdAt":100,"updatedAt":100}],"tombstones":[]}"""
+        handler.merge(mergeCommand(payload))
+
+        coVerify(exactly = 1) { toDoRepo.createList("Groceries", any()) }
+        coVerify(exactly = 1) { calendarRepo.insertSyncedEntry(match { it.listId == 9L }, any()) }
+    }
+
+    @Test
+    fun `absent keys keep the local row's list link, importance, and tags`() = runTest {
+        val localRow = entry(uid = "a", updatedAt = 100L).copy(id = 42, listId = 5L, isImportant = true)
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(withTags(localRow, tags = listOf("keep")))
+        coEvery { calendarRepo.getIdByUid("a") } returns 42L
+        coEvery { calendarRepo.updateSyncedEntry(any(), any()) } just Runs
+
+        // A narrower delta, as an older peer would send: no listName/isImportant/tags keys at all.
+        val payload = """{"entries":[{"uid":"a","type":"EVENT","title":"t","startMillis":0,"createdAt":100,"updatedAt":200}],"tombstones":[]}"""
+        handler.merge(mergeCommand(payload))
+
+        coVerify(exactly = 1) {
+            calendarRepo.updateSyncedEntry(match { it.listId == 5L && it.isImportant }, isNull())
+        }
+    }
+
+    @Test
+    fun `round-trip - exported explicit nulls overwrite where absent keys would preserve`() = runTest {
+        // The peer's version of "a" belongs to no list and is flagged important.
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(
+            withTags(entry(uid = "a", updatedAt = 200L).copy(isImportant = true))
+        )
+        val exported = handler.export(exportCommand()).text.orEmpty()
+        val exportedEntry = JSONObject(exported).getJSONArray("entries").getJSONObject(0)
+        assertTrue(exportedEntry.has("listName") && exportedEntry.isNull("listName"))
+
+        // Merging that delta onto a device whose local row is list-linked and unimportant.
+        val localRow = entry(uid = "a", updatedAt = 100L).copy(id = 42, listId = 5L, isImportant = false)
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(withTags(localRow))
+        coEvery { calendarRepo.getIdByUid("a") } returns 42L
+        coEvery { calendarRepo.updateSyncedEntry(any(), any()) } just Runs
+        handler.merge(mergeCommand(exported))
+
+        coVerify(exactly = 1) {
+            calendarRepo.updateSyncedEntry(match { it.listId == null && it.isImportant }, any())
+        }
+    }
+
+    @Test
+    fun `merge stamps the sender's identity on inserts and never on updates`() = runTest {
+        coEvery { calendarRepo.entriesSnapshot() } returns listOf(
+            withTags(entry(uid = "existing", updatedAt = 100L).copy(id = 7))
+        )
+        coEvery { calendarRepo.getIdByUid("existing") } returns 7L
+        coEvery { calendarRepo.insertSyncedEntry(any(), any()) } returns 1L
+        coEvery { calendarRepo.updateSyncedEntry(any(), any()) } just Runs
+
+        val payload = """{"entries":[
+            {"uid":"fresh","type":"EVENT","title":"n","startMillis":0,"createdAt":1,"updatedAt":1},
+            {"uid":"existing","type":"EVENT","title":"e","startMillis":0,"createdAt":1,"updatedAt":200}
+        ],"tombstones":[]}"""
+        handler.merge(mergeCommand(payload, deviceId = "peer-1", deviceName = "Pixel"))
+
+        coVerify(exactly = 1) {
+            calendarRepo.insertSyncedEntry(
+                match { it.uid == "fresh" && it.originDeviceId == "peer-1" && it.originDeviceName == "Pixel" },
+                any()
+            )
+        }
+        coVerify(exactly = 1) {
+            calendarRepo.updateSyncedEntry(match { it.uid == "existing" && it.originDeviceId == null }, any())
+        }
+    }
+
+    @Test
     fun `malformed merge payload returns a failure without touching the repository`() = runTest {
-        val result = handler.merge("{ not json")
+        val result = handler.merge(mergeCommand("{ not json"))
 
         assertFalse(result.ok)
         coVerify(exactly = 0) { calendarRepo.entriesSnapshot() }
@@ -189,7 +306,7 @@ class CalendarSyncHandlerTest {
         every { settingsRepo.getSnapshot() } returns CalendarSettings(isBiometricRequired = true)
         every { sessionManager.isSessionValid(any()) } returns false
 
-        val result = handler.merge("""{"entries":[],"tombstones":[]}""")
+        val result = handler.merge(mergeCommand("""{"entries":[],"tombstones":[]}"""))
 
         assertFalse(result.ok)
         coVerify(exactly = 0) { calendarRepo.entriesSnapshot() }

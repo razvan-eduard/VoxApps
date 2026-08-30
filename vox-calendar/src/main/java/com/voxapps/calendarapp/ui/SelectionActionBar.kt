@@ -3,6 +3,7 @@ package com.voxapps.calendarapp.ui
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.SendToMobile
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -16,7 +17,8 @@ internal fun SelectionActionBar(
     onClose: () -> Unit,
     onDelete: () -> Unit,
     onMoveExisting: () -> Unit,
-    onMoveNew: () -> Unit
+    onMoveNew: () -> Unit,
+    onSyncWithDevice: () -> Unit
 ) {
     val languageManager = LocalLanguageManager.current
     VoxSelectionBar(
@@ -33,6 +35,9 @@ internal fun SelectionActionBar(
         }
         IconButton(onClick = onMoveNew) {
             Icon(Icons.Filled.CreateNewFolder, contentDescription = languageManager.getString("selection_move_new"))
+        }
+        IconButton(onClick = onSyncWithDevice) {
+            Icon(Icons.Filled.SendToMobile, contentDescription = languageManager.getString("selection_sync_with_device"))
         }
     }
 }

@@ -21,7 +21,13 @@ data class SpendingLimit(
     val categoryId: Long? = null,
     val amountHomeCurrency: Double,
     val period: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /**
+     * Whether only records made on this device count toward the limit — true by default, so a
+     * personal budget keeps meaning what it meant before device sync could add someone else's
+     * spending to the ledger. Unticked, records from every device count: a shared budget.
+     */
+    val ownDeviceOnly: Boolean = true
 ) {
     companion object {
         const val PERIOD_WEEKLY = "WEEKLY"

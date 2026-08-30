@@ -69,14 +69,16 @@ class NfcPairingReader(
             onResult(PairingResult.Failure("Pairing handshake was rejected"))
             return
         }
-        val remotePeerId = JSONObject(String(NfcPairingProtocol.extractResponseData(helloResponse), Charsets.UTF_8))
-            .getString("peerId")
+        val hello = JSONObject(String(NfcPairingProtocol.extractResponseData(helloResponse), Charsets.UTF_8))
+        val remotePeerId = hello.getString("peerId")
+        val remoteName = hello.optString("name").takeIf { it.isNotBlank() } ?: "Vox device"
 
         val sharedKey = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val sharedKeyBase64 = Base64.encodeToString(sharedKey, Base64.NO_WRAP)
         val pairPayload = JSONObject()
             .put("peerId", peerStore.localPeerId)
             .put("key", sharedKeyBase64)
+            .put("name", peerStore.localDeviceName)
             .toString()
             .toByteArray(Charsets.UTF_8)
 
@@ -88,13 +90,15 @@ class NfcPairingReader(
 
         val peer = PairedPeer(
             peerId = remotePeerId,
-            label = "Vox device",
+            label = remoteName,
             isServerRole = false,
             sharedKeyBase64 = sharedKeyBase64,
             bluetoothMac = null,
             pairedAt = System.currentTimeMillis()
         )
-        peerStore.upsertPeer(peer)
-        onResult(PairingResult.Success(peer))
+        // A re-tap of an already-known phone rotates the key but keeps everything the relationship
+        // accumulated — see SyncPeerStore.upsertPairing.
+        peerStore.upsertPairing(peer)
+        onResult(PairingResult.Success(peerStore.getPeer(remotePeerId) ?: peer))
     }
 }

@@ -358,5 +358,11 @@
   "hint_ics_title": "Import et export ICS",
   "hint_ics_body": "Lit et écrit le format calendrier standard, pour que les entrées circulent vers et depuis Google Agenda, Thunderbird ou Apple Calendar sans compte de part et d'autre.",
   "hint_backup_title": "Sauvegarde et restauration",
-  "hint_backup_body": "Une sauvegarde emporte entrées, calques, listes de tâches et réglages. Le mode le plus sûr ne supprime que ce qui existait lors de la sauvegarde."
+  "hint_backup_body": "Une sauvegarde emporte entrées, calques, listes de tâches et réglages. Le mode le plus sûr ne supprime que ce qui existait lors de la sauvegarde.",
+  "selection_sync_with_device": "Synchroniser avec un appareil",
+  "sync_with_device_title": "Vers quel appareil ?",
+  "sync_devices_loading": "Demande à Vox Hub…",
+  "sync_no_paired_devices": "Aucun appareil appairé. Appairez-en un dans Vox Hub.",
+  "sync_push_queued": "En file pour %1$s — transfert dès qu’il est joignable",
+  "sync_push_failed": "Impossible de mettre en file pour %1$s"
 }

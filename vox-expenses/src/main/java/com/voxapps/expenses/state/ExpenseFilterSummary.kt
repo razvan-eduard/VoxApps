@@ -28,11 +28,13 @@ object ExpenseFilterSummary {
         sort: SortMode,
         /** The narrowing to records with something missing, named so it can be seen and undone. */
         needsAttentionLabel: String? = null,
+        originLabel: String? = null,
         formatDate: (Long) -> String,
         formatAmount: (Double) -> String,
         sortLabel: (SortMode) -> String
     ): List<String?> = listOf(
         needsAttentionLabel?.takeIf { it.isNotBlank() },
+        originLabel?.takeIf { it.isNotBlank() },
         category?.takeIf { it.isNotBlank() },
         bank?.text?.takeIf { it.isNotBlank() },
         vendor?.text?.takeIf { it.isNotBlank() },

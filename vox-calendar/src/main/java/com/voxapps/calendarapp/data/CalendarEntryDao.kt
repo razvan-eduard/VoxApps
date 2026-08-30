@@ -62,8 +62,10 @@ interface CalendarEntryDao {
     suspend fun getById(id: Long): CalendarEntry?
 
     /** Reassigns all entries from a layer being deleted to the surviving default layer. */
-    @Query("UPDATE calendar_entries SET layerId = :newLayerId WHERE layerId = :oldLayerId")
-    suspend fun reassignLayer(oldLayerId: Long, newLayerId: Long)
+    // This bulk relink bumps updatedAt like any other edit: what a record points at is part of
+    // what it says, and a peer-to-peer sync can only carry the change if the row looks changed.
+    @Query("UPDATE calendar_entries SET layerId = :newLayerId, updatedAt = :now WHERE layerId = :oldLayerId")
+    suspend fun reassignLayer(oldLayerId: Long, newLayerId: Long, now: Long)
 
     /** Every uid currently under [layerId] — a subscription sync's diff base (see
      *  CalendarSubscriptionSyncEngine) and the delete-all branch of layer deletion. */
@@ -94,6 +96,11 @@ interface CalendarEntryDao {
     /** Read the uid before a delete-by-id, since the row won't exist to query afterwards. */
     @Query("SELECT uid FROM calendar_entries WHERE id = :id")
     suspend fun getUidById(id: Long): String?
+
+    /** The same reading for a whole screen selection about to be pushed to another device — local
+     *  row ids mean nothing on the other phone. */
+    @Query("SELECT uid FROM calendar_entries WHERE id IN (:ids)")
+    suspend fun getUidsByIds(ids: List<Long>): List<String>
 
     /** Resolves a peer-to-peer sync delta's uid back to this device's own local row id — needed
      *  before an update (preserve the local id) or a delete-by-uid (Room has no delete-by-uid). */

@@ -4,6 +4,7 @@ import android.app.Application
 import com.voxapps.hub.di.HubContainer
 import com.voxapps.hub.domain.backup.BackupScheduler
 import com.voxapps.hub.domain.sync.ScheduledSyncScheduler
+import com.voxapps.hub.domain.sync.SyncAlarmScheduler
 import com.voxapps.hub.domain.voxconnect.VoxConnectForegroundService
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,10 @@ class HubApplication : Application() {
         val initialSnapshot = container.settingsRepository.getSnapshot()
         BackupScheduler.reschedule(this, initialSnapshot.backupInterval)
         ScheduledSyncScheduler.ensureScheduled(this)
+        // Alarms do not survive a reboot, and a Doze-deferred one can be dropped outright — arming
+        // the chain here means a process start of any kind revives auto-sync, without waiting for
+        // the periodic worker's own tick to notice.
+        SyncAlarmScheduler.ensureScheduled(this)
 
         // Apply the persisted debug-logging flags immediately, then keep them in sync with any
         // later Settings toggle (mirrors every other satellite app's Application class).

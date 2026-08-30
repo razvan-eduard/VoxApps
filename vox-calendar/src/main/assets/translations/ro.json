@@ -358,5 +358,11 @@
   "hint_ics_title": "Import și export ICS",
   "hint_ics_body": "Citește și scrie formatul standard de calendar, deci intrările circulă spre și dinspre Google Calendar, Thunderbird sau Apple Calendar fără ca vreo parte să aibă nevoie de cont.",
   "hint_backup_title": "Copie de siguranță",
-  "hint_backup_body": "O copie conține intrările, straturile, listele de sarcini și setările. Restaurarea oferă trei moduri; cel mai sigur șterge doar ce exista când a fost făcută copia."
+  "hint_backup_body": "O copie conține intrările, straturile, listele de sarcini și setările. Restaurarea oferă trei moduri; cel mai sigur șterge doar ce exista când a fost făcută copia.",
+  "selection_sync_with_device": "Sincronizează cu un dispozitiv",
+  "sync_with_device_title": "Către ce dispozitiv?",
+  "sync_devices_loading": "Întreb Vox Hub…",
+  "sync_no_paired_devices": "Niciun dispozitiv împerecheat. Împerechează unul în Vox Hub.",
+  "sync_push_queued": "Pus la coadă pentru %1$s — se transferă când e accesibil",
+  "sync_push_failed": "Nu s-a putut pune la coadă pentru %1$s"
 }

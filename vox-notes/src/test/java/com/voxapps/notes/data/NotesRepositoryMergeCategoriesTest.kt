@@ -32,7 +32,7 @@ class NotesRepositoryMergeCategoriesTest {
     fun `reassigns notes and deletes the old category when both names resolve`() = runTest {
         repository.mergeCategories(mapOf("Groceries" to "Cumpărături"))
 
-        coVerify(exactly = 1) { noteDao.reassignCategory(groceries.id, cumparaturi.id) }
+        coVerify(exactly = 1) { noteDao.reassignCategory(groceries.id, cumparaturi.id, any()) }
         coVerify(exactly = 1) { categoryDao.delete(groceries) }
     }
 
@@ -40,7 +40,7 @@ class NotesRepositoryMergeCategoriesTest {
     fun `is case-insensitive when matching names`() = runTest {
         repository.mergeCategories(mapOf("groceries" to "cumpărături"))
 
-        coVerify(exactly = 1) { noteDao.reassignCategory(groceries.id, cumparaturi.id) }
+        coVerify(exactly = 1) { noteDao.reassignCategory(groceries.id, cumparaturi.id, any()) }
         coVerify(exactly = 1) { categoryDao.delete(groceries) }
     }
 
@@ -48,7 +48,7 @@ class NotesRepositoryMergeCategoriesTest {
     fun `skips entries where the old name does not exist`() = runTest {
         repository.mergeCategories(mapOf("Nonexistent" to "Cumpărături"))
 
-        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any(), any()) }
         coVerify(exactly = 0) { categoryDao.delete(any()) }
     }
 
@@ -56,7 +56,7 @@ class NotesRepositoryMergeCategoriesTest {
     fun `skips entries where the canonical name does not exist`() = runTest {
         repository.mergeCategories(mapOf("Groceries" to "Nonexistent"))
 
-        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any(), any()) }
         coVerify(exactly = 0) { categoryDao.delete(any()) }
     }
 
@@ -64,7 +64,7 @@ class NotesRepositoryMergeCategoriesTest {
     fun `skips same-name entries (no-op merge)`() = runTest {
         repository.mergeCategories(mapOf("Work" to "Work"))
 
-        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any(), any()) }
         coVerify(exactly = 0) { categoryDao.delete(any()) }
     }
 
@@ -72,8 +72,8 @@ class NotesRepositoryMergeCategoriesTest {
     fun `applies multiple independent merge entries`() = runTest {
         repository.mergeCategories(mapOf("Groceries" to "Cumpărături", "Work" to "Cumpărături"))
 
-        coVerify(exactly = 1) { noteDao.reassignCategory(groceries.id, cumparaturi.id) }
-        coVerify(exactly = 1) { noteDao.reassignCategory(work.id, cumparaturi.id) }
+        coVerify(exactly = 1) { noteDao.reassignCategory(groceries.id, cumparaturi.id, any()) }
+        coVerify(exactly = 1) { noteDao.reassignCategory(work.id, cumparaturi.id, any()) }
         coVerify(exactly = 1) { categoryDao.delete(groceries) }
         coVerify(exactly = 1) { categoryDao.delete(work) }
     }

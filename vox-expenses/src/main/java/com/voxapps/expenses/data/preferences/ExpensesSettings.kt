@@ -110,6 +110,17 @@ data class ExpensesSettings(
      */
     val voiceModelUse: String = VOICE_FLOW_SUPPORT.default.name,
     /**
+     * How much of the ledger a device sync volunteers — a [com.voxapps.datahygiene.SyncLevel] name.
+     * At MANUAL (the default) nothing leaves on its own, only records explicitly pushed from
+     * multi-select; at SHARED the bank accounts ticked per peer in Hub replicate continuously; at
+     * ALL the whole ledger does. Governs sending only — what a merge accepts is unaffected. A
+     * device-local choice, like the theme: deliberately not carried by export/import.
+     */
+    val syncLevel: String = com.voxapps.datahygiene.SyncLevel.MANUAL.name,
+    /** Whether lists label records that arrived from another device — see [Expense.originDeviceId].
+     *  Device-local, same as [syncLevel]. */
+    val showSyncProvenance: Boolean = false,
+    /**
      * Which way to assume the money went when no model is asked and no template has been taught —
      * see [ASSUME_NOTHING] and its siblings.
      *
@@ -567,6 +578,11 @@ data class ExpensesSettings(
             LlmLevel.entries.firstOrNull { it.name == stored }
                 ?.takeIf { it in VOICE_FLOW_SUPPORT.supported }
                 ?: LlmLevel.FULL
+
+        /** The stored [syncLevel] as its enum; anything unreadable reads as the level that sends
+         *  nothing unasked. */
+        fun syncLevelOf(stored: String): com.voxapps.datahygiene.SyncLevel =
+            com.voxapps.datahygiene.SyncLevel.fromStored(stored)
 
         /** The stored setting as a rung. The two values predate the scale and map exactly. */
         fun notificationLevelOf(stored: String): LlmLevel = when (stored) {

@@ -1,16 +1,21 @@
 package com.voxapps.expenses.receiver
 
-import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.datahygiene.SyncDeltaKeys
 import com.voxapps.datahygiene.SyncIdentity
+import com.voxapps.datahygiene.SyncLevel
+import com.voxapps.datahygiene.SyncPaging
 import com.voxapps.datahygiene.planMerge
 import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.ExpenseLineItem
+import com.voxapps.expenses.data.ExpenseSource
 import com.voxapps.expenses.data.ExpensesRepository
+import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.domain.llm.optTransactionDirection
 import com.voxapps.expenses.domain.llm.toJsonValue
 import com.voxapps.expenses.state.SessionManager
+import com.voxapps.ipc.VoxCommand
 import com.voxapps.ipc.VoxResult
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
@@ -19,19 +24,27 @@ import com.voxapps.design.color.VoxColorPalette
 
 /**
  * Vox Hub's peer-to-peer sync for this app (see [VoxIpc.OP_SYNC_EXPORT]/[VoxIpc.OP_SYNC_MERGE]) —
- * deliberately separate from [ExpensesExportImportHandler], which is a one-directional *restore*
- * (wipe pre-existing rows, insert a full snapshot verbatim). This is a *delta* merge: only entries
- * changed since a watermark, reconciled via [com.voxapps.datahygiene.planMerge]'s insert-if-new /
- * last-write-wins / delete-on-tombstone algorithm, never a blind overwrite.
+ * deliberately separate from [ExpensesExportImportHandler], which is a one-directional *restore*.
+ * This is a *delta* merge: pages of entries changed since a watermark, reconciled via
+ * [com.voxapps.datahygiene.planMerge]'s insert-if-new / last-write-wins / delete-on-tombstone
+ * algorithm, never a blind overwrite.
  *
- * Categories travel by name, not id (a local Room sequence has no meaning on another phone) — same
- * convention [ExpensesExportImportHandler] already uses. Line items travel *with* their parent
- * expense rather than getting their own sync identity — they're never edited or addressed
- * independently of the expense they belong to (the in-app edit flow already replaces an expense's
- * entire line-item list atomically, see [ExpensesRepository.updateExpense]), so whichever version of
- * the expense wins the last-write-wins comparison carries its line items along with it. No separate
- * per-item merge pass, no per-item uid — consistent with [Expense] itself already being whole-record
- * last-write-wins, not field-level merge.
+ * What the export volunteers is governed by [ExpensesSettings.syncLevel] plus the per-peer account
+ * scope the command carries (see [SyncLevel] for the three rungs); records the user explicitly
+ * pushed ([VoxCommand.uids]) travel at every rung. Deltas are paged ([SyncPaging]) so a large first
+ * sync crosses the binder boundary in bounded pieces.
+ *
+ * On the wire, every field the entity has travels, and links travel by NAME (category, bank
+ * account, recipient — a local Room id has no meaning on another phone). A key holding an explicit
+ * JSON null means "this field IS null" and overwrites; an ABSENT key means the sending build never
+ * knew the field, and the merge keeps the local row's value — so an older peer's narrower delta
+ * can't blank fields it never heard of. Line items travel *with* their parent expense (no sync
+ * identity of their own — the in-app edit flow already replaces an expense's entire line-item list
+ * atomically, so whichever version wins last-write-wins carries its items along).
+ *
+ * Rows a merge INSERTS are stamped with the sending device's identity
+ * ([VoxCommand.sourceDeviceId]/[VoxCommand.sourceDeviceName]) as their provenance; an update never
+ * rewrites an existing row's stamp — where a record came from doesn't change when it's edited.
  */
 class ExpensesSyncHandler(
     private val settingsRepo: ExpensesSettingsRepository,
@@ -39,52 +52,83 @@ class ExpensesSyncHandler(
     private val expensesRepo: ExpensesRepository,
     private val lockedMessage: String
 ) {
-    suspend fun export(since: Long, scopeNames: List<String>?): VoxResult {
+    suspend fun export(command: VoxCommand): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
         if (locked) return VoxResult(ok = false, text = lockedMessage)
 
-        val scopeSet = scopeNames?.takeIf { it.isNotEmpty() }?.map { it.lowercase() }?.toSet()
+        val level = ExpensesSettings.syncLevelOf(settings.syncLevel)
+        val since = command.since ?: 0L
+        // null = everything, empty = nothing — the wire contract; see VoxCommand.scopeNames.
+        val scopeSet = command.scopeNames?.map { it.lowercase() }?.toSet()
 
-        // expensesWithDetails (the same joined query ExpensesExportImportHandler's OP_EXPORT path
-        // uses) resolves each expense's category and line items in one query — no separate
-        // categoryNameById map to build, and line items ride along for free.
-        val accountsForSync = expensesRepo.bankAccountsSnapshot()
-        val changed = expensesRepo.allWithDetails.first()
-            .filter { it.expense.updatedAt > since }
-            .filter { details ->
-                if (scopeSet == null) return@filter true
-                val name = details.category?.name ?: return@filter false
-                name.lowercase() in scopeSet
+        val accounts = expensesRepo.bankAccountsSnapshot()
+        val all = expensesRepo.allWithDetails.first()
+        val continuous = when (level) {
+            SyncLevel.MANUAL -> emptyList()
+            SyncLevel.ALL -> all.filter { it.expense.updatedAt > since }
+            SyncLevel.SHARED -> all.filter { details ->
+                details.expense.updatedAt > since && inAccountScope(details.expense, scopeSet, accounts)
             }
-        val tombstones = expensesRepo.tombstonesSince(since)
+        }
+        val forcedUids = command.uids?.toSet().orEmpty()
+        val forced = if (forcedUids.isEmpty()) emptyList() else all.filter { it.expense.uid in forcedUids }
+        val candidates = (continuous + forced).distinctBy { it.expense.uid }
+        // At MANUAL a pushed copy belongs to the receiving device — a later local deletion is not
+        // its business, so no tombstones travel.
+        val tombstones = if (level == SyncLevel.MANUAL) emptyList() else expensesRepo.tombstonesSince(since)
 
+        val page = SyncPaging.page(
+            candidates, tombstones, command.cursor, command.limit,
+            entryKey = { SyncPaging.Key(it.expense.updatedAt, it.expense.uid) },
+            tombstoneKey = { SyncPaging.Key(it.deletedAt, it.uid) }
+        )
+
+        val recipientNameById = expensesRepo.recipientsSnapshot().associate { it.id to it.name }
         val json = JSONObject()
         json.put(
             SyncDeltaKeys.ENTRIES,
-            JSONArray(changed.map {
+            JSONArray(page.entries.map {
                 it.expense.toSyncJson(
                     it.category?.name, it.items,
-                    BankAccountTree.bankNameFor(it.expense.bankAccountId, accountsForSync)
+                    BankAccountTree.bankNameFor(it.expense.bankAccountId, accounts),
+                    it.expense.recipientId?.let { id -> recipientNameById[id] }
                 )
             })
         )
-        json.put(SyncDeltaKeys.TOMBSTONES, JSONArray(tombstones.map { JSONObject().put(SyncDeltaKeys.UID, it.uid).put(SyncDeltaKeys.DELETED_AT, it.deletedAt) }))
+        json.put(SyncDeltaKeys.TOMBSTONES, JSONArray(page.tombstones.map {
+            JSONObject().put(SyncDeltaKeys.UID, it.uid).put(SyncDeltaKeys.DELETED_AT, it.deletedAt)
+        }))
+        page.nextCursor?.let { json.put(SyncDeltaKeys.NEXT_CURSOR, it) }
         return VoxResult(ok = true, text = json.toString())
     }
 
-    suspend fun merge(deltaJson: String): VoxResult {
+    private fun inAccountScope(
+        expense: Expense,
+        scopeSet: Set<String>?,
+        accounts: List<com.voxapps.expenses.data.BankAccount>
+    ): Boolean {
+        if (scopeSet == null) return true
+        val name = BankAccountTree.bankNameFor(expense.bankAccountId, accounts)
+            ?: return SyncDeltaKeys.SCOPE_NO_ACCOUNT in scopeSet
+        return name.lowercase() in scopeSet
+    }
+
+    suspend fun merge(command: VoxCommand): VoxResult {
         val settings = settingsRepo.getSnapshot()
         val locked = settings.isBiometricRequired &&
             !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
         if (locked) return VoxResult(ok = false, text = lockedMessage)
 
         val root = try {
-            JSONObject(deltaJson)
+            JSONObject(command.text.orEmpty())
         } catch (e: Exception) {
             return VoxResult(ok = false, text = "Invalid sync payload")
         }
+
+        val local = expensesRepo.allExpensesSnapshot()
+        val localByUid = local.associateBy { it.uid }
 
         // Same auto-create-by-name convention ExpensesExportImportHandler.import() already uses.
         val existingCategories = expensesRepo.categories.first().toMutableList()
@@ -92,25 +136,50 @@ class ExpensesSyncHandler(
         // Fetched once per merge, not per-entry — see VoxColorPalette.unusedOrRandomColor's
         // precedingColor param.
         val precedingColor = expensesRepo.mostRecentCategoryColor()
+        suspend fun categoryIdFor(name: String): Long? =
+            nameToId[name.lowercase()] ?: run {
+                val newId = expensesRepo.addCategory(
+                    name,
+                    VoxColorPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }, precedingColor),
+                    existingCategories.size,
+                    System.currentTimeMillis()
+                )
+                if (newId > 0) nameToId[name.lowercase()] = newId
+                newId.takeIf { it > 0 }
+            }
 
         val entriesJson = root.optJSONArray(SyncDeltaKeys.ENTRIES) ?: JSONArray()
-        val remoteEntries = (0 until entriesJson.length()).map { i ->
+        val remoteEntries = mutableListOf<Pair<Expense, List<ExpenseLineItem>?>>()
+        for (i in 0 until entriesJson.length()) {
             val e = entriesJson.getJSONObject(i)
-            val categoryName = e.optNullableString("categoryName")
-            val categoryId = categoryName?.let { name ->
-                nameToId[name.lowercase()] ?: run {
-                    val newId = expensesRepo.addCategory(
-                        name,
-                        VoxColorPalette.unusedOrRandomColor(existingCategories.map { it.colorArgb }, precedingColor),
-                        existingCategories.size,
-                        System.currentTimeMillis()
-                    )
-                    if (newId > 0) nameToId[name.lowercase()] = newId
-                    newId.takeIf { it > 0 }
-                }
+            val localRow = localByUid[e.optString(SyncDeltaKeys.UID)]
+            val categoryId = when {
+                !e.has("categoryName") -> localRow?.categoryId
+                e.isNull("categoryName") -> null
+                else -> categoryIdFor(e.getString("categoryName"))
             }
-            e.toExpense(categoryId) to e.toLineItems()
+            val bankAccountId = when {
+                !e.has("bank") -> localRow?.bankAccountId
+                e.isNull("bank") -> null
+                else -> bankAccountIdFor(e.getString("bank"), e.optString("currencyCode"), settings.defaultCurrency)
+                    ?: localRow?.bankAccountId
+            }
+            val recipientId = when {
+                !e.has("recipient") -> localRow?.recipientId
+                e.isNull("recipient") -> null
+                else -> recipientIdFor(e.getString("recipient")) ?: localRow?.recipientId
+            }
+            val expense = e.toExpense(localRow, categoryId, bankAccountId, recipientId).let {
+                // Provenance is stamped exactly once, at insert; an update keeps the local stamp
+                // (toExpense already copied it from localRow).
+                if (localRow == null) it.copy(
+                    originDeviceId = command.sourceDeviceId,
+                    originDeviceName = command.sourceDeviceName
+                ) else it
+            }
+            remoteEntries += expense to e.toLineItemsOrNull()
         }
+
         val tombstonesJson = root.optJSONArray(SyncDeltaKeys.TOMBSTONES) ?: JSONArray()
         val remoteTombstoneUids = (0 until tombstonesJson.length())
             .map { tombstonesJson.getJSONObject(it).optString(SyncDeltaKeys.UID) }
@@ -118,21 +187,57 @@ class ExpensesSyncHandler(
 
         // Archived rows are part of the merge: the other device has to learn a record was put away
         // rather than be told nothing and send it back as new.
-        val local = expensesRepo.allExpensesSnapshot()
         val plan = ExpenseSyncIdentity.planMerge(local, remoteEntries.map { it.first }, remoteTombstoneUids)
         val itemsByUid = remoteEntries.associate { (expense, items) -> expense.uid to items }
 
-        for (expense in plan.toInsert) expensesRepo.insertSyncedExpense(expense, itemsByUid[expense.uid].orEmpty())
+        for (expense in plan.toInsert) expensesRepo.insertSyncedExpense(expense, itemsByUid[expense.uid] ?: emptyList())
         for (expense in plan.toUpdate) {
             val localId = expensesRepo.getIdByUid(expense.uid) ?: continue
-            expensesRepo.updateSyncedExpense(expense.copy(id = localId), itemsByUid[expense.uid].orEmpty())
+            expensesRepo.updateSyncedExpense(expense.copy(id = localId), itemsByUid[expense.uid])
         }
         for (uid in plan.toDeleteUids) expensesRepo.deleteExpenseByUid(uid)
 
         return VoxResult(
             ok = true,
-            text = "${plan.toInsert.size} inserted, ${plan.toUpdate.size} updated, ${plan.toDeleteUids.size} deleted"
+            text = JSONObject()
+                .put(SyncDeltaKeys.INSERTED, plan.toInsert.size)
+                .put(SyncDeltaKeys.UPDATED, plan.toUpdate.size)
+                .put(SyncDeltaKeys.DELETED, plan.toDeleteUids.size)
+                .toString()
         )
+    }
+
+    /**
+     * The local account a peer's bank name lands on: exactly one active account of that name, or a
+     * fresh one created for it — the convention [ExpensesRepository.accountNamed] already implements
+     * for a person naming a bank by hand. Two accounts already carrying the name is a real ambiguity
+     * and returns null (the caller keeps the local link rather than guessing); the created account
+     * takes the incoming record's own currency, the closest thing to the truth this side has.
+     */
+    private suspend fun bankAccountIdFor(bankName: String, expenseCurrency: String?, defaultCurrency: String): Long? {
+        val name = bankName.trim().takeIf { it.isNotEmpty() } ?: return null
+        val existing = expensesRepo.bankAccountsSnapshot()
+        val matches = existing.filter {
+            !it.archived && it.isAccount && BankAccountTree.bankNameOf(it, existing)?.equals(name, ignoreCase = true) == true
+        }
+        if (matches.size > 1) return null
+        matches.singleOrNull()?.let { return it.id }
+        return expensesRepo.accountNamed(name, expenseCurrency?.takeIf { it.isNotBlank() } ?: defaultCurrency)
+    }
+
+    /** The counterparty a peer's recipient name lands on — [Recipients.named]'s exactly-one rule,
+     *  creating the row where nothing carries the name yet, null (keep the local link) where two
+     *  active rows tie. */
+    private suspend fun recipientIdFor(recipientName: String): Long? {
+        val name = recipientName.trim().takeIf { it.isNotEmpty() } ?: return null
+        val existing = expensesRepo.recipientsSnapshot()
+        val matches = existing.filter { !it.archived && it.name.trim().equals(name, ignoreCase = true) }
+        if (matches.size > 1) return null
+        matches.singleOrNull()?.let { return it.id }
+        val id = expensesRepo.addRecipient(
+            com.voxapps.expenses.domain.accounts.Recipients.newRecipient(name, bankName = null, iban = null, System.currentTimeMillis())
+        )
+        return id.takeIf { it > 0 }
     }
 }
 
@@ -141,26 +246,37 @@ private object ExpenseSyncIdentity : SyncIdentity<Expense> {
     override fun updatedAtOf(record: Expense): Long = record.updatedAt
 }
 
+/** Every nullable field is written as an explicit JSON null rather than omitted — on this wire,
+ *  null and absent mean different things (see the class doc comment). */
 private fun Expense.toSyncJson(
     categoryName: String?,
     items: List<ExpenseLineItem>,
-    /** Derived from the account, sent so a peer can name the bank without one. */
-    bankName: String?
+    /** Derived from the account, sent so a peer can resolve the link by name. */
+    bankName: String?,
+    recipientName: String?
 ): JSONObject = JSONObject().apply {
     put(SyncDeltaKeys.UID, uid)
-    put("title", title)
+    putNullable("title", title)
     put("totalAmount", totalAmount)
+    putNullable("previousBalanceAmount", previousBalanceAmount)
+    putNullable("invoiceOwnAmount", invoiceOwnAmount)
+    putNullable("netAmount", netAmount)
+    putNullable("vatAmount", vatAmount)
     put("currencyCode", currencyCode)
-    put("vendor", vendor)
-    put("bank", bankName)
-    put("location", location)
+    putNullable("vendor", vendor)
+    putNullable("bank", bankName)
+    putNullable("recipient", recipientName)
+    putNullable("originsJson", originsJson)
+    putNullable("location", location)
     put("dateTime", dateTime)
-    put("comments", comments)
-    put("categoryName", categoryName)
+    putNullable("comments", comments)
+    putNullable("categoryName", categoryName)
     put("direction", direction.toJsonValue())
-    put("receiptImageName", receiptImageName)
+    putNullable("receiptImageName", receiptImageName)
     put("isStub", isStub)
-    put("archivedAt", archivedAt)
+    put("source", source.name)
+    put("manuallyEdited", manuallyEdited)
+    putNullable("archivedAt", archivedAt)
     put("createdAt", createdAt)
     put(SyncDeltaKeys.UPDATED_AT, updatedAt)
     put("lineItems", JSONArray(items.sortedBy { it.position }.map { it.toSyncJson() }))
@@ -178,10 +294,10 @@ private fun ExpenseLineItem.toSyncJson(): JSONObject = JSONObject().apply {
     grossAmount?.let { put("grossAmount", it) }
 }
 
-/** [expenseId] is set later by the repository once it knows which local row (new insert or
- *  resolved-by-uid update) these items belong to — see [ExpensesRepository.insertSyncedExpense]/
- *  [ExpensesRepository.updateSyncedExpense]. */
-private fun JSONObject.toLineItems(): List<ExpenseLineItem> {
+/** Null when the delta carries no "lineItems" key at all — an older build's entry, whose merge
+ *  must leave the local items untouched rather than clear them. */
+private fun JSONObject.toLineItemsOrNull(): List<ExpenseLineItem>? {
+    if (!has("lineItems")) return null
     val array = optJSONArray("lineItems") ?: return emptyList()
     return (0 until array.length()).map { i ->
         val item = array.getJSONObject(i)
@@ -198,25 +314,68 @@ private fun JSONObject.toLineItems(): List<ExpenseLineItem> {
     }
 }
 
-private fun JSONObject.toExpense(categoryId: Long?): Expense = Expense(
+/**
+ * The entry as a full local entity: keys the delta carries overwrite, keys it lacks fall back to
+ * [local]'s values (a fresh insert falls back to the entity's own defaults). The resolved link ids
+ * come in from the caller because resolving them needs the repository.
+ */
+private fun JSONObject.toExpense(
+    local: Expense?,
+    categoryId: Long?,
+    bankAccountId: Long?,
+    recipientId: Long?
+): Expense = Expense(
     uid = optString(SyncDeltaKeys.UID),
-    title = optNullableString("title"),
-    totalAmount = optDouble("totalAmount"),
-    currencyCode = optString("currencyCode"),
-    vendor = optNullableString("vendor"),
-    location = optNullableString("location"),
-    dateTime = optLong("dateTime"),
-    comments = optNullableString("comments"),
+    title = stringOr("title") { local?.title },
+    totalAmount = if (has("totalAmount")) optDouble("totalAmount") else local?.totalAmount ?: 0.0,
+    previousBalanceAmount = doubleOr("previousBalanceAmount") { local?.previousBalanceAmount },
+    invoiceOwnAmount = doubleOr("invoiceOwnAmount") { local?.invoiceOwnAmount },
+    netAmount = doubleOr("netAmount") { local?.netAmount },
+    vatAmount = doubleOr("vatAmount") { local?.vatAmount },
+    currencyCode = if (has("currencyCode")) optString("currencyCode") else local?.currencyCode ?: "",
+    vendor = stringOr("vendor") { local?.vendor },
+    bankAccountId = bankAccountId,
+    recipientId = recipientId,
+    originsJson = stringOr("originsJson") { local?.originsJson },
+    location = stringOr("location") { local?.location },
+    dateTime = if (has("dateTime")) optLong("dateTime") else local?.dateTime ?: 0L,
+    comments = stringOr("comments") { local?.comments },
     categoryId = categoryId,
-    direction = optTransactionDirection(),
-    receiptImageName = optNullableString("receiptImageName"),
-    isStub = optBoolean("isStub", false),
-    // Archiving travels: a peer that only heard about the ledger would hand back every record the
-    // other device put away, as if it were new.
-    archivedAt = if (has("archivedAt") && !isNull("archivedAt")) optLong("archivedAt") else null,
-    createdAt = optLong("createdAt"),
+    direction = if (has("direction")) optTransactionDirection() else local?.direction
+        ?: com.voxapps.expenses.data.TransactionDirection.OUTGOING,
+    receiptImageName = stringOr("receiptImageName") { local?.receiptImageName },
+    isStub = if (has("isStub")) optBoolean("isStub", false) else local?.isStub ?: false,
+    source = if (has("source")) {
+        ExpenseSource.entries.firstOrNull { it.name == optString("source") } ?: local?.source ?: ExpenseSource.MANUAL
+    } else {
+        local?.source ?: ExpenseSource.MANUAL
+    },
+    manuallyEdited = if (has("manuallyEdited")) optBoolean("manuallyEdited", false) else local?.manuallyEdited ?: false,
+    originDeviceId = local?.originDeviceId,
+    originDeviceName = local?.originDeviceName,
+    archivedAt = longOr("archivedAt") { local?.archivedAt },
+    createdAt = if (has("createdAt")) optLong("createdAt") else local?.createdAt ?: System.currentTimeMillis(),
     updatedAt = optLong(SyncDeltaKeys.UPDATED_AT)
 )
 
-private fun JSONObject.optNullableString(key: String): String? =
-    if (has(key) && !isNull(key)) optString(key) else null
+private fun JSONObject.putNullable(key: String, value: Any?) {
+    put(key, value ?: JSONObject.NULL)
+}
+
+private inline fun JSONObject.stringOr(key: String, fallback: () -> String?): String? = when {
+    !has(key) -> fallback()
+    isNull(key) -> null
+    else -> optString(key)
+}
+
+private inline fun JSONObject.doubleOr(key: String, fallback: () -> Double?): Double? = when {
+    !has(key) -> fallback()
+    isNull(key) -> null
+    else -> optDouble(key).takeIf { !it.isNaN() }
+}
+
+private inline fun JSONObject.longOr(key: String, fallback: () -> Long?): Long? = when {
+    !has(key) -> fallback()
+    isNull(key) -> null
+    else -> optLong(key)
+}

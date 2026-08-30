@@ -8,6 +8,10 @@ import com.voxapps.expenses.state.ExpenseFilterSummary
 import com.voxapps.design.filter.VoxFilterSummary
 import com.voxapps.design.filter.VoxFilterButton
 import android.widget.Toast
+import androidx.compose.material.icons.filled.SendToMobile
+import com.voxapps.ipc.VoxDataTransferClient
+import com.voxapps.design.picklist.VoxSyncDevice
+import com.voxapps.design.picklist.VoxDevicePickerSheet
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -46,6 +50,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -132,6 +137,10 @@ fun ExpensesScreen(
     var confirmingArchive by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var showDevicePicker by remember { mutableStateOf(false) }
+    // Null while the ask to Hub is in flight — the sheet reads that as "loading", an empty list as
+    // "nothing paired".
+    var syncDevices by remember { mutableStateOf<List<VoxSyncDevice>?>(null) }
     // Scan needs Vision installed to even launch, and Commander installed for the OCR-cleanup step
     // that runs after — stays visible but dimmed, with an explanatory toast on tap naming whichever
     // one is actually missing, rather than silently failing (or crashing, for the Vision case) if
@@ -259,6 +268,12 @@ fun ExpensesScreen(
                         Icon(
                             Icons.Filled.Edit,
                             contentDescription = languageManager.getString("selection_edit")
+                        )
+                    }
+                    IconButton(onClick = { showDevicePicker = true }) {
+                        Icon(
+                            Icons.Filled.SendToMobile,
+                            contentDescription = languageManager.getString("selection_sync_with_device")
                         )
                     }
                     IconButton(onClick = { confirmingArchive = true }) {
@@ -443,15 +458,20 @@ fun ExpensesScreen(
                     todayEffectPrimaryColor = todayEffectPrimaryColor,
                     todayEffectSecondaryColor = todayEffectSecondaryColor,
                     todayEffectSpeed = todayEffectSpeed,
-                    itemContent = { calItem ->
+                    // The multi-select grammar itself lives in CalendarView (see CalendarSelection);
+                    // this app only supplies the key and draws its own card.
+                    selection = com.voxapps.calendar.CalendarSelection(selection) { it.ewd.expense.id },
+                    itemContent = { calItem, sel ->
                         ExpenseCard(
                             expenseWithDetails = calItem.ewd,
-                            onClick = { onCardClick(calItem.ewd) },
-                            selected = calItem.ewd.expense.id in selection,
-                            onLongClick = { onCardLongClick(calItem.ewd) },
+                            onClick = { sel?.onClick { onEditExpense(calItem.ewd) } ?: onCardClick(calItem.ewd) },
+                            selected = sel?.selected == true,
+                            onLongClick = sel?.let { handles -> { handles.onLongClick() } },
                             bankName = BankAccountTree.bankNameFor(
                                 calItem.ewd.expense.bankAccountId, state.bankAccounts
                             ),
+                            originLabel = calItem.ewd.expense.originDeviceName
+                                .takeIf { state.showSyncProvenance },
                             // The day heading above these rows already said which day; the hour
                             // is what tells two of them apart.
                             showDay = false
@@ -483,6 +503,7 @@ fun ExpensesScreen(
                             selected = ewd.expense.id in selection,
                             onLongClick = { onCardLongClick(ewd) },
                             bankName = BankAccountTree.bankNameFor(ewd.expense.bankAccountId, state.bankAccounts),
+                            originLabel = ewd.expense.originDeviceName.takeIf { state.showSyncProvenance },
                             recurring = RecurringPayment.vendorKeyOf(ewd.expense.vendor) in confirmedVendorKeys,
                             // Only while the list is narrowed to them: on the ordinary list this
                             // would be a red line on half the rows, which is not information.
@@ -499,6 +520,47 @@ fun ExpensesScreen(
                 }
             }
         }
+    }
+
+    if (showDevicePicker) {
+        // Fetched on open, not held live: the paired devices live in Vox Hub and change rarely.
+        LaunchedEffect(Unit) {
+            syncDevices = VoxDataTransferClient.requestSyncPeers(context)
+                ?.takeIf { it.ok }
+                ?.let { com.voxapps.design.picklist.parseVoxSyncDevices(it.text) }
+                ?: emptyList()
+        }
+        VoxDevicePickerSheet(
+            title = languageManager.getString("sync_with_device_title"),
+            devices = syncDevices.orEmpty(),
+            emptyText = languageManager.getString(
+                if (syncDevices == null) "sync_devices_loading" else "sync_no_paired_devices"
+            ),
+            onPick = { device ->
+                val ids = selection.ids.toList()
+                showDevicePicker = false
+                syncDevices = null
+                scanScope.launch {
+                    val uids = stateManager.expenseUidsFor(ids)
+                    val queued = uids.isNotEmpty() && VoxDataTransferClient.enqueueSyncPush(
+                        context, device.peerId, context.packageName, uids
+                    )?.ok == true
+                    Toast.makeText(
+                        context,
+                        String.format(
+                            languageManager.getString(if (queued) "sync_push_queued" else "sync_push_failed"),
+                            device.label
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    if (queued) selection.clear()
+                }
+            },
+            onDismiss = {
+                showDevicePicker = false
+                syncDevices = null
+            }
+        )
     }
 
     if (confirmingArchive) {

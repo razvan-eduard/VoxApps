@@ -19,7 +19,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
     entities = [CalendarLayer::class, CalendarEntry::class, CalendarEntryTag::class, CalendarEntryTombstone::class,
         PendingLlmRequestEntity::class, AttachmentEntity::class, CalendarReminder::class,
         ToDoList::class, LearnedFieldCorrection::class],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 @TypeConverters(CalendarConverters::class)
@@ -219,6 +219,16 @@ abstract class CalendarDatabase : RoomDatabase() {
             }
         }
 
+        // Record provenance — see CalendarEntry.originDeviceId. Existing rows backfill to null
+        // origin ("made here"), which is true of every row written before a sync merge could
+        // insert one.
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE calendar_entries ADD COLUMN originDeviceId TEXT")
+                db.execSQL("ALTER TABLE calendar_entries ADD COLUMN originDeviceName TEXT")
+            }
+        }
+
         /** Room backed by SQLCipher; passphrase comes from the Keystore-backed store. */
         fun get(context: Context): CalendarDatabase = instance ?: synchronized(this) {
             instance ?: build(context.applicationContext).also { instance = it }
@@ -231,7 +241,7 @@ abstract class CalendarDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, CalendarDatabase::class.java, "vox-calendar.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 .build()
         }
     }

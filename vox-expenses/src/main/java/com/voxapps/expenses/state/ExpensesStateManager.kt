@@ -106,6 +106,8 @@ class ExpensesStateManager(
         val selectedCurrency: String? = null,
         /** Narrowed to the records something is missing from — see [ExpenseGaps]. */
         val onlyNeedsAttention: Boolean = false,
+        /** Narrowed to one device's records — see [OriginFilter]. Null shows everything. */
+        val selectedOrigin: OriginFilter? = null,
         val sessionTick: Int = 0
     )
 
@@ -142,7 +144,8 @@ class ExpensesStateManager(
         val currencies: List<String>,
         val span: AmountSpan,
         val locations: List<String>,
-        val vendors: List<String>
+        val vendors: List<String>,
+        val originDevices: List<String>
     )
 
     /**
@@ -158,6 +161,11 @@ class ExpensesStateManager(
     private data class RowKey(
         val narrowing: SqlNarrowing,
         val onlyNeedsAttention: Boolean,
+        /** Provenance rides beside the attention toggle, not inside the SQL narrowing: like "needs
+         *  me", "whose device" composes with every ordinary filter, and living in this one key is
+         *  what makes the paged window, the whole-list snapshot, and every report total agree on
+         *  it. */
+        val origin: OriginFilter?,
         val fallbackCategoryId: Long?,
         val accounts: List<BankAccount>
     ) {
@@ -165,7 +173,8 @@ class ExpensesStateManager(
             ExpenseFilter.residualMatches(
                 ewd, narrowing.bank, { id -> BankAccountTree.bankNameFor(id, accounts) },
                 narrowing.vendor, narrowing.location
-            ) && (!onlyNeedsAttention ||
+            ) && (origin == null || origin.matches(ewd.expense)) &&
+                (!onlyNeedsAttention ||
                 ExpenseGaps.of(ewd, fallbackCategoryId, accountsInUse = accounts.isNotEmpty()).isNotEmpty())
 
         // A card answers for itself; an account answers for its cards too. The narrower choice
@@ -175,11 +184,11 @@ class ExpensesStateManager(
     }
 
     private val rowKeyFlow: Flow<RowKey> = combine(
-        _runtime.map { it.narrowing() to it.onlyNeedsAttention }.distinctUntilChanged(),
+        _runtime.map { Triple(it.narrowing(), it.onlyNeedsAttention, it.selectedOrigin) }.distinctUntilChanged(),
         expensesRepo.categories,
         expensesRepo.bankAccounts
-    ) { (narrowing, attention), categories, accounts ->
-        RowKey(narrowing, attention, categories.firstOrNull { it.isDefault }?.id, accounts)
+    ) { (narrowing, attention, origin), categories, accounts ->
+        RowKey(narrowing, attention, origin, categories.firstOrNull { it.isDefault }?.id, accounts)
     }.distinctUntilChanged()
 
     /**
@@ -234,8 +243,11 @@ class ExpensesStateManager(
             expensesRepo.currenciesInUse,
             expensesRepo.amountSpan,
             expensesRepo.locationsInUse,
-            expensesRepo.vendorsInUse
-        ) { currencies, span, locations, vendors -> ListVocabulary(currencies, span, locations, vendors) }
+            expensesRepo.vendorsInUse,
+            expensesRepo.originDevicesInUse
+        ) { currencies, span, locations, vendors, originDevices ->
+            ListVocabulary(currencies, span, locations, vendors, originDevices)
+        }
 
         // Paired rather than passed separately: combine is typed up to five sources, and the lists
         // that name a record's category and its account travel with the pickers' vocabularies.
@@ -271,6 +283,10 @@ class ExpensesStateManager(
                     selectedCardId = rt.selectedCardId,
                     selectedCurrency = rt.selectedCurrency,
                     onlyNeedsAttention = rt.onlyNeedsAttention,
+                    selectedOrigin = rt.selectedOrigin,
+                    availableOriginDevices = vocabulary.originDevices,
+                    showSyncProvenance = settings.showSyncProvenance,
+                    syncLevel = settings.syncLevel,
                     bankAccounts = accounts,
                     availableCurrencies = vocabulary.currencies,
                     amountBuckets = VoxRangeBuckets.of(
@@ -305,6 +321,13 @@ class ExpensesStateManager(
 
     /** Narrows the list to records with something missing — see [ExpenseGaps]. */
     fun setNeedsAttentionFilter(only: Boolean) = _runtime.update { it.copy(onlyNeedsAttention = only) }
+
+    /** Narrows the list (and every total computed from it) to one device's records — see
+     *  [OriginFilter]. Null shows everything again. */
+    fun setOriginFilter(filter: OriginFilter?) = _runtime.update { it.copy(selectedOrigin = filter) }
+
+    /** The stable sync identities behind a selection — what "sync with device" queues. */
+    suspend fun expenseUidsFor(ids: Collection<Long>): List<String> = expensesRepo.uidsForIds(ids)
 
     fun setCategoryFilter(categoryId: Long?) = _runtime.update { it.copy(selectedCategoryId = categoryId) }
     fun setSort(sort: SortMode) = _runtime.update { it.copy(sort = sort) }
@@ -346,6 +369,7 @@ class ExpensesStateManager(
             selectedAmount = null, selectedAccountId = null, selectedCardId = null,
             selectedCurrency = null,
             onlyNeedsAttention = false,
+            selectedOrigin = null,
             sort = SortMode.NEWEST
         )
     }
@@ -353,6 +377,8 @@ class ExpensesStateManager(
     fun setLocationFilter(location: FilterValue?) = _runtime.update { it.copy(selectedLocation = location) }
     fun setVendorFilter(vendor: FilterValue?) = _runtime.update { it.copy(selectedVendor = vendor) }
 
+    fun setSyncLevel(level: String) { scope.launch { settingsRepo.setSyncLevel(level) } }
+    fun setShowSyncProvenance(enabled: Boolean) { scope.launch { settingsRepo.setShowSyncProvenance(enabled) } }
     fun setBiometricRequired(required: Boolean) { scope.launch { settingsRepo.setBiometricRequired(required) } }
     fun setSessionTimeoutMinutes(minutes: Int) { scope.launch { settingsRepo.setSessionTimeoutMinutes(minutes) } }
     fun setLanguage(code: String) { scope.launch { settingsRepo.setLanguage(code) } }
@@ -1106,8 +1132,14 @@ class ExpensesStateManager(
         scope.launch { expensesRepo.deleteAccountBudget(budget) }
     }
 
-    fun addSpendingLimit(categoryId: Long?, amountHomeCurrency: Double, period: String) {
-        scope.launch { expensesRepo.addSpendingLimit(categoryId, amountHomeCurrency, period) }
+    fun addSpendingLimit(categoryId: Long?, amountHomeCurrency: Double, period: String, ownDeviceOnly: Boolean = true) {
+        scope.launch { expensesRepo.addSpendingLimit(categoryId, amountHomeCurrency, period, ownDeviceOnly = ownDeviceOnly) }
+    }
+
+    /** Flips whether records synced from other devices count toward this limit — see
+     *  [SpendingLimit.ownDeviceOnly]. */
+    fun setSpendingLimitOwnDeviceOnly(limit: SpendingLimit, ownDeviceOnly: Boolean) {
+        scope.launch { expensesRepo.updateSpendingLimit(limit.copy(ownDeviceOnly = ownDeviceOnly)) }
     }
 
     fun deleteSpendingLimit(limit: SpendingLimit) {

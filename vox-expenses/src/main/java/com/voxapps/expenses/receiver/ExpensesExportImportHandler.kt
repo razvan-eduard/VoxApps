@@ -462,11 +462,19 @@ class ExpensesExportImportHandler(
         if (root.has("expenses")) {
             // Archived rows included, or a restore would re-create every one of them as new.
             val preExistingExpenses = expensesRepo.allExpensesSnapshot()
+            val preExistingByUid = preExistingExpenses.associateBy { it.uid }
             val importedExpenses = root.optJSONArray("expenses") ?: JSONArray()
+            val importedList = (0 until importedExpenses.length()).map { importedExpenses.getJSONObject(it) }
+            // Rows the backup claims by uid are updated IN PLACE below: deleting them in the
+            // reconcile pass would destroy the very rows just restored, and their deletion would
+            // mint tombstones a later device sync faithfully replays against every paired phone.
+            val importedUids = importedList
+                .mapNotNull { it.optStringOrNull("uid")?.takeIf { u -> u.isNotBlank() } }
+                .toSet()
 
             expensesCreated = VoxSnapshotReplaceImporter.restore(
                 mode = importMode,
-                imported = (0 until importedExpenses.length()).map { importedExpenses.getJSONObject(it) },
+                imported = importedList,
                 preExisting = preExistingExpenses,
                 exportedAt = exportedAt,
                 createdAtOf = { it.createdAt },
@@ -488,53 +496,115 @@ class ExpensesExportImportHandler(
                             )
                         }
                     }
-                    val newExpenseId = expensesRepo.addExpense(
-                        title = e.optStringOrNull("title"),
-                        totalAmount = e.optDouble("totalAmount"),
-                        currencyCode = e.optStringOrNull("currencyCode") ?: "",
-                        vendor = e.optStringOrNull("vendor"),
-                        // Through the same map the account rows were merged by, so a record restored
-                        // onto a device that already knew the card points at the row it already has.
-                        // A backup old enough to name only the bank still lands on an account: the
-                        // name becomes one, exactly as the migration made them.
-                        bankAccountId = e.optLong("bankAccountId")
-                            .takeIf { e.has("bankAccountId") && !e.isNull("bankAccountId") }
-                            ?.let { importedAccountToLocal[it] }
-                            ?: e.optStringOrNull("bank")?.let { expensesRepo.accountNamed(it, settings.defaultCurrency) },
-                        // Same map for the transaction's counterparty; no name fallback — there are
-                        // no legacy exports carrying a recipient name to honor.
-                        recipientId = e.optLong("recipientId")
-                            .takeIf { e.has("recipientId") && !e.isNull("recipientId") }
-                            ?.let { importedRecipientToLocal[it] },
-                        location = e.optStringOrNull("location"),
-                        dateTime = e.optLong("dateTime", System.currentTimeMillis()),
-                        comments = e.optStringOrNull("comments"),
-                        categoryId = categoryId,
-                        direction = e.optTransactionDirection(),
-                        items = items,
-                        imageName = e.optStringOrNull("receiptImageName"),
-                        // Preserved from the source device, never re-stamped to "now" — re-stamping
-                        // would make a later re-sync from the same backup see this row as freshly
-                        // created and permanently immune to being correctly replaced, silently
-                        // reintroducing the bug this createdAt filter exists to fix.
-                        createdAt = e.optLong("createdAt", System.currentTimeMillis()),
-                        // Old pre-existing rows are deleted AFTER every insert (VoxSnapshotReplaceImporter's
-                        // own order), so they're still present here and would otherwise get misdetected as
-                        // duplicates of the very rows they're about to be replaced by — import must never be
-                        // blocked by this check (RecordSource.HUB_IMPORT: another install's already-validated data).
-                        checkForDuplicate = false,
-                        source = e.optExpenseSource(),
-                        manuallyEdited = e.optBoolean("manuallyEdited", false),
-                        archivedAt = e.optLong("archivedAt").takeIf { e.has("archivedAt") && !e.isNull("archivedAt") }
-                    )
-                    if (newExpenseId > 0) {
-                        attachmentDao.restoreFromBackup(
-                            ExpensesAttachments.RECORD_TYPE, newExpenseId, e.optJSONArray("attachments") ?: JSONArray()
+                    // Through the same map the account rows were merged by, so a record restored
+                    // onto a device that already knew the card points at the row it already has.
+                    // A backup old enough to name only the bank still lands on an account: the
+                    // name becomes one, exactly as the migration made them.
+                    val bankAccountId = e.optLong("bankAccountId")
+                        .takeIf { e.has("bankAccountId") && !e.isNull("bankAccountId") }
+                        ?.let { importedAccountToLocal[it] }
+                        ?: e.optStringOrNull("bank")?.let { expensesRepo.accountNamed(it, settings.defaultCurrency) }
+                    // Same map for the transaction's counterparty; no name fallback — there are
+                    // no legacy exports carrying a recipient name to honor.
+                    val recipientId = e.optLong("recipientId")
+                        .takeIf { e.has("recipientId") && !e.isNull("recipientId") }
+                        ?.let { importedRecipientToLocal[it] }
+
+                    val uid = e.optStringOrNull("uid")?.takeIf { it.isNotBlank() }
+                    val existing = uid?.let { preExistingByUid[it] }
+                    if (existing != null) {
+                        // The same record, already on this device: the backup's version takes its
+                        // place — no delete-then-reinsert churn, no tombstone, the local row id
+                        // (what attachment rows reference) stays. Fields the backup doesn't carry
+                        // keep the row's own values.
+                        expensesRepo.updateSyncedExpense(
+                            Expense(
+                                id = existing.id,
+                                uid = uid,
+                                title = e.optStringOrNull("title"),
+                                totalAmount = e.optDouble("totalAmount"),
+                                previousBalanceAmount = e.optDoubleOrNull("previousBalanceAmount"),
+                                invoiceOwnAmount = e.optDoubleOrNull("invoiceOwnAmount"),
+                                netAmount = e.optDoubleOrNull("netAmount"),
+                                vatAmount = e.optDoubleOrNull("vatAmount"),
+                                currencyCode = e.optStringOrNull("currencyCode") ?: "",
+                                vendor = e.optStringOrNull("vendor"),
+                                bankAccountId = bankAccountId,
+                                recipientId = recipientId,
+                                originsJson = existing.originsJson,
+                                location = e.optStringOrNull("location"),
+                                dateTime = e.optLong("dateTime", System.currentTimeMillis()),
+                                comments = e.optStringOrNull("comments"),
+                                categoryId = categoryId,
+                                direction = e.optTransactionDirection(),
+                                receiptImageName = e.optStringOrNull("receiptImageName"),
+                                isStub = e.optBoolean("isStub", existing.isStub),
+                                archivedAt = e.optLong("archivedAt").takeIf { e.has("archivedAt") && !e.isNull("archivedAt") },
+                                createdAt = e.optLong("createdAt", existing.createdAt),
+                                updatedAt = e.optLong("updatedAt", existing.updatedAt),
+                                source = e.optExpenseSource(),
+                                manuallyEdited = e.optBoolean("manuallyEdited", false),
+                                originDeviceId = e.optStringOrNull("originDeviceId") ?: existing.originDeviceId,
+                                originDeviceName = e.optStringOrNull("originDeviceName") ?: existing.originDeviceName
+                            ),
+                            items
                         )
+                        attachmentDao.restoreFromBackup(
+                            ExpensesAttachments.RECORD_TYPE, existing.id, e.optJSONArray("attachments") ?: JSONArray()
+                        )
+                        existing.id
+                    } else {
+                        val newExpenseId = expensesRepo.addExpense(
+                            title = e.optStringOrNull("title"),
+                            totalAmount = e.optDouble("totalAmount"),
+                            currencyCode = e.optStringOrNull("currencyCode") ?: "",
+                            vendor = e.optStringOrNull("vendor"),
+                            bankAccountId = bankAccountId,
+                            recipientId = recipientId,
+                            location = e.optStringOrNull("location"),
+                            dateTime = e.optLong("dateTime", System.currentTimeMillis()),
+                            comments = e.optStringOrNull("comments"),
+                            categoryId = categoryId,
+                            direction = e.optTransactionDirection(),
+                            items = items,
+                            imageName = e.optStringOrNull("receiptImageName"),
+                            isStub = e.optBoolean("isStub", false),
+                            // Preserved from the source device, never re-stamped to "now" — re-stamping
+                            // would make a later re-sync from the same backup see this row as freshly
+                            // created and permanently immune to being correctly replaced, silently
+                            // reintroducing the bug this createdAt filter exists to fix.
+                            createdAt = e.optLong("createdAt", System.currentTimeMillis()),
+                            // Old pre-existing rows are deleted AFTER every insert (VoxSnapshotReplaceImporter's
+                            // own order), so they're still present here and would otherwise get misdetected as
+                            // duplicates of the very rows they're about to be replaced by — import must never be
+                            // blocked by this check (RecordSource.HUB_IMPORT: another install's already-validated data).
+                            checkForDuplicate = false,
+                            source = e.optExpenseSource(),
+                            manuallyEdited = e.optBoolean("manuallyEdited", false),
+                            archivedAt = e.optLong("archivedAt").takeIf { e.has("archivedAt") && !e.isNull("archivedAt") },
+                            netAmount = e.optDoubleOrNull("netAmount"),
+                            vatAmount = e.optDoubleOrNull("vatAmount"),
+                            previousBalanceAmount = e.optDoubleOrNull("previousBalanceAmount"),
+                            invoiceOwnAmount = e.optDoubleOrNull("invoiceOwnAmount"),
+                            // Identity and provenance survive the round trip — see Expense.toJson.
+                            // A backup from before they existed minted fresh ones, and still does.
+                            uid = uid,
+                            updatedAtOverride = e.optLong("updatedAt").takeIf { e.has("updatedAt") },
+                            originDeviceId = e.optStringOrNull("originDeviceId"),
+                            originDeviceName = e.optStringOrNull("originDeviceName")
+                        )
+                        if (newExpenseId > 0) {
+                            attachmentDao.restoreFromBackup(
+                                ExpensesAttachments.RECORD_TYPE, newExpenseId, e.optJSONArray("attachments") ?: JSONArray()
+                            )
+                        }
+                        newExpenseId
                     }
-                    newExpenseId
                 },
-                delete = { expensesRepo.deleteExpenseById(it.id) }
+                // A row claimed by uid was just updated in place — it is the restored data now, and
+                // removing it would both destroy the restore and tombstone a uid every paired phone
+                // then deletes too.
+                delete = { if (it.uid !in importedUids) expensesRepo.deleteExpenseById(it.id) }
             )
         }
 
@@ -707,8 +777,18 @@ private fun Expense.toJson(
     bankName: String? = null
 ): JSONObject = JSONObject().apply {
     put("id", id)
+    // Sync identity and provenance ride along so a restore keeps the rows recognizable to a later
+    // device sync instead of re-minting them as brand-new — see import()'s uid reconciliation.
+    put("uid", uid)
+    put("updatedAt", updatedAt)
+    originDeviceId?.let { put("originDeviceId", it) }
+    originDeviceName?.let { put("originDeviceName", it) }
     put("title", title)
     put("totalAmount", totalAmount)
+    previousBalanceAmount?.let { put("previousBalanceAmount", it) }
+    invoiceOwnAmount?.let { put("invoiceOwnAmount", it) }
+    netAmount?.let { put("netAmount", it) }
+    vatAmount?.let { put("vatAmount", it) }
     put("currencyCode", currencyCode)
     put("vendor", vendor)
     bankAccountId?.let { put("bankAccountId", it) }
@@ -719,6 +799,7 @@ private fun Expense.toJson(
     put("categoryId", categoryId)
     put("direction", direction.toJsonValue())
     put("receiptImageName", receiptImageName)
+    put("isStub", isStub)
     put("createdAt", createdAt)
     put("source", source.name)
     put("manuallyEdited", manuallyEdited)

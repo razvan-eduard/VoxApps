@@ -74,7 +74,14 @@ class CalendarRepository(
         listId: Long? = null,
         position: Int = 0,
         colorArgb: Long? = null,
-        comments: String? = null
+        comments: String? = null,
+        /** Only Hub import passes these: a backup that carries the row's own edit timestamp and
+         *  provenance keeps them through a restore, so a later device sync compares the restored
+         *  content by when it was really edited rather than by when the backup was made. Every
+         *  other caller creates a fresh row edited "now", which is what the defaults do. */
+        updatedAtOverride: Long? = null,
+        originDeviceId: String? = null,
+        originDeviceName: String? = null
     ): Long {
         val id = entryDao.insert(
             CalendarEntry(
@@ -98,7 +105,9 @@ class CalendarRepository(
                 colorArgb = colorArgb,
                 comments = comments?.trim()?.takeIf { it.isNotEmpty() },
                 createdAt = now,
-                updatedAt = now,
+                updatedAt = updatedAtOverride ?: now,
+                originDeviceId = originDeviceId,
+                originDeviceName = originDeviceName,
                 individualReminderOffsetsMinutes = ReminderOffsetsCodec.encode(reminderOffsetsMinutes)
             )
         )
@@ -248,12 +257,30 @@ class CalendarRepository(
 
     /** Update-side of a sync merge: [entry] must already carry the *local* row's id (resolved via
      *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
-     *  peer's newer version, since it won the last-write-wins comparison that got us here. */
-    suspend fun updateSyncedEntry(entry: CalendarEntry, tags: List<String>) {
+     *  peer's newer version, since it won the last-write-wins comparison that got us here. [tags]
+     *  replace the local set (an empty list is a valid, correct result — it means the peer's
+     *  current state for this entry genuinely has no tags); null means the delta said nothing
+     *  about tags and the local set stays untouched. [reminderOffsetsMinutes] follows the same
+     *  null-means-untouched convention for the SCHEDULED reminder rows (the entry's own
+     *  individualReminderOffsetsMinutes column travels inside [entry] either way). */
+    suspend fun updateSyncedEntry(
+        entry: CalendarEntry,
+        tags: List<String>? = emptyList(),
+        reminderOffsetsMinutes: List<Int>? = null
+    ) {
         entryDao.update(entry)
+        if (reminderOffsetsMinutes != null) {
+            replaceReminders(entry.id, effectiveOffsetsFor(entry.layerId, reminderOffsetsMinutes))
+        }
+        if (tags == null) return
         tagDao.deleteAllForEntry(entry.id)
         insertTags(entry.id, tags)
     }
+
+    /** The stable sync identities behind a screen selection — what a manual "sync with device"
+     *  push queues. */
+    suspend fun uidsForIds(ids: Collection<Long>): List<String> =
+        if (ids.isEmpty()) emptyList() else entryDao.getUidsByIds(ids.toList())
 
     /** Applies an incoming sync tombstone: deletes the local row by uid (a no-op if it's already gone
      *  or was never synced here) via the normal [deleteEntryById] path, so a fresh local tombstone is
@@ -409,7 +436,7 @@ class CalendarRepository(
             LayerDeleteMode.REASSIGN_TO_MAIN -> {
                 val fallback = layerDao.getAll().firstOrNull { it.isDefault && it.id != layer.id }
                     ?: return
-                entryDao.reassignLayer(layer.id, fallback.id)
+                entryDao.reassignLayer(layer.id, fallback.id, System.currentTimeMillis())
                 toDoListDao.reassignLayer(layer.id, fallback.id)
             }
             LayerDeleteMode.DELETE_ALL_ENTRIES -> {

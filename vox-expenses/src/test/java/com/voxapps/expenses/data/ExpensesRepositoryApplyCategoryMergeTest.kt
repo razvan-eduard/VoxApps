@@ -40,7 +40,7 @@ class ExpensesRepositoryApplyCategoryMergeTest {
     fun `reassigns expenses and deletes the old category when both names resolve`() = runTest {
         repository.applyCategoryMerge(mapOf("Groceries" to "Mancare"))
 
-        coVerify(exactly = 1) { expenseDao.reassignCategory(groceries.id, food.id) }
+        coVerify(exactly = 1) { expenseDao.reassignCategory(groceries.id, food.id, any()) }
         coVerify(exactly = 1) { categoryDao.delete(groceries) }
     }
 
@@ -48,7 +48,7 @@ class ExpensesRepositoryApplyCategoryMergeTest {
     fun `is case-insensitive when matching names`() = runTest {
         repository.applyCategoryMerge(mapOf("groceries" to "mancare"))
 
-        coVerify(exactly = 1) { expenseDao.reassignCategory(groceries.id, food.id) }
+        coVerify(exactly = 1) { expenseDao.reassignCategory(groceries.id, food.id, any()) }
         coVerify(exactly = 1) { categoryDao.delete(groceries) }
     }
 
@@ -56,7 +56,7 @@ class ExpensesRepositoryApplyCategoryMergeTest {
     fun `skips entries where the old name does not exist`() = runTest {
         repository.applyCategoryMerge(mapOf("Nonexistent" to "Mancare"))
 
-        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any(), any()) }
         coVerify(exactly = 0) { categoryDao.delete(any()) }
     }
 
@@ -64,7 +64,7 @@ class ExpensesRepositoryApplyCategoryMergeTest {
     fun `skips entries where the canonical name does not exist`() = runTest {
         repository.applyCategoryMerge(mapOf("Groceries" to "Nonexistent"))
 
-        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any(), any()) }
         coVerify(exactly = 0) { categoryDao.delete(any()) }
     }
 
@@ -72,7 +72,7 @@ class ExpensesRepositoryApplyCategoryMergeTest {
     fun `skips same-name entries (no-op merge)`() = runTest {
         repository.applyCategoryMerge(mapOf("Transport" to "Transport"))
 
-        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any(), any()) }
         coVerify(exactly = 0) { categoryDao.delete(any()) }
     }
 
@@ -80,8 +80,8 @@ class ExpensesRepositoryApplyCategoryMergeTest {
     fun `applies multiple independent merge entries`() = runTest {
         repository.applyCategoryMerge(mapOf("Groceries" to "Mancare", "Transport" to "Mancare"))
 
-        coVerify(exactly = 1) { expenseDao.reassignCategory(groceries.id, food.id) }
-        coVerify(exactly = 1) { expenseDao.reassignCategory(transport.id, food.id) }
+        coVerify(exactly = 1) { expenseDao.reassignCategory(groceries.id, food.id, any()) }
+        coVerify(exactly = 1) { expenseDao.reassignCategory(transport.id, food.id, any()) }
         coVerify(exactly = 1) { categoryDao.delete(groceries) }
         coVerify(exactly = 1) { categoryDao.delete(transport) }
     }

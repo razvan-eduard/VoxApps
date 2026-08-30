@@ -26,10 +26,11 @@ class ExpenseFilterSummaryTest {
         from: Long? = null,
         to: Long? = null,
         sort: SortMode = SortMode.NEWEST,
-        needsAttention: String? = null
+        needsAttention: String? = null,
+        origin: String? = null
     ) = ExpenseFilterSummary.parts(
         category, bank, vendor, location, amount, account, currency, from, to, sort,
-        needsAttention, date, money, sortName
+        needsAttention, origin, date, money, sortName
     ).filterNotNull()
 
     @Test

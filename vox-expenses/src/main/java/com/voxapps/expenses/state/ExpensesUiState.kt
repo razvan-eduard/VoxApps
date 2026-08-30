@@ -38,6 +38,17 @@ sealed interface ExpensesUiState {
         val selectedCurrency: String? = null,
         /** Narrowed to records with something missing — see [com.voxapps.expenses.domain.health.ExpenseGaps]. */
         val onlyNeedsAttention: Boolean = false,
+        /** Narrowed to one device's records — see [OriginFilter]. Null shows everything. */
+        val selectedOrigin: OriginFilter? = null,
+        /** The devices any record arrived from — the provenance filter's vocabulary; empty on a
+         *  phone nothing has synced to, which is what hides the whole control. */
+        val availableOriginDevices: List<String> = emptyList(),
+        /** Whether lists label records that arrived from another device — see
+         *  [com.voxapps.expenses.data.preferences.ExpensesSettings.showSyncProvenance]. */
+        val showSyncProvenance: Boolean = false,
+        /** The stored device-sync level — see
+         *  [com.voxapps.expenses.data.preferences.ExpensesSettings.syncLevel]. */
+        val syncLevel: String = com.voxapps.datahygiene.SyncLevel.MANUAL.name,
         val bankAccounts: List<BankAccount> = emptyList(),
         val availableCurrencies: List<String> = emptyList(),
         val availableBanks: List<String> = emptyList(),

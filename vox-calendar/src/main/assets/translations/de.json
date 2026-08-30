@@ -358,5 +358,11 @@
   "hint_ics_title": "ICS-Import und -Export",
   "hint_ics_body": "Liest und schreibt das Standard-Kalenderformat, sodass Einträge zu und von Google Calendar, Thunderbird oder Apple Calendar wandern — ohne Konto auf beiden Seiten.",
   "hint_backup_title": "Sicherung und Wiederherstellung",
-  "hint_backup_body": "Eine Sicherung trägt Einträge, Ebenen, Aufgabenlisten und Einstellungen. Der sicherste Wiederherstellungsmodus löscht nur, was bei der Sicherung vorhanden war."
+  "hint_backup_body": "Eine Sicherung trägt Einträge, Ebenen, Aufgabenlisten und Einstellungen. Der sicherste Wiederherstellungsmodus löscht nur, was bei der Sicherung vorhanden war.",
+  "selection_sync_with_device": "Mit Gerät synchronisieren",
+  "sync_with_device_title": "An welches Gerät?",
+  "sync_devices_loading": "Frage Vox Hub…",
+  "sync_no_paired_devices": "Kein gekoppeltes Gerät. Kopple zuerst eines in Vox Hub.",
+  "sync_push_queued": "Für %1$s eingereiht — Übertragung sobald erreichbar",
+  "sync_push_failed": "Einreihen für %1$s fehlgeschlagen"
 }

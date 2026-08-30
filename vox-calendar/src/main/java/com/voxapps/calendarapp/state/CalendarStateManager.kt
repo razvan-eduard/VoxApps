@@ -146,6 +146,9 @@ class CalendarStateManager(
     }
 
     // --- SETTINGS WRITES ---
+    /** The stable sync identities behind a selection — what "sync with device" queues. */
+    suspend fun entryUidsFor(ids: Collection<Long>): List<String> = calendarRepo.uidsForIds(ids)
+
     fun setBiometricRequired(required: Boolean) { scope.launch { settingsRepo.setBiometricRequired(required) } }
     fun setSessionTimeoutMinutes(minutes: Int) { scope.launch { settingsRepo.setSessionTimeoutMinutes(minutes) } }
     fun setLanguage(code: String) { scope.launch { settingsRepo.setLanguage(code) } }

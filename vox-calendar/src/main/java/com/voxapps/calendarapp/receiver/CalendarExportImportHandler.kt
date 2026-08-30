@@ -191,8 +191,60 @@ class CalendarExportImportHandler(
                 listId = listId,
                 position = e.optInt("position", 0),
                 colorArgb = if (e.has("colorArgb") && !e.isNull("colorArgb")) e.optLong("colorArgb") else null,
-                comments = e.optStringOrNull("comments")
+                comments = e.optStringOrNull("comments"),
+                // Identity and provenance survive the round trip — a backup from before they
+                // existed reads as edited when it was created, which is the truest value it has.
+                updatedAtOverride = e.optLong("updatedAt").takeIf { e.has("updatedAt") },
+                originDeviceId = e.optStringOrNull("originDeviceId"),
+                originDeviceName = e.optStringOrNull("originDeviceName")
             )
+        }
+
+        // Rows the backup claims by uid are replaced IN PLACE below: deleting them in the reconcile
+        // pass would mint tombstones a later device sync faithfully replays against every paired
+        // phone, erasing the very records the restore just wrote. In-place replacement goes through
+        // the sync-merge write (whole row + tags), then reminders/attachments restore onto the
+        // surviving local id.
+        suspend fun replaceInPlace(e: JSONObject, existing: CalendarEntryWithTags, layerId: Long, listId: Long?): Long {
+            val tagsArray = e.optJSONArray("tags") ?: JSONArray()
+            val tags = (0 until tagsArray.length()).map { tagsArray.optString(it) }
+            val remindersArray = e.optJSONArray("reminders") ?: JSONArray()
+            val reminders = (0 until remindersArray.length()).map { remindersArray.optInt(it) }
+            calendarRepo.updateSyncedEntry(
+                existing.entry.copy(
+                    type = e.optStringOrNull("type").toEnumOrNull<CalendarEntryType>() ?: CalendarEntryType.EVENT,
+                    title = e.optStringOrNull("title") ?: "",
+                    description = e.optStringOrNull("description"),
+                    location = e.optStringOrNull("location"),
+                    startMillis = if (e.has("startMillis") && !e.isNull("startMillis")) e.optLong("startMillis") else null,
+                    endMillis = if (e.has("endMillis") && !e.isNull("endMillis")) e.optLong("endMillis") else null,
+                    allDay = e.optBoolean("allDay", false),
+                    completed = e.optBoolean("completed", false),
+                    isImportant = e.optBoolean("isImportant", false),
+                    recurrenceFrequency = e.optStringOrNull("recurrenceFrequency")
+                        .toEnumOrNull<RecurrenceFrequency>() ?: RecurrenceFrequency.NONE,
+                    recurrenceInterval = if (e.has("recurrenceInterval")) e.optInt("recurrenceInterval", 1) else 1,
+                    recurrenceUntilMillis = if (e.has("recurrenceUntilMillis") && !e.isNull("recurrenceUntilMillis")) {
+                        e.optLong("recurrenceUntilMillis")
+                    } else {
+                        null
+                    },
+                    recurrenceDaysMask = e.optInt("recurrenceDaysMask", 0),
+                    layerId = layerId,
+                    listId = listId,
+                    position = e.optInt("position", 0),
+                    colorArgb = if (e.has("colorArgb") && !e.isNull("colorArgb")) e.optLong("colorArgb") else null,
+                    comments = e.optStringOrNull("comments"),
+                    createdAt = e.optLong("createdAt", existing.entry.createdAt),
+                    updatedAt = e.optLong("updatedAt", existing.entry.updatedAt),
+                    individualReminderOffsetsMinutes = ReminderOffsetsCodec.encode(reminders),
+                    originDeviceId = e.optStringOrNull("originDeviceId") ?: existing.entry.originDeviceId,
+                    originDeviceName = e.optStringOrNull("originDeviceName") ?: existing.entry.originDeviceName
+                ),
+                tags,
+                reminderOffsetsMinutes = reminders
+            )
+            return existing.entry.id
         }
 
         suspend fun restoreAttachments(newEntryId: Long, e: JSONObject) {
@@ -208,22 +260,33 @@ class CalendarExportImportHandler(
             // Same to-do exclusion as export — a to-do-flavored entry was never part of this backup,
             // so it must never be wiped by this import's reconciliation pass either.
             val preExistingEvents = calendarRepo.entriesSnapshot().filter { it.entry.listId == null }
+            val preExistingByUid = preExistingEvents.associateBy { it.entry.uid }
             val importedEntries = root.optJSONArray("events") ?: JSONArray()
+            val importedList = (0 until importedEntries.length()).map { importedEntries.getJSONObject(it) }
+            val importedUids = importedList
+                .mapNotNull { it.optStringOrNull("uid")?.takeIf { u -> u.isNotBlank() } }
+                .toSet()
 
             entriesCreated = VoxSnapshotReplaceImporter.restore(
                 mode = mode,
-                imported = (0 until importedEntries.length()).map { importedEntries.getJSONObject(it) },
+                imported = importedList,
                 preExisting = preExistingEvents,
                 exportedAt = exportedAt,
                 createdAtOf = { it.entry.createdAt },
                 insert = insert@{ e ->
                     val importedLayerId = e.optLong("layerId")
                     val layerId = importedIdToLocalId[importedLayerId] ?: defaultLocalLayerId ?: return@insert 0L
-                    val newEntryId = restoreEntry(e, layerId, listId = null)
-                    if (newEntryId > 0) restoreAttachments(newEntryId, e)
-                    newEntryId
+                    val existing = e.optStringOrNull("uid")?.takeIf { it.isNotBlank() }?.let { preExistingByUid[it] }
+                    val entryId = if (existing != null) {
+                        replaceInPlace(e, existing, layerId, listId = null)
+                    } else {
+                        restoreEntry(e, layerId, listId = null)
+                    }
+                    if (entryId > 0) restoreAttachments(entryId, e)
+                    entryId
                 },
-                delete = { calendarRepo.deleteEntryById(it.entry.id) }
+                // A row claimed by uid was replaced in place — it IS the restored data now.
+                delete = { if (it.entry.uid !in importedUids) calendarRepo.deleteEntryById(it.entry.id) }
             )
         }
 
@@ -232,11 +295,16 @@ class CalendarExportImportHandler(
         var itemsCreated = 0
         if (root.has("todoItems")) {
             val preExistingItems = calendarRepo.entriesSnapshot().filter { it.entry.listId != null }
+            val preExistingByUid = preExistingItems.associateBy { it.entry.uid }
             val importedItems = root.optJSONArray("todoItems") ?: JSONArray()
+            val importedList = (0 until importedItems.length()).map { importedItems.getJSONObject(it) }
+            val importedUids = importedList
+                .mapNotNull { it.optStringOrNull("uid")?.takeIf { u -> u.isNotBlank() } }
+                .toSet()
 
             itemsCreated = VoxSnapshotReplaceImporter.restore(
                 mode = mode,
-                imported = (0 until importedItems.length()).map { importedItems.getJSONObject(it) },
+                imported = importedList,
                 preExisting = preExistingItems,
                 exportedAt = exportedAt,
                 createdAtOf = { it.entry.createdAt },
@@ -244,11 +312,16 @@ class CalendarExportImportHandler(
                     val importedLayerId = e.optLong("layerId")
                     val layerId = importedIdToLocalId[importedLayerId] ?: defaultLocalLayerId ?: return@insert 0L
                     val listId = importedListIdToLocalId[e.optLong("listId")] ?: return@insert 0L
-                    val newEntryId = restoreEntry(e, layerId, listId)
-                    if (newEntryId > 0) restoreAttachments(newEntryId, e)
-                    newEntryId
+                    val existing = e.optStringOrNull("uid")?.takeIf { it.isNotBlank() }?.let { preExistingByUid[it] }
+                    val entryId = if (existing != null) {
+                        replaceInPlace(e, existing, layerId, listId)
+                    } else {
+                        restoreEntry(e, layerId, listId)
+                    }
+                    if (entryId > 0) restoreAttachments(entryId, e)
+                    entryId
                 },
-                delete = { calendarRepo.deleteEntryById(it.entry.id) }
+                delete = { if (it.entry.uid !in importedUids) calendarRepo.deleteEntryById(it.entry.id) }
             )
         }
 
@@ -334,6 +407,12 @@ private fun CalendarEntryWithTags.toJson(
     put("position", e.position)
     put("colorArgb", e.colorArgb)
     put("createdAt", e.createdAt)
+    // The row's own edit timestamp and provenance ride along so a restore keeps the rows
+    // comparable to (and recognizable by) a later device sync — see importData()'s uid
+    // reconciliation.
+    put("updatedAt", e.updatedAt)
+    e.originDeviceId?.let { put("originDeviceId", it) }
+    e.originDeviceName?.let { put("originDeviceName", it) }
     put("tags", JSONArray(tagNames))
     put("attachments", JSONArray(attachments.map { it.toBackupJson() }))
     put("reminders", JSONArray(reminderOffsetsMinutes))

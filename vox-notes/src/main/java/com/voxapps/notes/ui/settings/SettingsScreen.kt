@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -290,8 +291,15 @@ fun SettingsScreen(
                 stateManager = stateManager,
                 modifier = mod
             )
-            SettingsPage.BACKUP -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+            SettingsPage.BACKUP -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(pad)
+                    .padding(16.dp)
+            ) {
                 BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+                DeviceSyncSettingsSection(settings = settings, stateManager = stateManager)
             }
             SettingsPage.LOGS -> LogsSettingsTab(
                 enabled = settings.debugLoggingEnabled,

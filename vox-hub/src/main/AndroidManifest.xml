@@ -4,8 +4,9 @@
     <!--
         The COMMAND permission guarding every satellite's receiver is declared once in :core:ipc's
         own manifest (shared across every Vox app) and folded in here automatically via manifest
-        merger — see VoxIpc.kt's class doc comment. Hub is a pure IPC client (discovers satellites,
-        requests export/import) — it holds no local database and exposes no receiver of its own.
+        merger — see VoxIpc.kt's class doc comment. Hub is mostly an IPC client (discovers
+        satellites, requests export/import); its one receiver on the bus exists for the two
+        satellite→hub sync-push ops — see HubCommandReceiver.
     -->
 
     <!-- Peer-to-peer device sync (see domain/sync/): NFC pairing + Bluetooth Classic transport. -->
@@ -101,5 +102,22 @@
             android:name=".domain.voxconnect.VoxConnectForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- The only satellite→hub ops on the command bus: "sync with device" peer listing and push
+             queueing — see HubCommandReceiver. Same shared signature permission as every satellite's
+             own command receiver. -->
+        <receiver
+            android:name=".receiver.HubCommandReceiver"
+            android:exported="true"
+            android:permission="com.voxapps.vox.permission.COMMAND">
+            <intent-filter>
+                <action android:name="com.voxapps.action.VOX_COMMAND" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Landing point of the wall-clock-aligned auto-sync alarm chain — see SyncAlarmScheduler. -->
+        <receiver
+            android:name=".domain.sync.SyncAlarmReceiver"
+            android:exported="false" />
     </application>
 </manifest>

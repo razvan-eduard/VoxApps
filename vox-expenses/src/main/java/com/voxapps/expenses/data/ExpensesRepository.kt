@@ -241,7 +241,7 @@ class ExpensesRepository(
      */
     suspend fun deleteBankAccount(account: BankAccount) {
         bankAccountDao ?: return
-        expenseDao.clearBankAccount(account.id)
+        expenseDao.clearBankAccount(account.id, System.currentTimeMillis())
         bankAccountDao.delete(account)
     }
 
@@ -325,7 +325,7 @@ class ExpensesRepository(
     /** The records keep their spending and only stop being transactions — see [ExpenseDao.clearRecipient]. */
     suspend fun deleteRecipient(recipient: Recipient) {
         recipientDao ?: return
-        expenseDao.clearRecipient(recipient.id)
+        expenseDao.clearRecipient(recipient.id, System.currentTimeMillis())
         recipientDao.delete(recipient)
     }
 
@@ -412,6 +412,10 @@ class ExpensesRepository(
     /** The currencies they are spent in — codes as written, only blanks dropped. */
     val currenciesInUse: Flow<List<String>> =
         expenseDao.observeCurrenciesInUse().distinctUntilChanged()
+
+    /** The devices any record arrived from — see [Expense.originDeviceName]. */
+    val originDevicesInUse: Flow<List<String>> =
+        expenseDao.observeOriginDevicesInUse().distinctUntilChanged()
 
     /** The ledger's smallest and largest amounts — see [ExpenseDao.observeAmountSpan]. */
     val amountSpan: Flow<AmountSpan> =
@@ -767,6 +771,11 @@ class ExpensesRepository(
 
     suspend fun getIdByUid(uid: String): Long? = expenseDao.getIdByUid(uid)
 
+    /** The stable sync identities behind a screen selection — what a manual "sync with device"
+     *  push queues, since local row ids mean nothing on the other phone. */
+    suspend fun uidsForIds(ids: Collection<Long>): List<String> =
+        if (ids.isEmpty()) emptyList() else expenseDao.getUidsByIds(ids.toList())
+
     /** Insert-side of a sync merge: preserves [expense]'s uid/updatedAt verbatim — unlike [addExpense],
      *  which always mints a fresh uid and stamps updatedAt to "now" (correct for a locally *created*
      *  row, wrong for one being replicated from a peer that already has real sync identity). [items]
@@ -781,13 +790,15 @@ class ExpensesRepository(
     }
 
     /** Update-side of a sync merge: [expense] must already carry the *local* row's id (resolved via
-     *  [getIdByUid] before calling this) — every other field, including updatedAt, comes from the
-     *  peer's newer version, since it won the last-write-wins comparison that got us here. [items]
-     *  unconditionally replace the local set (an empty list is a valid, correct result — it means the
-     *  peer's current state for this expense genuinely has no line items), mirroring [updateExpense]'s
-     *  delete-then-reinsert pattern exactly. */
-    suspend fun updateSyncedExpense(expense: Expense, items: List<ExpenseLineItem> = emptyList()) {
+     *  [getIdByUid] before calling this) — the field values themselves were already reconciled by
+     *  the handler (peer's newer version, with the local row filling anything the peer's delta
+     *  didn't carry). [items] replace the local set (an empty list is a valid, correct result — it
+     *  means the peer's current state for this expense genuinely has no line items), mirroring
+     *  [updateExpense]'s delete-then-reinsert pattern exactly; null means the delta said nothing
+     *  about line items and the local set stays untouched. */
+    suspend fun updateSyncedExpense(expense: Expense, items: List<ExpenseLineItem>? = emptyList()) {
         expenseDao.update(expense)
+        if (items == null) return
         lineItemDao.deleteAllForExpense(expense.id)
         if (items.isNotEmpty()) {
             lineItemDao.insertAll(items.mapIndexed { index, item -> item.copy(id = 0, expenseId = expense.id, position = index) })
@@ -845,14 +856,27 @@ class ExpensesRepository(
         origins: Map<String, com.voxapps.recordflow.FieldOrigin> = emptyMap(),
         /** Only Hub import passes this: a record that was archived on the device the backup came
          *  from is archived here too, or a restore would quietly refill the ledger. */
-        archivedAt: Long? = null
+        archivedAt: Long? = null,
+        netAmount: Double? = null,
+        vatAmount: Double? = null,
+        /** Only Hub import passes these: a backup that carries sync identity and provenance keeps
+         *  them through a restore, so a later device sync still recognizes the rows instead of
+         *  re-minting them as brand-new. Every other caller creates a fresh identity, which is what
+         *  the defaults do. */
+        uid: String? = null,
+        updatedAtOverride: Long? = null,
+        originDeviceId: String? = null,
+        originDeviceName: String? = null
     ): Long {
         return try {
             val candidate = Expense(
+                uid = uid ?: java.util.UUID.randomUUID().toString(),
                 title = title?.trim()?.takeIf { it.isNotEmpty() },
                 totalAmount = totalAmount,
                 previousBalanceAmount = previousBalanceAmount,
                 invoiceOwnAmount = invoiceOwnAmount,
+                netAmount = netAmount,
+                vatAmount = vatAmount,
                 currencyCode = currencyCode,
                 vendor = vendor?.trim()?.takeIf { it.isNotEmpty() },
                 bankAccountId = bankAccountId,
@@ -866,8 +890,11 @@ class ExpensesRepository(
                 isStub = isStub,
                 archivedAt = archivedAt,
                 createdAt = createdAt,
+                updatedAt = updatedAtOverride ?: System.currentTimeMillis(),
                 source = source,
                 manuallyEdited = manuallyEdited,
+                originDeviceId = originDeviceId,
+                originDeviceName = originDeviceName,
                 originsJson = ExpenseOrigins.encode(origins)
             )
 
@@ -1373,8 +1400,8 @@ class ExpensesRepository(
             idOf = { it.id },
             isFallback = { it.isDefault }
         )
-        if (fallback != null) expenseDao.reassignCategory(category.id, fallback.id)
-        else expenseDao.clearCategory(category.id)
+        if (fallback != null) expenseDao.reassignCategory(category.id, fallback.id, System.currentTimeMillis())
+        else expenseDao.clearCategory(category.id, System.currentTimeMillis())
         spendingLimitDao.clearCategory(category.id)
         // Referential cleanup mirroring the old memory's clearCategory: rules lose the set-entry
         // pointing at the deleted category, and a rule with nothing left to set is deleted — every
@@ -1394,11 +1421,17 @@ class ExpensesRepository(
         categoryId: Long?,
         amountHomeCurrency: Double,
         period: String,
-        createdAt: Long = System.currentTimeMillis()
+        createdAt: Long = System.currentTimeMillis(),
+        ownDeviceOnly: Boolean = true
     ): Long =
         spendingLimitDao.insert(
-            SpendingLimit(categoryId = categoryId, amountHomeCurrency = amountHomeCurrency, period = period, createdAt = createdAt)
+            SpendingLimit(
+                categoryId = categoryId, amountHomeCurrency = amountHomeCurrency, period = period,
+                createdAt = createdAt, ownDeviceOnly = ownDeviceOnly
+            )
         )
+
+    suspend fun updateSpendingLimit(limit: SpendingLimit) = spendingLimitDao.update(limit)
 
     suspend fun deleteSpendingLimit(limit: SpendingLimit) = spendingLimitDao.delete(limit)
 
@@ -1408,7 +1441,7 @@ class ExpensesRepository(
             if (oldName.equals(canonicalName, ignoreCase = true)) continue
             val old = cats.firstOrNull { it.name.equals(oldName, ignoreCase = true) } ?: continue
             val canonical = cats.firstOrNull { it.name.equals(canonicalName, ignoreCase = true) } ?: continue
-            expenseDao.reassignCategory(old.id, canonical.id)
+            expenseDao.reassignCategory(old.id, canonical.id, System.currentTimeMillis())
             categoryDao.delete(old)
         }
     }

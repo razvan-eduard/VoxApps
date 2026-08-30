@@ -32,8 +32,8 @@ class NotesRepositoryDeleteCategoryTest {
     fun `the notes land on the fallback, not on none at all`() = runTest {
         repository.deleteCategory(work)
 
-        coVerify(exactly = 1) { noteDao.reassignCategory(work.id, fallback.id) }
-        coVerify(exactly = 0) { noteDao.clearCategory(any()) }
+        coVerify(exactly = 1) { noteDao.reassignCategory(work.id, fallback.id, any()) }
+        coVerify(exactly = 0) { noteDao.clearCategory(any(), any()) }
         coVerify(exactly = 1) { categoryDao.delete(work) }
     }
 
@@ -43,8 +43,8 @@ class NotesRepositoryDeleteCategoryTest {
 
         repository.deleteCategory(work)
 
-        coVerify(exactly = 1) { noteDao.clearCategory(work.id) }
-        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 1) { noteDao.clearCategory(work.id, any()) }
+        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any(), any()) }
     }
 
     @Test
@@ -52,8 +52,8 @@ class NotesRepositoryDeleteCategoryTest {
         repository.deleteCategory(fallback)
 
         coVerify(exactly = 0) { categoryDao.delete(any()) }
-        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any()) }
-        coVerify(exactly = 0) { noteDao.clearCategory(any()) }
+        coVerify(exactly = 0) { noteDao.reassignCategory(any(), any(), any()) }
+        coVerify(exactly = 0) { noteDao.clearCategory(any(), any()) }
     }
 
     /** Exactly one carries it: moving the star clears it everywhere else in the same pass. */

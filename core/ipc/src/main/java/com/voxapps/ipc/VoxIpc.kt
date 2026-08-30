@@ -124,16 +124,34 @@ object VoxIpc {
      * Vox Hub's peer-to-peer device sync ops (NFC pairing + Bluetooth transport) — deliberately
      * separate from [OP_EXPORT]/[OP_IMPORT], which is a one-directional *restore* (wipe pre-existing
      * rows, insert the snapshot verbatim). [OP_SYNC_EXPORT] returns only entries with
-     * `updatedAt > `[VoxCommand.since] (plus deletion tombstones with `deletedAt > since`), optionally
-     * restricted to [VoxCommand.scopeNames] (category/layer *names*, not ids — ids are a local Room
-     * sequence with no meaning on another phone; names are what category/layer reconciliation already
-     * keys on). [OP_SYNC_MERGE] applies an incoming delta of that same shape: insert-if-new,
-     * last-write-wins-by-`updatedAt` on a uid collision, delete-on-tombstone — never a blind
-     * insert-then-wipe like [OP_IMPORT]. See [VoxDataTransferClient.requestSyncExport]/
-     * [requestSyncMerge].
+     * `updatedAt > `[VoxCommand.since] (plus deletion tombstones with `deletedAt > since`), paged by
+     * [VoxCommand.limit]/[VoxCommand.cursor] (see `SyncDeltaKeys.NEXT_CURSOR`), forced to include
+     * [VoxCommand.uids] (the manual push queue), and restricted by the app's own sync level plus
+     * [VoxCommand.scopeNames] (container *names*, not ids — ids are a local Room sequence with no
+     * meaning on another phone; names are what container reconciliation already keys on; null means
+     * everything, an empty list means nothing). [OP_SYNC_MERGE] applies an incoming delta of that
+     * same shape: insert-if-new (stamped with [VoxCommand.sourceDeviceId]/[VoxCommand.sourceDeviceName]
+     * as the row's provenance), last-write-wins-by-`updatedAt` on a uid collision (absent keys keep
+     * the local row's values — an older peer's narrower delta must not blank fields it never knew),
+     * delete-on-tombstone — never a blind insert-then-wipe like [OP_IMPORT]. See
+     * [VoxDataTransferClient.requestSyncExport]/[requestSyncMerge].
      */
     const val OP_SYNC_EXPORT = "sync_export"
     const val OP_SYNC_MERGE = "sync_merge"
+
+    /**
+     * Vox Hub's side of the manual "sync with device" flow — the only two ops a SATELLITE sends to
+     * HUB (every other op in this contract flows the other way). [OP_LIST_SYNC_PEERS] returns the
+     * paired devices as a JSON array of `{peerId, label}` so a satellite's multi-select can offer a
+     * target picker without knowing anything about pairing. [OP_ENQUEUE_PUSH] queues
+     * [VoxCommand.uids] from the sending satellite ([VoxCommand.sourcePackage]) for
+     * [VoxCommand.peerId]; Hub forces those uids into the next sync session's export with that peer
+     * — and attempts one immediately, best-effort — regardless of the satellite's sync level or
+     * scope. A push is a one-time copy: later local edits don't follow it, but re-pushing the same
+     * records updates the peer's copies in place (same uid, last-write-wins).
+     */
+    const val OP_LIST_SYNC_PEERS = "list_sync_peers"
+    const val OP_ENQUEUE_PUSH = "enqueue_sync_push"
 
     /**
      * VoxConnect Bridge's dynamic form-schema fetch — a satellite replies with a JSON description of

@@ -183,12 +183,18 @@ interface ExpenseDao {
     @Query("SELECT DISTINCT vendor FROM expenses WHERE archivedAt IS NULL AND vendor IS NOT NULL AND TRIM(vendor) != '' ORDER BY vendor")
     fun observeVendorsInUse(): Flow<List<String>>
 
-    @Query("UPDATE expenses SET categoryId = NULL WHERE categoryId = :categoryId")
-    suspend fun clearCategory(categoryId: Long)
+    /** The devices any record on this phone arrived from — the provenance filter's vocabulary. */
+    @Query("SELECT DISTINCT originDeviceName FROM expenses WHERE originDeviceName IS NOT NULL ORDER BY originDeviceName")
+    fun observeOriginDevicesInUse(): Flow<List<String>>
+
+    // These bulk relinks bump updatedAt like any other edit: what a record points at is part of
+    // what it says, and a peer-to-peer sync can only carry the change if the row looks changed.
+    @Query("UPDATE expenses SET categoryId = NULL, updatedAt = :now WHERE categoryId = :categoryId")
+    suspend fun clearCategory(categoryId: Long, now: Long)
 
     /** Reassigns all expenses from one category to another (used by category auto-merge). */
-    @Query("UPDATE expenses SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
-    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long)
+    @Query("UPDATE expenses SET categoryId = :newCategoryId, updatedAt = :now WHERE categoryId = :oldCategoryId")
+    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long, now: Long)
 
     @Query("DELETE FROM expenses")
     suspend fun deleteAll()
@@ -206,13 +212,13 @@ interface ExpenseDao {
     /** Resolves a peer-to-peer sync delta's uid back to this device's own local row id — needed
      *  before an update (preserve the local id) or a delete-by-uid (Room has no delete-by-uid). */
     /** Lets go of a deleted account without touching the spending it paid for. */
-    @Query("UPDATE expenses SET bankAccountId = NULL WHERE bankAccountId = :accountId")
-    suspend fun clearBankAccount(accountId: Long)
+    @Query("UPDATE expenses SET bankAccountId = NULL, updatedAt = :now WHERE bankAccountId = :accountId")
+    suspend fun clearBankAccount(accountId: Long, now: Long)
 
     /** Lets go of a deleted recipient the same way — the records keep their spending and only
      *  stop being transactions, which is what losing the link means (see [Expense.recipientId]). */
-    @Query("UPDATE expenses SET recipientId = NULL WHERE recipientId = :recipientId")
-    suspend fun clearRecipient(recipientId: Long)
+    @Query("UPDATE expenses SET recipientId = NULL, updatedAt = :now WHERE recipientId = :recipientId")
+    suspend fun clearRecipient(recipientId: Long, now: Long)
 
     @Query("SELECT id FROM expenses WHERE uid = :uid")
     suspend fun getIdByUid(uid: String): Long?
