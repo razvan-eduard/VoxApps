@@ -107,7 +107,11 @@ fun SettingsScreen(
     val settings by settingsRepo.settingsFlow.collectAsStateWithLifecycle(initialValue = ExpensesSettings())
     val ui by stateManager.uiState.collectAsStateWithLifecycle()
     val categories = (ui as? ExpensesUiState.Unlocked)?.categories ?: emptyList()
-    val expenses = (ui as? ExpensesUiState.Unlocked)?.expenses?.map { it.expense } ?: emptyList()
+    // Collected here, not carried in the ui state: the dedup preview and the account budgets want
+    // the rows, and only while this screen is showing them.
+    val expenseRows by stateManager.filteredExpenses
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val expenses = remember(expenseRows) { expenseRows.map { it.expense } }
     val spendingLimits by stateManager.spendingLimits.collectAsStateWithLifecycle(initialValue = emptyList())
     val budgetAccounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val accountBudgets by stateManager.accountBudgets.collectAsStateWithLifecycle(initialValue = emptyList())

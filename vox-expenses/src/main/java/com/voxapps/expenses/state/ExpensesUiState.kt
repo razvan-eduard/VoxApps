@@ -4,12 +4,14 @@ import com.voxapps.expenses.data.BankAccount
 import com.voxapps.design.filter.VoxRange
 import androidx.compose.runtime.Immutable
 import com.voxapps.expenses.data.Category
-import com.voxapps.expenses.data.ExpenseWithDetails
 
 /**
- * Top-level UI state for Vox Expenses (mirrors vox-notes' NotesUiState). [Locked] is emitted only when
- * biometric reading is required and the session has expired. [Unlocked] carries the already
- * filtered/sorted data plus the active filter selection.
+ * Top-level UI state for Vox Expenses (mirrors vox-notes' NotesUiState). [Locked] is emitted only
+ * when biometric reading is required and the session has expired. [Unlocked] carries the active
+ * filter selection and the pickers' vocabularies — never the rows themselves: the scrolling list
+ * pages them through [ExpensesStateManager.pagedExpenses], and the screens that hold a whole list
+ * (reports, the calendar layout, bulk selection) collect [ExpensesStateManager.filteredExpenses]
+ * only while they are on screen.
  */
 @Immutable
 sealed interface ExpensesUiState {
@@ -19,7 +21,6 @@ sealed interface ExpensesUiState {
 
     @Immutable
     data class Unlocked(
-        val expenses: List<ExpenseWithDetails>,
         val categories: List<Category>,
         val selectedCategoryId: Long?,
         val sort: SortMode,

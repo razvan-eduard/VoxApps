@@ -46,6 +46,11 @@ import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.filter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -141,24 +146,79 @@ class ExpensesStateManager(
     )
 
     /**
-     * The records with something missing, when that is what was asked for.
+     * Everything one row's keep-or-drop answer depends on: the SQL narrowing, the resolved account
+     * list (the account family and the bank names both come through it), the attention toggle and
+     * its two inputs. One key, so the paged window and the whole-list snapshot cannot disagree
+     * about which rows the current question keeps.
      *
-     * Applied after the ordinary filters rather than inside them: "needs me" is a question about the
-     * record's completeness, not about which shop or month it belongs to, and the two compose —
-     * "August, and the ones that need me" is a reasonable thing to ask.
+     * Attention is applied after the ordinary filters rather than inside them: "needs me" is a
+     * question about the record's completeness, not about which shop or month it belongs to, and
+     * the two compose — "August, and the ones that need me" is a reasonable thing to ask.
      */
-    private fun withAttentionFilter(
-        rt: Runtime,
-        categories: List<Category>,
-        accounts: List<BankAccount>,
-        records: List<ExpenseWithDetails>
-    ): List<ExpenseWithDetails> =
-        if (!rt.onlyNeedsAttention) records
-        else ExpenseGaps.needingAttention(
-            records,
-            categories.firstOrNull { it.isDefault }?.id,
-            accountsInUse = accounts.isNotEmpty()
-        )
+    private data class RowKey(
+        val narrowing: SqlNarrowing,
+        val onlyNeedsAttention: Boolean,
+        val fallbackCategoryId: Long?,
+        val accounts: List<BankAccount>
+    ) {
+        fun keeps(ewd: ExpenseWithDetails): Boolean =
+            ExpenseFilter.residualMatches(
+                ewd, narrowing.bank, { id -> BankAccountTree.bankNameFor(id, accounts) },
+                narrowing.vendor, narrowing.location
+            ) && (!onlyNeedsAttention ||
+                ExpenseGaps.of(ewd, fallbackCategoryId, accountsInUse = accounts.isNotEmpty()).isNotEmpty())
+
+        // A card answers for itself; an account answers for its cards too. The narrower choice
+        // wins because it is the one made second.
+        fun accountFamily(): Set<Long>? =
+            (narrowing.cardId ?: narrowing.accountId)?.let { BankAccountTree.familyOf(it, accounts) }
+    }
+
+    private val rowKeyFlow: Flow<RowKey> = combine(
+        _runtime.map { it.narrowing() to it.onlyNeedsAttention }.distinctUntilChanged(),
+        expensesRepo.categories,
+        expensesRepo.bankAccounts
+    ) { (narrowing, attention), categories, accounts ->
+        RowKey(narrowing, attention, categories.firstOrNull { it.isDefault }?.id, accounts)
+    }.distinctUntilChanged()
+
+    /**
+     * The narrowed rows, whole — for the screens that hold a list: reports, the calendar layout,
+     * select-all, bulk edit, the day dots. Cold on purpose: collected only while such a screen is
+     * showing, so a ledger write while the app sits in the background materializes nothing.
+     */
+    val filteredExpenses: Flow<List<ExpenseWithDetails>> = rowKeyFlow.flatMapLatest { k ->
+        expensesRepo.observeFiltered(
+            categoryId = k.narrowing.categoryId,
+            dateFrom = k.narrowing.dateFrom,
+            dateTo = k.narrowing.dateTo,
+            amountMin = k.narrowing.amount?.from,
+            amountMax = k.narrowing.amount?.to,
+            currency = k.narrowing.currency,
+            accountIds = k.accountFamily(),
+            sortName = k.narrowing.sort.name
+        ).map { rows -> rows.filter { k.keeps(it) } }
+    }
+
+    /**
+     * The same rows as a paging window — what the scrolling list renders. Hot and cached in the
+     * manager's scope so the window survives recomposition; every page passes the same
+     * [RowKey.keeps] the snapshot uses, so the two views of one question cannot disagree.
+     */
+    val pagedExpenses: Flow<PagingData<ExpenseWithDetails>> = rowKeyFlow.flatMapLatest { k ->
+        Pager(PagingConfig(pageSize = 60, enablePlaceholders = false)) {
+            expensesRepo.pagedFiltered(
+                categoryId = k.narrowing.categoryId,
+                dateFrom = k.narrowing.dateFrom,
+                dateTo = k.narrowing.dateTo,
+                amountMin = k.narrowing.amount?.from,
+                amountMax = k.narrowing.amount?.to,
+                currency = k.narrowing.currency,
+                accountIds = k.accountFamily(),
+                sortName = k.narrowing.sort.name
+            )
+        }.flow.map { paging -> paging.filter { k.keeps(it) } }
+    }.cachedIn(scope)
 
     private val _uiState = MutableStateFlow<ExpensesUiState>(ExpensesUiState.Loading)
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
@@ -168,35 +228,6 @@ class ExpensesStateManager(
             .map { infoList ->
                 infoList.firstOrNull { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
                     ?.nextScheduleTimeMillis
-            }
-
-        // The rows arrive already narrowed and ordered by the query; only what SQL cannot say
-        // faithfully — FilterValue's Unicode matching, the bank resolved through the account —
-        // remains to check up here, on the small remainder. Re-keyed on the narrowing AND the
-        // accounts, since the account family and the bank names both resolve through the latter.
-        val filteredFlow = combine(
-            _runtime.map { it.narrowing() }.distinctUntilChanged(),
-            expensesRepo.bankAccounts
-        ) { narrowing, accounts -> narrowing to accounts }
-            .distinctUntilChanged()
-            .flatMapLatest { (f, accounts) ->
-                expensesRepo.observeFiltered(
-                    categoryId = f.categoryId,
-                    dateFrom = f.dateFrom,
-                    dateTo = f.dateTo,
-                    amountMin = f.amount?.from,
-                    amountMax = f.amount?.to,
-                    currency = f.currency,
-                    // A card answers for itself; an account answers for its cards too. The
-                    // narrower choice wins because it is the one made second.
-                    accountIds = (f.cardId ?: f.accountId)?.let { BankAccountTree.familyOf(it, accounts) },
-                    sortName = f.sort.name
-                ).map { rows ->
-                    ExpenseFilter.residual(
-                        rows, f.bank, { id -> BankAccountTree.bankNameFor(id, accounts) },
-                        f.vendor, f.location
-                    )
-                }
             }
 
         val vocabularyFlow = combine(
@@ -214,11 +245,10 @@ class ExpensesStateManager(
 
         combine(
             settingsRepo.settingsFlow,
-            filteredFlow,
             namesFlow,
             _runtime,
             nextRunMillisFlow
-        ) { settings, expenses, names, rt, nextRunMillis ->
+        ) { settings, names, rt, nextRunMillis ->
             val (categories, accounts, vocabulary) = names
             val locked = settings.isBiometricRequired &&
                 !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
@@ -226,7 +256,6 @@ class ExpensesStateManager(
                 ExpensesUiState.Locked
             } else {
                 ExpensesUiState.Unlocked(
-                    expenses = withAttentionFilter(rt, categories, accounts, expenses),
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,

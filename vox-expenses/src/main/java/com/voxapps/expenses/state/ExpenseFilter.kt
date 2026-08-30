@@ -77,11 +77,20 @@ object ExpenseFilter {
         location: FilterValue?
     ): List<ExpenseWithDetails> {
         if (bank == null && vendor == null && location == null) return expenses
-        return expenses.filter { ewd ->
-            val e = ewd.expense
-            (bank == null || bank.matches(bankOf(e.bankAccountId))) &&
-                (vendor == null || vendor.matches(e.vendor)) &&
-                (location == null || location.matches(e.location))
-        }
+        return expenses.filter { residualMatches(it, bank, bankOf, vendor, location) }
+    }
+
+    /** [residual] for one record — the form a paging window filters by, one page at a time. */
+    fun residualMatches(
+        ewd: ExpenseWithDetails,
+        bank: FilterValue?,
+        bankOf: (Long?) -> String?,
+        vendor: FilterValue?,
+        location: FilterValue?
+    ): Boolean {
+        val e = ewd.expense
+        return (bank == null || bank.matches(bankOf(e.bankAccountId))) &&
+            (vendor == null || vendor.matches(e.vendor)) &&
+            (location == null || location.matches(e.location))
     }
 }

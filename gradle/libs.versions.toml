@@ -12,6 +12,7 @@ richeditor = "1.0.0"
 # Pinned to the version telephoto already brings transitively — no new version enters the tree.
 coil = "2.7.0"
 room = "2.8.4"
+paging = "3.3.6"
 retrofit = "3.0.0"
 okhttp = "5.4.0"
 ksp = "2.3.11"
@@ -73,6 +74,9 @@ androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidge
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-room-paging = { group = "androidx.room", name = "room-paging", version.ref = "room" }
+androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", version.ref = "paging" }
+androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 
 # Retrofit & OkHttp
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }

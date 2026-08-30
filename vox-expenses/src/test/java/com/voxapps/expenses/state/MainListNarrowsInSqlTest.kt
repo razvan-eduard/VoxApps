@@ -78,7 +78,10 @@ class MainListNarrowsInSqlTest {
             "the in-memory whole is for list-holding callers, not the screen's own path",
             text.contains("ExpenseFilter.apply(")
         )
-        assertTrue("what SQL cannot say runs as the residual", text.contains("ExpenseFilter.residual("))
+        assertTrue(
+            "what SQL cannot say runs as the per-record residual",
+            text.contains("ExpenseFilter.residualMatches(")
+        )
     }
 
     @Test
@@ -99,6 +102,50 @@ class MainListNarrowsInSqlTest {
         assertTrue(
             "apply must delegate the residual predicates so the two paths cannot drift",
             text.contains("residual(it, bank, bankOf, vendor, location)")
+        )
+        assertTrue(
+            "the list form must reuse the one-record predicate the paging window filters by",
+            text.contains("residualMatches(it, bank, bankOf, vendor, location)")
+        )
+    }
+
+    @Test
+    fun `the scrolling list is a paging window over the same narrowing`() {
+        val daoText = source(dao)
+        assertTrue(
+            "the paged query must exist as a paging source",
+            daoText.contains("PagingSource<Int, ExpenseWithDetails>")
+        )
+        val text = statements(manager)
+        assertTrue("the pager must be re-keyed like the snapshot", text.contains("Pager("))
+        assertTrue("the window must survive recomposition", text.contains(".cachedIn(scope)"))
+        assertTrue(
+            "both views of one question must pass the same keep-or-drop answer",
+            Regex("""keeps\(""").findAll(text).count() >= 3 // the definition and both call sites
+        )
+    }
+
+    @Test
+    fun `the ui state carries no rows`() {
+        val text = statements("src/main/java/com/voxapps/expenses/state/ExpensesUiState.kt")
+        assertFalse(
+            "rows travel through the paged window and the cold snapshot, never the hot state",
+            text.contains("ExpenseWithDetails")
+        )
+    }
+
+    @Test
+    fun `the main list's shape has its index`() {
+        val entity = source("src/main/java/com/voxapps/expenses/data/Expense.kt")
+        assertTrue(
+            "the entity must declare the (archivedAt, dateTime) index",
+            entity.contains("Index(\"archivedAt\", \"dateTime\")")
+        )
+        val db = source("src/main/java/com/voxapps/expenses/data/ExpensesDatabase.kt")
+        assertTrue("the migration must create it", db.contains("Migration(41, 42)"))
+        assertTrue(
+            "under the name Room expects, or validation rejects the schema",
+            db.contains("index_expenses_archivedAt_dateTime")
         )
     }
 }

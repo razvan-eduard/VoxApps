@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.voxapps.design.VoxDarkMode
 import com.voxapps.design.VoxTheme
 import com.voxapps.design.effects.TodayEffect
@@ -102,6 +103,15 @@ fun ExpensesRoot(
                     is ExpensesUiState.Locked -> AuthGate(onUnlockRequest = onUnlockRequest)
                     is ExpensesUiState.Unlocked -> {
                         val target = editTarget
+                        // The rows live here, not in the state: the paged window feeds the
+                        // scrolling list, the whole snapshot feeds the screens that hold a list
+                        // (reports, calendar layout, select-all) — and both stop the moment this
+                        // composition does. Null until the first snapshot lands, so an empty
+                        // ledger and a not-yet-answered query read differently.
+                        val pagedExpenses = container.expensesStateManager.pagedExpenses
+                            .collectAsLazyPagingItems()
+                        val expenseSnapshot by container.expensesStateManager.filteredExpenses
+                            .collectAsStateWithLifecycle(initialValue = null)
                         // Fetched fresh rather than derived from state.categories/state.expenses
                         // (which reflect any active filter) — the "+ New category..." color
                         // suggestion needs the true, unfiltered most-recent expense.
@@ -157,7 +167,7 @@ fun ExpensesRoot(
                                 onBack = { showArchive = false }
                             )
                             showReports -> ReportsScreen(
-                                expenses = state.expenses,
+                                expenses = expenseSnapshot.orEmpty(),
                                 state = state,
                                 stateManager = container.expensesStateManager,
                                 homeCurrency = container.settingsRepository.getSnapshot().homeCurrency,
@@ -166,6 +176,8 @@ fun ExpensesRoot(
                             )
                             else -> ExpensesScreen(
                                 state = state,
+                                expenses = expenseSnapshot,
+                                paged = pagedExpenses,
                                 stateManager = container.expensesStateManager,
                                 calendarViewEnabled = settings.calendarViewEnabled,
                                 language = settings.language,
