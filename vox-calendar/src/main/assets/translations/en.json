@@ -47,6 +47,7 @@
   "set_as_main_subscribed_note": "A subscribed calendar can't be the main one.",
   "reorder_calendar_handle": "Drag to reorder",
   "subscribe_calendar_menu_item": "Subscribe to online calendar",
+  "import_ics_menu_item": "Import from file (.ics)",
   "subscribe_calendar_title": "Subscribe to online calendar",
   "subscribe_calendar_url_label": "Calendar URL (.ics)",
   "subscribe_calendar_url_invalid": "Must start with https://, http://, or webcal://",
