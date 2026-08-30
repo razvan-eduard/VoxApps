@@ -76,6 +76,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -134,6 +135,10 @@ private val DONE_CHECK_COLOR = VoxSemanticColors.done
 /** The drag ceiling for the edit face's resize grip — the same bound the notes editor card uses,
  *  so an unbounded drag can't push the card's own controls off screen. */
 private val MAX_VIEWPORT_EXTRA_HEIGHT = 600.dp
+
+/** The list-color wash every face of the card sits on. Translucent on purpose: the card lets the
+ *  screen background through; fullscreen composites it over the theme surface for the same shade. */
+private fun listTint(colorArgb: Long): Color = Color(colorArgb.toInt()).copy(alpha = 0.16f)
 
 /** offsetMinutesBefore -> translation key, identical preset set to EntryEditScreen's event reminders
  *  so setting a reminder on a checklist item's due date feels the same as setting one on an event. */
@@ -215,7 +220,7 @@ fun ToDoListCard(
                 rotationY = rotation
                 cameraDistance = 12f * density.density
             },
-        colors = CardDefaults.cardColors(containerColor = Color(list.colorArgb.toInt()).copy(alpha = 0.16f))
+        colors = CardDefaults.cardColors(containerColor = listTint(list.colorArgb))
     ) {
         if (rotation <= 90f) {
             ToDoListViewFace(
@@ -533,7 +538,12 @@ private fun ToDoListEditFace(
             onDismissRequest = { isFullscreen = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+            // The room keeps the list's own color: the same wash the card wears, composited over
+            // the theme surface, so fullscreen is the card grown large rather than a generic page.
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = listTint(list.colorArgb).compositeOver(MaterialTheme.colorScheme.surface)
+            ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Surface(
