@@ -47,6 +47,7 @@
   "set_as_main_subscribed_note": "Un calendar la care ești abonat nu poate fi cel principal.",
   "reorder_calendar_handle": "Trage pentru a reordona",
   "subscribe_calendar_menu_item": "Abonează-te la un calendar online",
+  "import_ics_menu_item": "Importă din fișier (.ics)",
   "subscribe_calendar_title": "Abonează-te la un calendar online",
   "subscribe_calendar_url_label": "URL calendar (.ics)",
   "subscribe_calendar_url_invalid": "Trebuie să înceapă cu https://, http:// sau webcal://",

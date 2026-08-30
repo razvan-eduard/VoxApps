@@ -47,6 +47,7 @@
   "set_as_main_subscribed_note": "Un calendrier abonné ne peut pas être le principal.",
   "reorder_calendar_handle": "Glisser pour réorganiser",
   "subscribe_calendar_menu_item": "S'abonner à un calendrier en ligne",
+  "import_ics_menu_item": "Importer depuis un fichier (.ics)",
   "subscribe_calendar_title": "S'abonner à un calendrier en ligne",
   "subscribe_calendar_url_label": "URL du calendrier (.ics)",
   "subscribe_calendar_url_invalid": "Doit commencer par https://, http:// ou webcal://",

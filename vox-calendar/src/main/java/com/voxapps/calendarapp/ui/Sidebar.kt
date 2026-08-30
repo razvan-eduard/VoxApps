@@ -110,6 +110,11 @@ fun Sidebar(
     var showAddLayerDialog by remember { mutableStateOf(false) }
     var showSubscribeDialog by remember { mutableStateOf(false) }
     var addMenuExpanded by remember { mutableStateOf(false) }
+    // The same import journey the ICS settings tab offers — the + menu is just a nearer door to it.
+    val launchIcsImport = rememberIcsImportFlow(
+        (androidx.compose.ui.platform.LocalContext.current.applicationContext as CalendarApplication)
+            .container.calendarRepository
+    )
     var editingLayer by remember { mutableStateOf<CalendarLayer?>(null) }
     var deleteCandidate by remember { mutableStateOf<CalendarLayer?>(null) }
 
@@ -155,10 +160,15 @@ fun Sidebar(
                     IconButton(onClick = { addMenuExpanded = true }) {
                         Icon(Icons.Filled.Add, contentDescription = languageManager.getString("add_layer"))
                     }
+                    // The three ways a calendar arrives: written by hand, from a file, from a URL.
                     DropdownMenu(expanded = addMenuExpanded, onDismissRequest = { addMenuExpanded = false }) {
                         DropdownMenuItem(
                             text = { Text(languageManager.getString("add_layer")) },
                             onClick = { addMenuExpanded = false; showAddLayerDialog = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(languageManager.getString("import_ics_menu_item")) },
+                            onClick = { addMenuExpanded = false; launchIcsImport() }
                         )
                         DropdownMenuItem(
                             text = { Text(languageManager.getString("subscribe_calendar_menu_item")) },

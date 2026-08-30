@@ -47,6 +47,7 @@
   "set_as_main_subscribed_note": "Ein abonnierter Kalender kann nicht der Hauptkalender sein.",
   "reorder_calendar_handle": "Zum Umsortieren ziehen",
   "subscribe_calendar_menu_item": "Online-Kalender abonnieren",
+  "import_ics_menu_item": "Aus Datei importieren (.ics)",
   "subscribe_calendar_title": "Online-Kalender abonnieren",
   "subscribe_calendar_url_label": "Kalender-URL (.ics)",
   "subscribe_calendar_url_invalid": "Muss mit https://, http:// oder webcal:// beginnen",
