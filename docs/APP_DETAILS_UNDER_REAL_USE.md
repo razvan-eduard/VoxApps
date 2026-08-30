@@ -91,18 +91,23 @@ enable switch and its own delete; there is also a delete-all, which asks first a
 it takes. Disabling rather than deleting is available, which is the right first move for a rule that
 is only sometimes wrong.
 
-**The list under ten thousand rows.** Here the honest answer is that it will degrade.
-`expensesWithDetails` observes **every** row with its items and attachments, and `ExpenseFilter.apply`
-filters and sorts that list in Kotlin on every emission and every filter change
-(the `combine` over `expensesWithDetails` in `ExpensesStateManager`). The table carries indices on `categoryId` and `uid` only — nothing
-on `dateTime` — and no filter reaches SQL at all.
+**The list under ten thousand rows.** The main list's narrowing happens in the database:
+`ExpenseDao.observeFiltered` carries category, date span, amount span, account family, currency and
+the sort order as SQL, so the rows that leave the database are the rows the screen shows.
+`ExpensesStateManager` re-keys that query through `flatMapLatest` on the filter projection, and runs
+only `ExpenseFilter.residual` — the vendor/location/bank matching SQL cannot say faithfully
+(Unicode case-folding, the bank resolved through the record's account) — on the narrowed remainder.
+The pickers' vocabularies (currencies, locations, vendors, the amount buckets' ends) are column
+aggregates (`SELECT DISTINCT`, `MIN`/`MAX`), not walks over carried rows. `expensesWithDetails`
+still observes every row, for the paths that genuinely read the ledger whole — the widget, IPC
+read/export, the duplicate machinery.
 
-> **Verdict.** Rules age well. The list does not.
+> **Verdict.** Rules age well, and the list narrows where the rows live.
 >
-> **The gap, measured how.** This is reasoned from the code, not benchmarked — I have not run it
-> against ten thousand rows. What is certain is the shape: O(n) per change, the whole table resident,
-> no paging. The fix is the ordinary one — push date and category into the query, page the list — and
-> it is worth doing before a year's data arrives rather than after.
+> **What remains open.** The table indexes `categoryId` and `uid` only — nothing on `dateTime`, so
+> the query scans (cheap at this scale, but an index belongs under it eventually) — and a narrowed
+> view is still materialized whole rather than paged. Paging is the next cut if a single filtered
+> view is ever itself ten thousand rows.
 
 ## 5. Offline, five per cent battery
 

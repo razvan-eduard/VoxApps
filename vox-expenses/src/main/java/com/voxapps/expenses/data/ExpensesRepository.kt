@@ -81,6 +81,9 @@ val RECOGNIZED_NOT_INSERTED = setOf(
 
 private const val TAG_ACCOUNTS = "BankAccounts"
 
+/** An id no row ever carries (autoincrement starts at 1) — keeps a SQL IN () clause non-empty. */
+private const val NO_ACCOUNT_SENTINEL = -1L
+
 class ExpensesRepository(
     private val expenseDao: ExpenseDao,
     private val categoryDao: CategoryDao,
@@ -329,6 +332,31 @@ class ExpensesRepository(
     val expensesWithDetails: Flow<List<ExpenseWithDetails>> =
         expenseDao.observeExpensesWithDetails().distinctUntilChanged()
 
+    /**
+     * The main list, narrowed inside the query — see [ExpenseDao.observeFiltered]. A null
+     * [accountIds] means no account narrowing at all; an empty set means an account family that
+     * resolved to nothing, which must match nothing — the sentinel id no row carries keeps SQL's
+     * IN () clause non-empty in both cases.
+     */
+    fun observeFiltered(
+        categoryId: Long?,
+        dateFrom: Long?,
+        dateTo: Long?,
+        amountMin: Double?,
+        amountMax: Double?,
+        currency: String?,
+        accountIds: Set<Long>?,
+        sortName: String
+    ): Flow<List<ExpenseWithDetails>> =
+        expenseDao.observeFiltered(
+            categoryId, dateFrom, dateTo, amountMin, amountMax, currency,
+            filterByAccount = accountIds != null,
+            accountIds = accountIds?.toList()?.ifEmpty { listOf(NO_ACCOUNT_SENTINEL) }
+                ?: listOf(NO_ACCOUNT_SENTINEL),
+            sort = sortName
+        ).distinctUntilChanged()
+
+
     /** What has been put out of the way — see [Expense.archivedAt]. */
     val archivedWithDetails: Flow<List<ExpenseWithDetails>> =
         expenseDao.observeArchivedWithDetails().distinctUntilChanged()
@@ -355,6 +383,18 @@ class ExpensesRepository(
     /** The shops this device's records name. */
     val vendorsInUse: Flow<List<String>> =
         expenseDao.observeVendorsInUse().mapNames().distinctUntilChanged()
+
+    /** The places they name. */
+    val locationsInUse: Flow<List<String>> =
+        expenseDao.observeLocationsInUse().mapNames().distinctUntilChanged()
+
+    /** The currencies they are spent in — codes as written, only blanks dropped. */
+    val currenciesInUse: Flow<List<String>> =
+        expenseDao.observeCurrenciesInUse().distinctUntilChanged()
+
+    /** The ledger's smallest and largest amounts — see [ExpenseDao.observeAmountSpan]. */
+    val amountSpan: Flow<AmountSpan> =
+        expenseDao.observeAmountSpan().distinctUntilChanged()
 
     /** Trimmed, non-empty, one spelling each — what any list of names wants. */
     private fun Flow<List<String>>.mapNames(): Flow<List<String>> = map { names ->
