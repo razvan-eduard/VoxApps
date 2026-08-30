@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -64,6 +65,7 @@ fun SpendingLimitsSettingsTab(
     var addingNew by remember { mutableStateOf(false) }
     var newCategoryId by remember { mutableStateOf<Long?>(null) }
     var newAmountText by remember { mutableStateOf("") }
+    var newOwnDeviceOnly by remember { mutableStateOf(true) }
     var newPeriod by remember { mutableStateOf(SpendingLimit.PERIOD_MONTHLY) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
 
@@ -119,6 +121,21 @@ fun SpendingLimitsSettingsTab(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            // Only worth a row once device sync has actually delivered foreign
+                            // records — until then every limit is own-device by definition.
+                            if (listState?.availableOriginDevices?.isNotEmpty() == true) {
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = limit.ownDeviceOnly,
+                                        onCheckedChange = { stateManager.setSpendingLimitOwnDeviceOnly(limit, it) }
+                                    )
+                                    Text(
+                                        languageManager.getString("limit_own_device_only"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                         IconButton(onClick = { stateManager.deleteSpendingLimit(limit) }) {
                             Icon(Icons.Filled.Delete, contentDescription = languageManager.getString("delete"))
@@ -159,15 +176,25 @@ fun SpendingLimitsSettingsTab(
                         label = { Text(languageManager.getString("period_monthly")) }
                     )
                 }
+                if (listState?.availableOriginDevices?.isNotEmpty() == true) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Checkbox(checked = newOwnDeviceOnly, onCheckedChange = { newOwnDeviceOnly = it })
+                        Text(
+                            languageManager.getString("limit_own_device_only"),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
                         val amount = newAmountText.toDoubleOrNull()
                         if (amount != null) {
-                            stateManager.addSpendingLimit(newCategoryId, amount, newPeriod)
+                            stateManager.addSpendingLimit(newCategoryId, amount, newPeriod, newOwnDeviceOnly)
                         }
                         addingNew = false
                         newCategoryId = null
                         newAmountText = ""
+                        newOwnDeviceOnly = true
                     }) { Text(languageManager.getString("save")) }
                     TextButton(onClick = { addingNew = false }) { Text(languageManager.getString("cancel")) }
                 }

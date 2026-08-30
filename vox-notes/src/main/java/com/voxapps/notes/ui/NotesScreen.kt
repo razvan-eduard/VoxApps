@@ -44,6 +44,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.SendToMobile
+import com.voxapps.design.picklist.VoxDevicePickerSheet
+import com.voxapps.design.picklist.VoxSyncDevice
+import com.voxapps.design.picklist.parseVoxSyncDevices
+import com.voxapps.design.selection.VoxSelectionBackHandler
+import com.voxapps.design.selection.VoxSelectionBar
+import com.voxapps.design.selection.rememberVoxSelection
+import com.voxapps.ipc.VoxDataTransferClient
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -124,6 +133,14 @@ fun NotesScreen(
     var showDateSheet by remember { mutableStateOf(false) }
     var pendingDeleteNote by remember { mutableStateOf<Note?>(null) }
     var pendingNoteCleanup by remember { mutableStateOf<PendingNoteCleanup?>(null) }
+    // Picking notes out of the calendar list to send them somewhere — bound through CalendarView's
+    // shared selection contract (see CalendarSelection); nothing is persisted.
+    val selection = rememberVoxSelection<Long>()
+    var showDevicePicker by remember { mutableStateOf(false) }
+    // Null while the ask to Hub is in flight — the sheet reads that as "loading", an empty list as
+    // "nothing paired".
+    var syncDevices by remember { mutableStateOf<List<VoxSyncDevice>?>(null) }
+    VoxSelectionBackHandler(selection)
 
     LaunchedEffect(quickAddTrigger) {
         if (quickAddTrigger > 0) {
@@ -215,22 +232,50 @@ fun NotesScreen(
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(languageManager.getString("notes_title")) },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = languageManager.getString("open_menu"))
+                if (selection.active) {
+                    VoxSelectionBar(
+                        count = selection.size,
+                        title = { languageManager.counted("selection_mode_count", it) },
+                        onClose = { selection.clear() },
+                        closeContentDescription = languageManager.getString("cancel")
+                    ) {
+                        val listed = state.notes.map { it.note.id }
+                        val allPicked = listed.isNotEmpty() && selection.ids.containsAll(listed)
+                        IconButton(onClick = {
+                            if (allPicked) selection.clear() else selection.selectAll(listed)
+                        }) {
+                            Icon(
+                                Icons.Filled.Checklist,
+                                contentDescription = languageManager.getString(
+                                    if (allPicked) "selection_select_none" else "selection_select_all"
+                                )
+                            )
                         }
-                    },
-                    actions = {
-                        IconButton(onClick = { showDateSheet = true }) {
-                            Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))
-                        }
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
+                        IconButton(onClick = { showDevicePicker = true }) {
+                            Icon(
+                                Icons.Filled.SendToMobile,
+                                contentDescription = languageManager.getString("selection_sync_with_device")
+                            )
                         }
                     }
-                )
+                } else {
+                    TopAppBar(
+                        title = { Text(languageManager.getString("notes_title")) },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = languageManager.getString("open_menu"))
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { showDateSheet = true }) {
+                                Icon(Icons.Filled.CalendarMonth, contentDescription = languageManager.getString("sort_and_filter"))
+                            }
+                            IconButton(onClick = onOpenSettings) {
+                                Icon(Icons.Filled.Settings, contentDescription = languageManager.getString("settings"))
+                            }
+                        }
+                    )
+                }
             },
             floatingActionButton = {
                 // Hidden while a note is expanded for editing — the expanded card already occupies
@@ -281,19 +326,25 @@ fun NotesScreen(
                         todayEffectPrimaryColor = todayEffectPrimaryColor,
                         todayEffectSecondaryColor = todayEffectSecondaryColor,
                         todayEffectSpeed = todayEffectSpeed,
-                        itemContent = { calItem ->
+                        // The multi-select grammar itself lives in CalendarView (see
+                        // CalendarSelection); this app only supplies the key and draws its own card.
+                        selection = com.voxapps.calendar.CalendarSelection(selection) { it.nwc.note.id },
+                        itemContent = { calItem, sel ->
+                            val open = {
+                                commitEdit(editing, stateManager, context)
+                                editing = EditBuffer(
+                                    calItem.nwc.note.id,
+                                    calItem.nwc.note.title.orEmpty(),
+                                    calItem.nwc.note.text,
+                                    calItem.nwc.note.categoryId,
+                                    textHtml = calItem.nwc.note.textHtml
+                                )
+                            }
                             CollapsedNoteCard(
                                 item = calItem.nwc,
-                                onClick = {
-                                    commitEdit(editing, stateManager, context)
-                                    editing = EditBuffer(
-                                        calItem.nwc.note.id,
-                                        calItem.nwc.note.title.orEmpty(),
-                                        calItem.nwc.note.text,
-                                        calItem.nwc.note.categoryId,
-                                        textHtml = calItem.nwc.note.textHtml
-                                    )
-                                }
+                                onClick = { sel?.onClick(open) ?: open() },
+                                selected = sel?.selected == true,
+                                onLongClick = sel?.let { handles -> { handles.onLongClick() } }
                             )
                         }
                     )
@@ -455,6 +506,47 @@ fun NotesScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingNoteCleanup = null }) { Text(languageManager.getString("cancel")) }
+            }
+        )
+    }
+
+    if (showDevicePicker) {
+        // Fetched on open, not held live: the paired devices live in Vox Hub and change rarely.
+        LaunchedEffect(Unit) {
+            syncDevices = VoxDataTransferClient.requestSyncPeers(context)
+                ?.takeIf { it.ok }
+                ?.let { parseVoxSyncDevices(it.text) }
+                ?: emptyList()
+        }
+        VoxDevicePickerSheet(
+            title = languageManager.getString("sync_with_device_title"),
+            devices = syncDevices.orEmpty(),
+            emptyText = languageManager.getString(
+                if (syncDevices == null) "sync_devices_loading" else "sync_no_paired_devices"
+            ),
+            onPick = { device ->
+                val ids = selection.ids.toList()
+                showDevicePicker = false
+                syncDevices = null
+                scope.launch {
+                    val uids = stateManager.noteUidsFor(ids)
+                    val queued = uids.isNotEmpty() && VoxDataTransferClient.enqueueSyncPush(
+                        context, device.peerId, context.packageName, uids
+                    )?.ok == true
+                    Toast.makeText(
+                        context,
+                        String.format(
+                            languageManager.getString(if (queued) "sync_push_queued" else "sync_push_failed"),
+                            device.label
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    if (queued) selection.clear()
+                }
+            },
+            onDismiss = {
+                showDevicePicker = false
+                syncDevices = null
             }
         )
     }

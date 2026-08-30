@@ -100,6 +100,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.voxapps.design.selection.voxSelectable
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -161,7 +162,14 @@ private fun Color.darker(factor: Float = 0.7f): Color {
 
 /** Collapsed note: background tinted by category; title (if any) then body text. */
 @Composable
-fun CollapsedNoteCard(item: NoteWithCategory, onClick: () -> Unit) {
+fun CollapsedNoteCard(
+    item: NoteWithCategory,
+    onClick: () -> Unit,
+    /** Picked out of the list, for something about to be done to several notes at once — bound by
+     *  the calendar list's shared selection contract (see CalendarView), absent elsewhere. */
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null
+) {
     val note = item.note
     val context = LocalContext.current
     val attachmentDao = remember { (context.applicationContext as NotesApplication).container.attachmentDao }
@@ -170,8 +178,10 @@ fun CollapsedNoteCard(item: NoteWithCategory, onClick: () -> Unit) {
     }.collectAsStateWithLifecycle(initialValue = emptyList())
 
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .voxSelectable(selected = selected, onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(
             containerColor = cardColor(item.category, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
         )

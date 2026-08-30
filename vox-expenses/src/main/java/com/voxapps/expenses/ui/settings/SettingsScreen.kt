@@ -478,8 +478,15 @@ fun SettingsScreen(
                     }
                 )
             }
-            SettingsPage.BACKUP -> Column(modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+            SettingsPage.BACKUP -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(pad)
+                    .padding(16.dp)
+            ) {
                 BackupSettingsSection(settingsRepo = settingsRepo, settings = settings)
+                DeviceSyncSettingsSection(settings = settings, stateManager = stateManager)
             }
             SettingsPage.LOGS -> LogsSettingsTab(
                 enabled = settings.debugLoggingEnabled,

@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.voxapps.design.picklist.Picklist
 import com.voxapps.expenses.state.FilterValue
+import com.voxapps.expenses.state.OriginFilter
 import com.voxapps.expenses.state.SortMode
 
 /** Structural sibling to vox-notes' DateSortSheet, extended with bank/vendor filters and amount sort. */
@@ -73,6 +74,8 @@ fun ExpenseFilterSortSheet(
     availableBanks: List<String>,
     availableLocations: List<String>,
     availableVendors: List<String>,
+    availableOriginDevices: List<String>,
+    selectedOrigin: OriginFilter?,
     filtersActive: Boolean,
     onSortChange: (SortMode) -> Unit,
     onDateRangeChange: (Long?, Long?) -> Unit,
@@ -84,6 +87,7 @@ fun ExpenseFilterSortSheet(
     onBankChange: (FilterValue?) -> Unit,
     onVendorChange: (FilterValue?) -> Unit,
     onLocationChange: (FilterValue?) -> Unit,
+    onOriginChange: (OriginFilter?) -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -275,6 +279,20 @@ fun ExpenseFilterSortSheet(
                     anchor = { label, onClick, _ ->
                         PicklistButtonAnchor(label = label, onClick = onClick, enabled = currenciesUsable)
                     }
+                )
+            }
+
+            // Offered only where device sync has actually delivered records from elsewhere — a
+            // phone with nothing foreign has no provenance question to ask.
+            if (availableOriginDevices.isNotEmpty()) {
+                val originChoices = listOf(OriginFilter(null)) + availableOriginDevices.map { OriginFilter(it) }
+                Picklist(
+                    items = originChoices,
+                    selected = selectedOrigin,
+                    itemLabel = { it.deviceName ?: languageManager.getString("origin_this_device") },
+                    onSelect = { onOriginChange(it) },
+                    noneLabel = languageManager.getString("all_devices"),
+                    onNoneSelected = { onOriginChange(null) }
                 )
             }
 

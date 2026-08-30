@@ -35,10 +35,31 @@ data class VoxCommand(
      *  `deletedAt > since`) — null/0 means "everything", used for a first-ever sync with a given
      *  peer. See [VoxDataTransferClient.requestSyncExport]. */
     val since: Long? = null,
-    /** [VoxIpc.OP_SYNC_EXPORT]: category/layer *names* (not ids — ids aren't stable across devices,
-     *  see [VoxIpc.OP_SYNC_EXPORT]'s doc comment) to restrict the export to. Null/empty means every
-     *  category/layer is in scope. */
+    /** [VoxIpc.OP_SYNC_EXPORT]: container *names* (not ids — ids aren't stable across devices, see
+     *  [VoxIpc.OP_SYNC_EXPORT]'s doc comment) to restrict the export to: bank accounts for Expenses,
+     *  categories for Notes, calendars for Calendar. Null means everything is in scope; an EMPTY
+     *  list means nothing is — the two are distinct on purpose, so an opt-in app with no containers
+     *  shared yet exports nothing rather than everything. */
     val scopeNames: List<String>? = null,
+    /** [VoxIpc.OP_SYNC_EXPORT]: record uids to include regardless of watermark, sync level, or
+     *  scope — the manual "sync with device" push queue. [VoxIpc.OP_ENQUEUE_PUSH]: the uids being
+     *  queued. */
+    val uids: List<String>? = null,
+    /** [VoxIpc.OP_SYNC_EXPORT]: continuation cursor from the previous page's reply (see
+     *  `SyncDeltaKeys.NEXT_CURSOR`) — opaque to everyone but the satellite that minted it. Null
+     *  asks for the first page. Page size rides in [limit]; with no [limit] the whole delta comes
+     *  back in one page, the pre-pagination behavior. */
+    val cursor: String? = null,
+    /** [VoxIpc.OP_SYNC_MERGE]: identity of the device this delta came from, stamped onto rows the
+     *  merge INSERTS so the receiving app can show and filter record provenance. Updates never
+     *  touch an existing row's stamp. */
+    val sourceDeviceId: String? = null,
+    val sourceDeviceName: String? = null,
+    /** [VoxIpc.OP_ENQUEUE_PUSH]: which paired peer the queued uids are destined for. */
+    val peerId: String? = null,
+    /** [VoxIpc.OP_ENQUEUE_PUSH]: package name of the satellite whose records the [uids] identify —
+     *  the app Hub will address the forced export to. */
+    val sourcePackage: String? = null,
     /** [VoxIpc.OP_MEDIA_CONTROL]: one of "status"/"play"/"pause"/"next"/"prev". */
     val mediaAction: String? = null,
     /** [VoxIpc.OP_IMPORT]: one of [VoxIpc.IMPORT_MODE_FULL_OVERRIDE]/[VoxIpc.IMPORT_MODE_MERGE]/
@@ -62,6 +83,12 @@ data class VoxCommand(
         dateTo?.let { o.put("dateTo", it) }
         since?.let { o.put("since", it) }
         scopeNames?.let { o.put("scopeNames", JSONArray(it)) }
+        uids?.let { o.put("uids", JSONArray(it)) }
+        cursor?.let { o.put("cursor", it) }
+        sourceDeviceId?.let { o.put("sourceDeviceId", it) }
+        sourceDeviceName?.let { o.put("sourceDeviceName", it) }
+        peerId?.let { o.put("peerId", it) }
+        sourcePackage?.let { o.put("sourcePackage", it) }
         mediaAction?.let { o.put("mediaAction", it) }
         importMode?.let { o.put("importMode", it) }
         return o.toString()
@@ -90,6 +117,14 @@ data class VoxCommand(
                     scopeNames = o.optJSONArray("scopeNames")?.let { arr ->
                         (0 until arr.length()).map { arr.optString(it) }
                     },
+                    uids = o.optJSONArray("uids")?.let { arr ->
+                        (0 until arr.length()).map { arr.optString(it) }
+                    },
+                    cursor = o.optStringOrNull("cursor"),
+                    sourceDeviceId = o.optStringOrNull("sourceDeviceId"),
+                    sourceDeviceName = o.optStringOrNull("sourceDeviceName"),
+                    peerId = o.optStringOrNull("peerId"),
+                    sourcePackage = o.optStringOrNull("sourcePackage"),
                     mediaAction = o.optStringOrNull("mediaAction"),
                     importMode = o.optStringOrNull("importMode")
                 )

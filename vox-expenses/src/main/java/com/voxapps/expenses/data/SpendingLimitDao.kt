@@ -3,6 +3,7 @@ package com.voxapps.expenses.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.Update
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
@@ -16,6 +17,9 @@ interface SpendingLimitDao {
 
     @Delete
     suspend fun delete(limit: SpendingLimit)
+
+    @Update
+    suspend fun update(limit: SpendingLimit)
 
     @Query("UPDATE spending_limits SET categoryId = NULL WHERE categoryId = :categoryId")
     suspend fun clearCategory(categoryId: Long)

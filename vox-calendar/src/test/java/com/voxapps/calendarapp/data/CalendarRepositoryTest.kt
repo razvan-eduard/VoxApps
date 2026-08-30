@@ -61,13 +61,13 @@ class CalendarRepositoryTest {
 
     @Test
     fun `deleteLayer REASSIGN_TO_MAIN moves entries and to-do lists to the main layer, never deletes rows`() = runTest {
-        coEvery { entryDao.reassignLayer(2L, 1L) } returns Unit
+        coEvery { entryDao.reassignLayer(2L, 1L, any()) } returns Unit
         coEvery { toDoListDao.reassignLayer(2L, 1L) } returns Unit
         coEvery { layerDao.delete(otherLayer) } returns Unit
 
         repository.deleteLayer(otherLayer, CalendarRepository.LayerDeleteMode.REASSIGN_TO_MAIN)
 
-        coVerify(exactly = 1) { entryDao.reassignLayer(2L, 1L) }
+        coVerify(exactly = 1) { entryDao.reassignLayer(2L, 1L, any()) }
         coVerify(exactly = 1) { toDoListDao.reassignLayer(2L, 1L) }
         coVerify(exactly = 1) { layerDao.delete(otherLayer) }
         coVerify(exactly = 0) { entryDao.deleteById(any()) }
@@ -95,7 +95,7 @@ class CalendarRepositoryTest {
         coVerify(exactly = 1) { entryDao.insertTombstone(match { it.uid == "uid-11" }) }
         coVerify(exactly = 1) { toDoListDao.delete(staleList) }
         coVerify(exactly = 1) { layerDao.delete(otherLayer) }
-        coVerify(exactly = 0) { entryDao.reassignLayer(any(), any()) }
+        coVerify(exactly = 0) { entryDao.reassignLayer(any(), any(), any()) }
         coVerify(exactly = 0) { toDoListDao.reassignLayer(any(), any()) }
     }
 

@@ -173,12 +173,13 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.calendarRepository,
+                    container.toDoRepository,
                     container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        pending.setResultData(handler.export(command.since ?: 0L, command.scopeNames).toJson())
+                        pending.setResultData(handler.export(command).toJson())
                     } finally {
                         pending.finish()
                     }
@@ -190,12 +191,13 @@ class VoxCommandReceiver : BroadcastReceiver() {
                     container.settingsRepository,
                     container.sessionManager,
                     container.calendarRepository,
+                    container.toDoRepository,
                     container.lockedMessage
                 )
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        pending.setResultData(handler.merge(command.text.orEmpty()).toJson())
+                        pending.setResultData(handler.merge(command).toJson())
                     } finally {
                         pending.finish()
                     }

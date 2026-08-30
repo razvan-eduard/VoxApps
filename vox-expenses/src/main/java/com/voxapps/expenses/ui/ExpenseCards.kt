@@ -66,6 +66,9 @@ fun ExpenseCard(
     /** The bank this went through — the name of the account it points at, resolved by the caller,
      *  which is the layer that has the accounts. */
     bankName: String? = null,
+    /** The device this record arrived from, when the person asked to see provenance — the caller
+     *  gates on that setting, this row only prints what it is handed. */
+    originLabel: String? = null,
     /**
      * Whether the row has to name the day as well as the hour.
      *
@@ -165,7 +168,8 @@ fun ExpenseCard(
                             DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(expense.dateTime))
                         },
                         bankName?.takeIf { it.isNotBlank() },
-                        category?.name
+                        category?.name,
+                        originLabel?.takeIf { it.isNotBlank() }?.let { "($it)" }
                     )
                     if (filedAs.isNotEmpty()) {
                         Text(

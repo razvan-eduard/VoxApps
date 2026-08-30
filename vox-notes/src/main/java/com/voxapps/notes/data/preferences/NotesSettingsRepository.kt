@@ -30,6 +30,8 @@ interface NotesSettingsRepository {
     suspend fun setScanLlmLevel(level: String)
     /** See [NotesSettings.voiceLlmLevel]; unknown values are ignored rather than stored. */
     suspend fun setVoiceLlmLevel(level: String)
+    /** See [NotesSettings.syncLevel]; unknown values are ignored rather than stored. */
+    suspend fun setSyncLevel(level: String)
     suspend fun setThemeDarkMode(mode: String)
     suspend fun setThemeColored(colored: Boolean)
     suspend fun setOnboardingCompleted(completed: Boolean)

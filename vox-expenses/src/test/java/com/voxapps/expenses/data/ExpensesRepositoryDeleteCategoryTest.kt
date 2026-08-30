@@ -37,8 +37,8 @@ class ExpensesRepositoryDeleteCategoryTest {
     fun `the records land on the fallback category, not on none at all`() = runTest {
         repository.deleteCategory(cafes)
 
-        coVerify(exactly = 1) { expenseDao.reassignCategory(cafes.id, fallback.id) }
-        coVerify(exactly = 0) { expenseDao.clearCategory(any()) }
+        coVerify(exactly = 1) { expenseDao.reassignCategory(cafes.id, fallback.id, any()) }
+        coVerify(exactly = 0) { expenseDao.clearCategory(any(), any()) }
         coVerify(exactly = 1) { categoryDao.delete(cafes) }
     }
 
@@ -50,8 +50,8 @@ class ExpensesRepositoryDeleteCategoryTest {
 
         repository.deleteCategory(cafes)
 
-        coVerify(exactly = 1) { expenseDao.clearCategory(cafes.id) }
-        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any()) }
+        coVerify(exactly = 1) { expenseDao.clearCategory(cafes.id, any()) }
+        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any(), any()) }
     }
 
     @Test
@@ -59,7 +59,7 @@ class ExpensesRepositoryDeleteCategoryTest {
         repository.deleteCategory(fallback)
 
         coVerify(exactly = 0) { categoryDao.delete(any()) }
-        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any()) }
-        coVerify(exactly = 0) { expenseDao.clearCategory(any()) }
+        coVerify(exactly = 0) { expenseDao.reassignCategory(any(), any(), any()) }
+        coVerify(exactly = 0) { expenseDao.clearCategory(any(), any()) }
     }
 }

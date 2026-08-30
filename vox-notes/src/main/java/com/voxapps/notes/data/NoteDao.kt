@@ -37,13 +37,15 @@ interface NoteDao {
     @Insert
     suspend fun insert(note: Note): Long
 
+    // These bulk relinks bump updatedAt like any other edit: what a record points at is part of
+    // what it says, and a peer-to-peer sync can only carry the change if the row looks changed.
     /** Detach all notes from a category being deleted (code-level ON DELETE SET NULL). */
-    @Query("UPDATE notes SET categoryId = NULL WHERE categoryId = :categoryId")
-    suspend fun clearCategory(categoryId: Long)
+    @Query("UPDATE notes SET categoryId = NULL, updatedAt = :now WHERE categoryId = :categoryId")
+    suspend fun clearCategory(categoryId: Long, now: Long)
 
     /** Reassigns all notes from one category to another (used by category auto-merge). */
-    @Query("UPDATE notes SET categoryId = :newCategoryId WHERE categoryId = :oldCategoryId")
-    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long)
+    @Query("UPDATE notes SET categoryId = :newCategoryId, updatedAt = :now WHERE categoryId = :oldCategoryId")
+    suspend fun reassignCategory(oldCategoryId: Long, newCategoryId: Long, now: Long)
 
     /** Partial update from the inline editor — preserves createdAt. */
     @Query("UPDATE notes SET title = :title, text = :text, textHtml = :textHtml, categoryId = :categoryId, updatedAt = :updatedAt WHERE id = :id")
@@ -68,6 +70,11 @@ interface NoteDao {
      *  before an update (preserve the local id) or a delete-by-uid (Room has no delete-by-uid). */
     @Query("SELECT id FROM notes WHERE uid = :uid")
     suspend fun getIdByUid(uid: String): Long?
+
+    /** The reverse mapping, for a screen selection about to be pushed to another device — local
+     *  row ids mean nothing on the other phone. */
+    @Query("SELECT uid FROM notes WHERE id IN (:ids)")
+    suspend fun getUidsByIds(ids: List<Long>): List<String>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTombstone(tombstone: NoteTombstone)

@@ -115,6 +115,10 @@ class NotesStateManager(
     fun setBiometricRequired(required: Boolean) { scope.launch { settingsRepo.setBiometricRequired(required) } }
     fun setSessionTimeoutMinutes(minutes: Int) { scope.launch { settingsRepo.setSessionTimeoutMinutes(minutes) } }
     fun setDefaultVoiceCategoryId(id: Long?) { scope.launch { settingsRepo.setDefaultVoiceCategoryId(id) } }
+    fun setSyncLevel(level: String) { scope.launch { settingsRepo.setSyncLevel(level) } }
+
+    /** The stable sync identities behind a selection — what "sync with device" queues. */
+    suspend fun noteUidsFor(ids: Collection<Long>): List<String> = notesRepo.uidsForIds(ids)
     fun setVoiceSaveToastEnabled(enabled: Boolean) { scope.launch { settingsRepo.setVoiceSaveToastEnabled(enabled) } }
     fun setAutoCreateVoiceCategory(enabled: Boolean) { scope.launch { settingsRepo.setAutoCreateVoiceCategory(enabled) } }
     fun setLanguage(code: String) { scope.launch { settingsRepo.setLanguage(code) } }

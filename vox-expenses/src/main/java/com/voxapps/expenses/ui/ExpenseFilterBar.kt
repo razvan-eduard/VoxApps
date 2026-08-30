@@ -16,6 +16,7 @@ import com.voxapps.design.filter.VoxFilterSummary
 import com.voxapps.expenses.state.ExpenseFilterSummary
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
+import com.voxapps.expenses.state.OriginFilter
 import com.voxapps.expenses.state.sortKeyOf
 import java.text.DateFormat
 import java.util.Date
@@ -45,7 +46,7 @@ fun ExpenseFilterBar(
         state.selectedCategoryId, state.selectedBank, state.selectedVendor, state.selectedLocation,
         state.selectedAmount, narrowedTo, state.selectedCurrency,
         state.dateFrom, state.dateTo, state.sort, state.onlyNeedsAttention
-    )
+    ) || state.selectedOrigin != null
 
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -66,6 +67,9 @@ fun ExpenseFilterBar(
                     sort = state.sort,
                     needsAttentionLabel = languageManager.getString("attention_filter")
                         .takeIf { state.onlyNeedsAttention },
+                    originLabel = state.selectedOrigin?.let {
+                        it.deviceName ?: languageManager.getString("origin_this_device")
+                    },
                     formatDate = { dateFormat.format(Date(it)) },
                     formatAmount = { formatAmountPlain(it) },
                     sortLabel = { languageManager.getString(sortKeyOf(it)) }
@@ -99,6 +103,8 @@ fun ExpenseFilterBar(
             availableBanks = state.availableBanks,
             availableLocations = state.availableLocations,
             availableVendors = state.availableVendors,
+            availableOriginDevices = state.availableOriginDevices,
+            selectedOrigin = state.selectedOrigin,
             filtersActive = filtersActive,
             onSortChange = { stateManager.setSort(it) },
             onDateRangeChange = { from, to -> stateManager.setDateFilter(from, to) },
@@ -110,6 +116,7 @@ fun ExpenseFilterBar(
             onBankChange = { stateManager.setBankFilter(it) },
             onVendorChange = { stateManager.setVendorFilter(it) },
             onLocationChange = { stateManager.setLocationFilter(it) },
+            onOriginChange = { stateManager.setOriginFilter(it) },
             onClearAll = { stateManager.clearAllFilters() },
             onDismiss = { sheetOpen = false }
         )

@@ -55,6 +55,14 @@ data class NotesSettings(
     /** How far a model is let into tidying a spoken note — see [VOICE_FLOW_SUPPORT]. Stored as the
      *  rung's name; defaults to the offline rung, where the transcript is the note untouched. */
     val voiceLlmLevel: String = "NONE",
+    /**
+     * How much of the notes a device sync volunteers — a [com.voxapps.datahygiene.SyncLevel] name.
+     * At MANUAL (the default) nothing leaves on its own, only records explicitly pushed from
+     * multi-select; at SHARED the categories ticked per peer in Hub replicate continuously; at ALL
+     * every note does. Governs sending only — what a merge accepts is unaffected. A device-local
+     * choice, like the theme: deliberately not carried by export/import.
+     */
+    val syncLevel: String = com.voxapps.datahygiene.SyncLevel.MANUAL.name,
     val isBiometricRequired: Boolean = false,
     val sessionTimeoutMinutes: Int = TIMEOUT_30M,
     val defaultVoiceCategoryId: Long? = null,
@@ -149,6 +157,11 @@ data class NotesSettings(
             LlmLevel.entries.firstOrNull { it.name == stored }
                 ?.takeIf { it in VOICE_FLOW_SUPPORT.supported }
                 ?: LlmLevel.NONE
+
+        /** The stored [syncLevel] as its enum; anything unreadable reads as the level that sends
+         *  nothing unasked. */
+        fun syncLevelOf(stored: String): com.voxapps.datahygiene.SyncLevel =
+            com.voxapps.datahygiene.SyncLevel.fromStored(stored)
 
         const val TIMEOUT_30M = 30
         const val TIMEOUT_1H = 60

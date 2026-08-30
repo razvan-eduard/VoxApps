@@ -47,6 +47,10 @@ interface ExpensesSettingsRepository {
     suspend fun setNotificationModelUse(mode: String)
     /** See [ExpensesSettings.voiceModelUse]; unknown values are ignored rather than stored. */
     suspend fun setVoiceModelUse(mode: String)
+    /** See [ExpensesSettings.syncLevel]; unknown values are ignored rather than stored. */
+    suspend fun setSyncLevel(level: String)
+    /** See [ExpensesSettings.showSyncProvenance]. */
+    suspend fun setShowSyncProvenance(enabled: Boolean)
     /** See [ExpensesSettings.notificationAssumedDirection]; unknown values are ignored. */
     suspend fun setNotificationAssumedDirection(mode: String)
     /** See [ExpensesSettings.captureAmountlessPayments]. */

@@ -38,6 +38,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val SCAN_MODEL_USE = stringPreferencesKey("scan_model_use")
         val NOTIFICATION_MODEL_USE = stringPreferencesKey("notification_model_use")
         val VOICE_MODEL_USE = stringPreferencesKey("voice_model_use")
+        val SYNC_LEVEL = stringPreferencesKey("sync_level")
+        val SHOW_SYNC_PROVENANCE = booleanPreferencesKey("show_sync_provenance")
         val NOTIFICATION_ASSUMED_DIRECTION = stringPreferencesKey("notification_assumed_direction")
         val CAPTURE_AMOUNTLESS_PAYMENTS = booleanPreferencesKey("capture_amountless_payments")
         val GUARD_NOTIFICATION_ENABLED = booleanPreferencesKey("guard_notification_enabled")
@@ -149,6 +151,8 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
                 ?: ExpensesSettings.NOTIFICATION_MODEL_FULL,
             voiceModelUse = prefs[Keys.VOICE_MODEL_USE]
                 ?: ExpensesSettings.VOICE_FLOW_SUPPORT.default.name,
+            syncLevel = prefs[Keys.SYNC_LEVEL] ?: com.voxapps.datahygiene.SyncLevel.MANUAL.name,
+            showSyncProvenance = prefs[Keys.SHOW_SYNC_PROVENANCE] ?: false,
             notificationAssumedDirection = prefs[Keys.NOTIFICATION_ASSUMED_DIRECTION]
                 ?.takeIf { it in ExpensesSettings.ASSUMED_DIRECTION_CHOICES }
                 ?: ExpensesSettings.ASSUME_NOTHING,
@@ -322,6 +326,15 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
     override suspend fun setVoiceModelUse(mode: String) {
         if (ExpensesSettings.VOICE_FLOW_SUPPORT.supported.none { it.name == mode }) return
         dataStore.edit { it[Keys.VOICE_MODEL_USE] = mode }
+    }
+
+    override suspend fun setSyncLevel(level: String) {
+        if (com.voxapps.datahygiene.SyncLevel.entries.none { it.name == level }) return
+        dataStore.edit { it[Keys.SYNC_LEVEL] = level }
+    }
+
+    override suspend fun setShowSyncProvenance(enabled: Boolean) {
+        dataStore.edit { it[Keys.SHOW_SYNC_PROVENANCE] = enabled }
     }
 
     override suspend fun setWidgetBudgetMode(mode: String) {

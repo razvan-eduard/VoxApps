@@ -8,12 +8,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Schedules (or cancels) the periodic [ScheduledSyncWorker] job — mirrors
- * [com.voxapps.hub.domain.backup.BackupScheduler]'s shape. Runs at WorkManager's own periodic floor
- * (15 minutes) regardless of any individual peer's [PairedPeer.autoSyncIntervalMinutes]; the worker
- * itself decides per peer whether enough time has actually elapsed since
- * [PairedPeer.lastAttemptedSyncAt] to attempt a connection this tick — see that field's doc comment
- * for why a fixed, frequent check tick is the right way to honor a per-peer interval that can't be
- * scheduled any more precisely than WorkManager's own floor allows.
+ * [com.voxapps.hub.domain.backup.BackupScheduler]'s shape. The actual sync cadence lives in
+ * [SyncAlarmScheduler]'s wall-clock-aligned alarm chain; this periodic tick exists only to re-arm
+ * that chain after reboots and dropped alarms, so its interval is a liveness bound, not a sync
+ * cadence.
  */
 object ScheduledSyncScheduler {
     private const val UNIQUE_WORK_NAME = "scheduled_peer_sync"

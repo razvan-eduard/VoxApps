@@ -30,7 +30,12 @@ object SpendingLimitChecker {
         for (limit in limits) {
             val windowStart = SpendingPeriod.windowStartMillis(limit.period, today)
             val matching = expenses.filter {
-                it.dateTime >= windowStart && (limit.categoryId == null || it.categoryId == limit.categoryId)
+                it.dateTime >= windowStart &&
+                    (limit.categoryId == null || it.categoryId == limit.categoryId) &&
+                    // A personal budget counts only what was spent HERE; records another device
+                    // synced in count only toward a limit that opted into being shared — see
+                    // SpendingLimit.ownDeviceOnly.
+                    (!limit.ownDeviceOnly || it.originDeviceId == null)
             }
             var spent = 0.0
             for (expense in matching) {

@@ -37,6 +37,10 @@ private data class PendingScrollTarget(val month: YearMonth, val date: LocalDate
 /**
  * The single entry point apps call — a horizontally month-paged, vertically per-day agenda list.
  * Can optionally show a hybrid grid view if [isGridView] is true.
+ *
+ * With a [selection], the agenda list carries the shared multi-select grammar (see
+ * [CalendarSelection]): `itemContent` receives each item's [CalendarItemSelection] handles to bind
+ * onto its card. Without one, the handles are null and the list is tap-to-open only.
  */
 @Composable
 fun <T : CalendarItem> CalendarView(
@@ -56,9 +60,15 @@ fun <T : CalendarItem> CalendarView(
     todayEffectPrimaryColor: Color = Color(0xFFFF6D00),
     todayEffectSecondaryColor: Color? = null,
     todayEffectSpeed: Float = 1f,
-    itemContent: @Composable (T) -> Unit,
+    selection: CalendarSelection<T>? = null,
+    itemContent: @Composable (T, CalendarItemSelection?) -> Unit,
     emptyDayContent: (@Composable (LocalDate) -> Unit)? = null
 ) {
+    // The month/grid plumbing below predates the selection contract and hands cards a plain
+    // one-argument slot; the contract is bound here, once, so neither inner view repeats it.
+    val boundItemContent: @Composable (T) -> Unit = { item ->
+        itemContent(item, selection?.handlesFor(item))
+    }
     val scope = rememberCoroutineScope()
     var pendingScroll by remember { mutableStateOf<PendingScrollTarget?>(null) }
     // The pager opens at the SELECTED month, not today's: this composable unmounts whenever a
@@ -112,7 +122,7 @@ fun <T : CalendarItem> CalendarView(
                 onDateSelected?.invoke(millis)
             },
             onToggleGridView = onToggleGridView,
-            itemContent = itemContent,
+            itemContent = boundItemContent,
             pagerState = pagerState,
             dayDots = dayDots,
             todayLabel = todayContentDescription,
@@ -194,7 +204,7 @@ fun <T : CalendarItem> CalendarView(
                         peekCount = peekCount,
                         locale = locale,
                         onPeekItemClick = ::navigateToItem,
-                        itemContent = itemContent,
+                        itemContent = boundItemContent,
                         emptyDayContent = emptyDayContent,
                         todayLabel = todayContentDescription,
                         todayEffect = todayEffect,

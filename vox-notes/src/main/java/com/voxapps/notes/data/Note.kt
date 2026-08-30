@@ -44,5 +44,16 @@ data class Note(
     val createdAt: Long,
     @ColumnInfo(name = "categoryId") val categoryId: Long? = null,
     val updatedAt: Long = System.currentTimeMillis(),
-    val isStub: Boolean = false
+    val isStub: Boolean = false,
+
+    /**
+     * Which paired device this record arrived from, or null for one made here.
+     *
+     * Stamped exactly once, when a peer-to-peer sync merge INSERTS the row, and never rewritten —
+     * an update from the peer changes what the record says, not where it came from, and the stamp
+     * itself never travels on the sync wire. [originDeviceName] is the peer's self-declared display
+     * name at stamp time, denormalized so lists and filters need no registry lookup.
+     */
+    val originDeviceId: String? = null,
+    val originDeviceName: String? = null
 )

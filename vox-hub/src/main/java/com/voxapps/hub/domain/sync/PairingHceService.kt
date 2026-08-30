@@ -21,7 +21,10 @@ class PairingHceService : HostApduService() {
             isSelectApdu(commandApdu) -> NfcPairingProtocol.STATUS_OK
 
             NfcPairingProtocol.isHelloCommand(commandApdu) -> {
-                val payload = JSONObject().put("peerId", peerStore.localPeerId).toString().toByteArray(Charsets.UTF_8)
+                val payload = JSONObject()
+                    .put("peerId", peerStore.localPeerId)
+                    .put("name", peerStore.localDeviceName)
+                    .toString().toByteArray(Charsets.UTF_8)
                 payload + NfcPairingProtocol.STATUS_OK
             }
 
@@ -30,13 +33,15 @@ class PairingHceService : HostApduService() {
                     val json = JSONObject(String(NfcPairingProtocol.extractPairPayload(commandApdu), Charsets.UTF_8))
                     val peer = PairedPeer(
                         peerId = json.getString("peerId"),
-                        label = "Vox device",
+                        label = json.optString("name").takeIf { it.isNotBlank() } ?: "Vox device",
                         isServerRole = true,
                         sharedKeyBase64 = json.getString("key"),
                         bluetoothMac = null,
                         pairedAt = System.currentTimeMillis()
                     )
-                    peerStore.upsertPeer(peer)
+                    // A re-tap of an already-known phone rotates the key but keeps everything the
+                    // relationship accumulated — see SyncPeerStore.upsertPairing.
+                    peerStore.upsertPairing(peer)
                     PairingEvents.emit(PairingEvent.ReceivedAsServer(peer))
                 }.onFailure { Logger.e("PairingHceService", "Malformed PAIR payload", it) }
                 NfcPairingProtocol.STATUS_OK

@@ -358,5 +358,11 @@
   "hint_ics_title": "ICS import and export",
   "hint_ics_body": "Reads and writes the standard calendar format, so entries move to and from Google Calendar, Thunderbird or Apple Calendar without either side needing an account.",
   "hint_backup_title": "Backup and restore",
-  "hint_backup_body": "A backup carries entries, layers, to-do lists and settings. Restoring offers three modes; the safest one deletes only what existed when the backup was taken."
+  "hint_backup_body": "A backup carries entries, layers, to-do lists and settings. Restoring offers three modes; the safest one deletes only what existed when the backup was taken.",
+  "selection_sync_with_device": "Sync with device",
+  "sync_with_device_title": "Send to which device?",
+  "sync_devices_loading": "Asking Vox Hub…",
+  "sync_no_paired_devices": "No paired devices. Pair one in Vox Hub first.",
+  "sync_push_queued": "Queued for %1$s — transfers when it’s reachable",
+  "sync_push_failed": "Couldn’t queue for %1$s"
 }

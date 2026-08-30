@@ -32,6 +32,11 @@ class NotesRepository(
     /** One-shot snapshot for the headless read path (Commander IPC). */
     suspend fun notesSnapshot(): List<Note> = noteDao.getAll()
 
+    /** The stable sync identities behind a screen selection — what a manual "sync with device"
+     *  push queues. */
+    suspend fun uidsForIds(ids: Collection<Long>): List<String> =
+        if (ids.isEmpty()) emptyList() else noteDao.getUidsByIds(ids.toList())
+
     /** One-shot day-scoped snapshot (Vox Calendar's day-tap summary via Commander IPC). */
     suspend fun notesForDateRange(from: Long, to: Long): List<Note> = noteDao.getForDateRange(from, to)
 
@@ -66,13 +71,33 @@ class NotesRepository(
         text: String,
         categoryId: Long?,
         createdAt: Long,
-        textHtml: String? = null
+        textHtml: String? = null,
+        isStub: Boolean = false,
+        /** Only Hub import passes these: a backup that carries sync identity and provenance keeps
+         *  them through a restore, so a later device sync still recognizes the rows instead of
+         *  re-minting them as brand-new. Every other caller creates a fresh identity, which is what
+         *  the defaults do. */
+        uid: String? = null,
+        updatedAtOverride: Long? = null,
+        originDeviceId: String? = null,
+        originDeviceName: String? = null
     ): Long {
         val clean = text.trim()
         val cleanTitle = title?.trim()?.takeIf { it.isNotEmpty() }
         if (clean.isEmpty() && cleanTitle == null) return 0
         return noteDao.insert(
-            Note(title = cleanTitle, text = clean, createdAt = createdAt, categoryId = categoryId, textHtml = textHtml)
+            Note(
+                uid = uid ?: java.util.UUID.randomUUID().toString(),
+                title = cleanTitle,
+                text = clean,
+                createdAt = createdAt,
+                categoryId = categoryId,
+                textHtml = textHtml,
+                isStub = isStub,
+                updatedAt = updatedAtOverride ?: System.currentTimeMillis(),
+                originDeviceId = originDeviceId,
+                originDeviceName = originDeviceName
+            )
         )
     }
 
@@ -193,8 +218,8 @@ class NotesRepository(
             idOf = { it.id },
             isFallback = { it.isDefault }
         )
-        if (destination != null) noteDao.reassignCategory(category.id, destination.id)
-        else noteDao.clearCategory(category.id)
+        if (destination != null) noteDao.reassignCategory(category.id, destination.id, System.currentTimeMillis())
+        else noteDao.clearCategory(category.id, System.currentTimeMillis())
         categoryDao.delete(category)
     }
 
@@ -220,7 +245,7 @@ class NotesRepository(
             if (oldName.equals(canonicalName, ignoreCase = true)) continue
             val old = cats.firstOrNull { it.name.equals(oldName, ignoreCase = true) } ?: continue
             val canonical = cats.firstOrNull { it.name.equals(canonicalName, ignoreCase = true) } ?: continue
-            noteDao.reassignCategory(old.id, canonical.id)
+            noteDao.reassignCategory(old.id, canonical.id, System.currentTimeMillis())
             categoryDao.delete(old)
         }
     }

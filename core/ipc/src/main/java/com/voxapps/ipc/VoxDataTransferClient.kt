@@ -44,33 +44,78 @@ object VoxDataTransferClient {
     )
 
     /**
-     * Peer-to-peer sync, export side: asks a satellite for everything that's changed since [since]
-     * (0/null for a first-ever sync with this peer), optionally restricted to [scopeNames]
-     * (category/layer names — null/empty means everything). See [VoxIpc.OP_SYNC_EXPORT].
+     * Peer-to-peer sync, export side: asks a satellite for one PAGE of everything that's changed
+     * since [since] (0/null for a first-ever sync with this peer), restricted by the app's own sync
+     * level and [scopeNames] (container names — null means everything, empty means nothing), forced
+     * to include [forcedUids] (the manual push queue), sliced to [pageSize] records starting after
+     * [cursor] (null for the first page; the reply's `SyncDeltaKeys.NEXT_CURSOR` names the next one,
+     * absent on the last page). See [VoxIpc.OP_SYNC_EXPORT].
      */
     suspend fun requestSyncExport(
         context: Context,
         packageName: String,
         since: Long?,
         scopeNames: List<String>? = null,
+        forcedUids: List<String>? = null,
+        cursor: String? = null,
+        pageSize: Int? = null,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): VoxResult? = send(
         context, packageName,
-        VoxCommand(op = VoxIpc.OP_SYNC_EXPORT, since = since, scopeNames = scopeNames),
+        VoxCommand(
+            op = VoxIpc.OP_SYNC_EXPORT, since = since, scopeNames = scopeNames,
+            uids = forcedUids, cursor = cursor, limit = pageSize
+        ),
         timeoutMs
     )
 
     /**
-     * Peer-to-peer sync, merge side: hands a satellite a delta ([deltaJson], the same shape
+     * Peer-to-peer sync, merge side: hands a satellite a delta page ([deltaJson], the same shape
      * [requestSyncExport] returns) to apply via insert-if-new / last-write-wins-by-updatedAt /
-     * delete-on-tombstone — never [requestImport]'s wipe-and-replace. See [VoxIpc.OP_SYNC_MERGE].
+     * delete-on-tombstone — never [requestImport]'s wipe-and-replace. Inserted rows are stamped
+     * with [sourceDeviceId]/[sourceDeviceName] as their provenance. See [VoxIpc.OP_SYNC_MERGE].
      */
     suspend fun requestSyncMerge(
         context: Context,
         packageName: String,
         deltaJson: String,
+        sourceDeviceId: String? = null,
+        sourceDeviceName: String? = null,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
-    ): VoxResult? = send(context, packageName, VoxCommand(op = VoxIpc.OP_SYNC_MERGE, text = deltaJson), timeoutMs)
+    ): VoxResult? = send(
+        context, packageName,
+        VoxCommand(
+            op = VoxIpc.OP_SYNC_MERGE, text = deltaJson,
+            sourceDeviceId = sourceDeviceId, sourceDeviceName = sourceDeviceName
+        ),
+        timeoutMs
+    )
+
+    /**
+     * The paired devices Hub knows, for a satellite's "sync with device" picker — a JSON array of
+     * `{peerId, label}` in the reply's [VoxResult.text]. See [VoxIpc.OP_LIST_SYNC_PEERS].
+     */
+    suspend fun requestSyncPeers(
+        context: Context,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxResult? = send(context, VoxIpc.HUB_PACKAGE, VoxCommand(op = VoxIpc.OP_LIST_SYNC_PEERS), timeoutMs)
+
+    /**
+     * Queues [uids] of [sourcePackage]'s records for a one-time push to [peerId] — Hub forces them
+     * into the next export with that peer and attempts a session immediately, best-effort. See
+     * [VoxIpc.OP_ENQUEUE_PUSH].
+     */
+    suspend fun enqueueSyncPush(
+        context: Context,
+        peerId: String,
+        sourcePackage: String,
+        uids: List<String>,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS
+    ): VoxResult? = send(
+        context, VoxIpc.HUB_PACKAGE,
+        VoxCommand(op = VoxIpc.OP_ENQUEUE_PUSH, peerId = peerId, sourcePackage = sourcePackage, uids = uids),
+        timeoutMs
+    )
 
     /**
      * Fetches a satellite's [VoxSatelliteSchema] — its call-count contract, prompt template, and
@@ -135,6 +180,13 @@ object VoxDataTransferClient {
         val intent = Intent(VoxIpc.ACTION_COMMAND).apply {
             setPackage(packageName)
             putExtra(VoxIpc.EXTRA_PAYLOAD, command.toJson())
+            // A stopped app — force-stopped, or installed and never opened — receives no broadcast
+            // at all without this, no matter that setPackage targets it, and the caller sees a
+            // timeout indistinguishable from a slow reply. See [VoxAppsDiscovery.ping]'s comment
+            // for the measurement behind it. It matters in both directions here: Hub reaching a
+            // satellite for a scheduled sync, and a satellite reaching Hub for a manual push —
+            // Hub being the app a person opens least.
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
         }
         return withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine { cont ->

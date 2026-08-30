@@ -60,9 +60,17 @@ class NotesExportImportHandler(
                     allFileNames += attachments.map { it.fileName }
                     JSONObject().apply {
                         put("id", note.id)
+                        // Sync identity and provenance ride along so a restore keeps the rows
+                        // recognizable to a later device sync instead of re-minting them as
+                        // brand-new — see importData()'s uid reconciliation.
+                        put("uid", note.uid)
+                        put("updatedAt", note.updatedAt)
+                        note.originDeviceId?.let { put("originDeviceId", it) }
+                        note.originDeviceName?.let { put("originDeviceName", it) }
                         put("title", note.title)
                         put("text", note.text)
                         put("textHtml", note.textHtml)
+                        put("isStub", note.isStub)
                         put("createdAt", note.createdAt)
                         put("categoryId", note.categoryId)
                         put("attachments", JSONArray(attachments.map { it.toBackupJson() }))
@@ -110,11 +118,19 @@ class NotesExportImportHandler(
             // before this import ran, is presumed unrelated to the restore and must survive.
             // Categories are untouched here (they already merge safely by name above).
             val preExistingNotes = notesRepo.notesSnapshot()
+            val preExistingByUid = preExistingNotes.associateBy { it.uid }
             val importedNotes = root.optJSONArray("notes") ?: JSONArray()
+            val importedList = (0 until importedNotes.length()).map { importedNotes.getJSONObject(it) }
+            // Rows the backup claims by uid are updated IN PLACE below: deleting them in the
+            // reconcile pass would destroy the very rows just restored, and their deletion would
+            // mint tombstones a later device sync faithfully replays against every paired phone.
+            val importedUids = importedList
+                .mapNotNull { it.optStringOrNull("uid")?.takeIf { u -> u.isNotBlank() } }
+                .toSet()
 
             notesCreated = VoxSnapshotReplaceImporter.restore(
                 mode = mode,
-                imported = (0 until importedNotes.length()).map { importedNotes.getJSONObject(it) },
+                imported = importedList,
                 preExisting = preExistingNotes,
                 exportedAt = exportedAt,
                 createdAtOf = { it.createdAt },
@@ -124,6 +140,32 @@ class NotesExportImportHandler(
                     if (text.isBlank() && title.isNullOrBlank()) return@insert 0L
                     val importedCategoryId = if (n.has("categoryId") && !n.isNull("categoryId")) n.optLong("categoryId") else null
                     val categoryId = importedCategoryId?.let { importedIdToLocalId[it] }
+
+                    val uid = n.optStringOrNull("uid")?.takeIf { it.isNotBlank() }
+                    val existing = uid?.let { preExistingByUid[it] }
+                    if (existing != null) {
+                        // The same note, already on this device: the backup's version takes its
+                        // place — no delete-then-reinsert churn, no tombstone, the local row id
+                        // (what attachment rows reference) stays.
+                        notesRepo.updateSyncedNote(
+                            existing.copy(
+                                title = title?.trim()?.takeIf { it.isNotEmpty() },
+                                text = text.trim(),
+                                textHtml = n.optStringOrNull("textHtml"),
+                                categoryId = categoryId,
+                                isStub = n.optBoolean("isStub", existing.isStub),
+                                createdAt = n.optLong("createdAt", existing.createdAt),
+                                updatedAt = n.optLong("updatedAt", existing.updatedAt),
+                                originDeviceId = n.optStringOrNull("originDeviceId") ?: existing.originDeviceId,
+                                originDeviceName = n.optStringOrNull("originDeviceName") ?: existing.originDeviceName
+                            )
+                        )
+                        attachmentDao.restoreFromBackup(
+                            NotesAttachments.RECORD_TYPE, existing.id, n.optJSONArray("attachments") ?: JSONArray()
+                        )
+                        return@insert existing.id
+                    }
+
                     val newNoteId = notesRepo.addNote(
                         title = title,
                         text = text,
@@ -131,7 +173,14 @@ class NotesExportImportHandler(
                         categoryId = categoryId,
                         // Preserved from the source device, never re-stamped to "now" — see the
                         // exportedAt comment above for why that would silently undo this fix.
-                        createdAt = n.optLong("createdAt", System.currentTimeMillis())
+                        createdAt = n.optLong("createdAt", System.currentTimeMillis()),
+                        isStub = n.optBoolean("isStub", false),
+                        // Identity and provenance survive the round trip — a backup from before
+                        // they existed minted fresh ones, and still does.
+                        uid = uid,
+                        updatedAtOverride = n.optLong("updatedAt").takeIf { n.has("updatedAt") },
+                        originDeviceId = n.optStringOrNull("originDeviceId"),
+                        originDeviceName = n.optStringOrNull("originDeviceName")
                     )
                     if (newNoteId > 0) {
                         attachmentDao.restoreFromBackup(
@@ -140,7 +189,10 @@ class NotesExportImportHandler(
                     }
                     newNoteId
                 },
-                delete = { notesRepo.deleteNoteById(it.id) }
+                // A row claimed by uid was just updated in place — it is the restored data now, and
+                // removing it would both destroy the restore and tombstone a uid every paired phone
+                // then deletes too.
+                delete = { if (it.uid !in importedUids) notesRepo.deleteNoteById(it.id) }
             )
         }
 
