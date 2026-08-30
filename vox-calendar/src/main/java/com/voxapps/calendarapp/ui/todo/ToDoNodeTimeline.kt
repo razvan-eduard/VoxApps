@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.animation.animateContentSize
@@ -796,7 +797,13 @@ fun ToDoNodeTimelineEditable(
     // its close callback here; the editor itself commits on dispose.
     onCloseEditor: () -> Unit = {},
     // Editor expand/collapse animates only when the theme menu's animations toggle allows it.
-    animateEditor: Boolean = false
+    animateEditor: Boolean = false,
+    // The minimum viewport height the edit face's resize handle asked for — zero leaves the
+    // wrap-under-cap behaviour untouched. It outranks the resting cap, so the grip is never a
+    // no-op on a short list.
+    viewportFloor: Dp = 0.dp,
+    // Fullscreen mode: fill whatever height the host weighted out instead of the floor/cap window.
+    fillViewport: Boolean = false
 ) {
     val haptics = LocalHapticFeedback.current
     var localItems by remember(items) { mutableStateOf(items) }
@@ -833,9 +840,15 @@ fun ToDoNodeTimelineEditable(
     // The tall inline editor would leave no room for its neighbors under the resting cap — give the
     // viewport enough height while one is open that the ghost rows around it stay reachable.
     // The edit face owns the screen while it's open — cap near full height so editing isn't done
-    // through a letterbox (was a fixed 360dp).
+    // through a letterbox (was a fixed 360dp). The floor comes from the edit face's resize handle
+    // and wins over the cap; fullscreen sidesteps both and fills the room its host gave.
     val maxTimelineHeight = (LocalConfiguration.current.screenHeightDp - 240).dp.coerceIn(360.dp, 720.dp)
-    LazyColumn(state = lazyListState, modifier = modifier.heightIn(max = maxTimelineHeight)) {
+    val heightConstraint = if (fillViewport) {
+        Modifier.fillMaxHeight()
+    } else {
+        Modifier.heightIn(min = viewportFloor, max = maxOf(maxTimelineHeight, viewportFloor))
+    }
+    LazyColumn(state = lazyListState, modifier = modifier.then(heightConstraint)) {
         // A ghost "+" slot sits before the first item, between every pair, and after the last one —
         // one more insert point than there are items — so a task can be added at any position, not
         // just appended. Each slot's onClick carries the exact index to insert at.

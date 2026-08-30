@@ -27,8 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -113,7 +111,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -133,6 +130,7 @@ import com.voxapps.attachments.ui.rememberCameraCaptureLauncher
 import com.voxapps.attachments.ui.rememberVisionCaptureLauncher
 import com.voxapps.attachments.ui.rememberVisionInstalled
 import com.voxapps.design.SpeedDialAction
+import com.voxapps.design.VoxResizeHandle
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.ipc.VoxOcrRequest
 import com.voxapps.notes.NotesApplication
@@ -482,29 +480,13 @@ fun NoteEditorCard(
             // of the writing room above; tapping toggles between most of the screen and the size
             // the drag (or the default) had set — the manual size is remembered, not reset.
             val maxExtraPx = with(LocalDensity.current) { MAX_EDITOR_EXTRA_HEIGHT.toPx() }
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(22.dp)
-                    .pointerInput(Unit) {
-                        detectTapGestures { editorMaxed = !editorMaxed }
-                    }
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures { _, dragAmount ->
-                            editorMaxed = false
-                            editorExtraHeightPx = (editorExtraHeightPx + dragAmount).coerceIn(0f, maxExtraPx)
-                        }
-                    }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(5.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f))
-                )
-            }
+            VoxResizeHandle(
+                onDragBy = { delta ->
+                    editorMaxed = false
+                    editorExtraHeightPx = (editorExtraHeightPx + delta).coerceIn(0f, maxExtraPx)
+                },
+                onTapToggleMax = { editorMaxed = !editorMaxed }
+            )
             }
         }
     }

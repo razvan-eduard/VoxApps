@@ -330,6 +330,8 @@
   "voice_send_everything_desc": "La phrase part au moteur, qui lit le titre, le jour et l'heure.",
   "voice_review_list_title": "À vérifier",
   "voice_queued_for_review": "Gardé dans la liste À vérifier",
+  "editor_fullscreen": "Modifier en plein écran",
+  "editor_exit_fullscreen": "Quitter le plein écran",
   "scan_no_date_offline": "Aucune date sur la page ; aucune entrée créée.",
   "tutorial_skip": "Passer",
   "tutorial_back": "Retour",

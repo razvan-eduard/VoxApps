@@ -12,10 +12,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -36,6 +39,8 @@ import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EventRepeat
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -48,6 +53,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -72,10 +78,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.voxapps.calendarapp.CalendarApplication
 import com.voxapps.calendarapp.data.WeekdayMask
 import com.voxapps.calendarapp.data.ToDoItem
@@ -85,6 +95,7 @@ import com.voxapps.calendarapp.ui.EntryAttachmentsSection
 import com.voxapps.calendarapp.ui.WeekdayPickerRow
 import com.voxapps.calendarapp.ui.weekdayLabelKey
 import com.voxapps.calendarapp.ui.LocalLanguageManager
+import com.voxapps.design.VoxResizeHandle
 import com.voxapps.design.color.VoxColorPalette
 import com.voxapps.design.color.VoxColorSwatchPicker
 import com.voxapps.design.color.VoxCustomColorDialog
@@ -119,6 +130,10 @@ private val IMPORTANT_TOGGLE_OFF_COLOR = VoxSemanticColors.importantToggleOff
  *  convention [IMPORTANT_STAR_COLOR] above already follows) — the "Done" toggle uses the exact same
  *  green a done item's node/chip check icon already uses elsewhere, on or off. */
 private val DONE_CHECK_COLOR = VoxSemanticColors.done
+
+/** The drag ceiling for the edit face's resize grip — the same bound the notes editor card uses,
+ *  so an unbounded drag can't push the card's own controls off screen. */
+private val MAX_VIEWPORT_EXTRA_HEIGHT = 600.dp
 
 /** offsetMinutesBefore -> translation key, identical preset set to EntryEditScreen's event reminders
  *  so setting a reminder on a checklist item's due date feels the same as setting one on an event. */
@@ -309,6 +324,17 @@ private fun ToDoListEditFace(
     // Same retracted-until-tapped convention as the color strip: the routine lives behind one
     // header icon (gray = not a routine), and its day chips only occupy the card while open.
     var routineExpanded by remember(list.id) { mutableStateOf(false) }
+    // The room controls the notes editor card wears, on this card: a grip that grows the timeline
+    // viewport by exactly the drag, a tap that jumps it to most of the screen and back, and a
+    // fullscreen room behind the chevron. Keyed on the list so flipping to another card starts
+    // at rest.
+    var viewportExtraPx by remember(list.id) { mutableStateOf(0f) }
+    var viewportMaxed by remember(list.id) { mutableStateOf(false) }
+    var isFullscreen by remember(list.id) { mutableStateOf(false) }
+    // What the viewport measures at rest. The dragged floor grows from HERE, not from zero — a
+    // floor below the timeline's natural height is invisible, and the first stretch of a drag
+    // would be spent silently catching up to what is already on screen.
+    var restViewportPx by remember(list.id) { mutableStateOf(0f) }
 
     fun commitTitle() {
         val trimmed = title.trim()
@@ -317,6 +343,8 @@ private fun ToDoListEditFace(
 
     fun commitAndClose() {
         commitTitle()
+        // The dialog must not outlive the face it edits — closing the card closes the room.
+        isFullscreen = false
         onDone()
     }
 
@@ -329,7 +357,20 @@ private fun ToDoListEditFace(
         onDispose { commitTitle() }
     }
 
-    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+    // The viewport floor the resize grip drives: maxed jumps to most of the screen, a drag grows
+    // the rest measurement by exactly the drag, and rest itself asks for nothing — the viewport
+    // wraps under the cap and stays free to shrink when items go, while the measurement below
+    // keeps tracking the natural height.
+    val viewportFloor = when {
+        viewportMaxed -> (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+        viewportExtraPx > 0f -> with(LocalDensity.current) { (restViewportPx + viewportExtraPx).toDp() }
+        else -> 0.dp
+    }
+
+    // One face for both homes: the inline card and the fullscreen dialog. A ColumnScope receiver
+    // so the fullscreen branch can weight the timeline row to fill; exactly one instance composes
+    // at a time, so the title buffer never has a twin fighting it over the field.
+    val editFields: @Composable ColumnScope.(fullscreen: Boolean) -> Unit = { fullscreen ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = ::commitAndClose) {
                 Icon(Icons.Filled.Check, contentDescription = languageManager.getString("apply"))
@@ -386,7 +427,7 @@ private fun ToDoListEditFace(
                 modifier = Modifier.padding(vertical = 4.dp)
             )
         }
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = if (fullscreen) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth()) {
             ToDoNodeTimelineEditable(
                 items = items,
                 onToggleDone = { item -> scope.launch { toDoRepository.toggleDone(item) } },
@@ -403,7 +444,13 @@ private fun ToDoListEditFace(
                 onReorderCommitted = { ordered -> scope.launch { toDoRepository.reorderItems(ordered) } },
                 onDeleteItem = { item -> scope.launch { toDoRepository.deleteItem(item) } },
                 onQuickEditDate = { item -> quickEditItem = item },
-                modifier = Modifier.weight(1f),
+                modifier = if (fullscreen) {
+                    Modifier.weight(1f).fillMaxHeight()
+                } else {
+                    Modifier.weight(1f).onSizeChanged {
+                        if (viewportExtraPx == 0f && !viewportMaxed) restViewportPx = it.height.toFloat()
+                    }
+                },
                 onCloseEditor = { onEditTask(null) },
                 animateEditor = animateEditor,
                 editingItemId = editingTaskId,
@@ -415,7 +462,9 @@ private fun ToDoListEditFace(
                         scope = scope,
                         onClose = { onEditTask(null) }
                     )
-                }
+                },
+                viewportFloor = viewportFloor,
+                fillViewport = fullscreen
             )
             Box(modifier = Modifier.width(EDIT_FACE_RIGHT_COLUMN_WIDTH), contentAlignment = Alignment.Center) {
                 // The same picker every other colour choice uses, stood on its side: this card is
@@ -438,6 +487,75 @@ private fun ToDoListEditFace(
                 )
             }
         }
+        if (!fullscreen) {
+            // The resize handle: the notes editor card's grip, shared from :core:design. Dragging
+            // grows the timeline viewport by exactly the drag; tapping toggles between most of the
+            // screen and the size the drag had set — the manual size is remembered, not reset.
+            val maxExtraPx = with(LocalDensity.current) { MAX_VIEWPORT_EXTRA_HEIGHT.toPx() }
+            VoxResizeHandle(
+                onDragBy = { delta ->
+                    viewportMaxed = false
+                    viewportExtraPx = (viewportExtraPx + delta).coerceIn(0f, maxExtraPx)
+                },
+                onTapToggleMax = { viewportMaxed = !viewportMaxed }
+            )
+        }
+    }
+
+    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+        // The chevron pill: fullscreen behind one tap, the same affordance the notes editor card
+        // wears. It stays while the dialog is open, so the flipped card keeps a visible anchor.
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                onClick = { isFullscreen = !isFullscreen },
+                shape = CircleShape,
+                shadowElevation = 4.dp,
+                tonalElevation = 2.dp,
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Icon(
+                    if (isFullscreen) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                    contentDescription = languageManager.getString(
+                        if (isFullscreen) "editor_exit_fullscreen" else "editor_fullscreen"
+                    ),
+                    modifier = Modifier.padding(6.dp)
+                )
+            }
+        }
+        if (!isFullscreen) editFields(false)
+    }
+
+    // Fullscreen: the same fields, the whole screen. Every exit from this face commits — it has no
+    // discard path — so the room needs no save/close row of its own: the header's ✓ and delete
+    // travel with the fields, and the chevron (or the system back key) returns to the card.
+    if (isFullscreen) {
+        Dialog(
+            onDismissRequest = { isFullscreen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Surface(
+                            onClick = { isFullscreen = false },
+                            shape = CircleShape,
+                            shadowElevation = 4.dp,
+                            tonalElevation = 2.dp,
+                            modifier = Modifier.align(Alignment.Center)
+                        ) {
+                            Icon(
+                                Icons.Filled.ExpandMore,
+                                contentDescription = languageManager.getString("editor_exit_fullscreen"),
+                                modifier = Modifier.padding(6.dp)
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        editFields(true)
+                    }
+                }
+            }
+        }
     }
 
     quickEditItem?.let { item ->
@@ -454,7 +572,7 @@ private fun ToDoListEditFace(
             title = { Text(languageManager.getString("todo_delete_list_title")) },
             text = { Text(languageManager.getString("todo_delete_list_message")) },
             confirmButton = {
-                TextButton(onClick = { showDeleteListConfirm = false; onDeleteList() }) {
+                TextButton(onClick = { showDeleteListConfirm = false; isFullscreen = false; onDeleteList() }) {
                     Text(languageManager.getString("delete"))
                 }
             },
