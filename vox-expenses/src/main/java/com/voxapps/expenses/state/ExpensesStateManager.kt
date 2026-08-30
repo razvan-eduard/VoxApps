@@ -12,6 +12,7 @@ import com.voxapps.attachments.AttachmentDao
 import com.voxapps.attachments.AttachmentEntity
 import com.voxapps.attachments.AttachmentFileStore
 import com.voxapps.attachments.AttachmentSource
+import com.voxapps.expenses.data.AmountSpan
 import com.voxapps.expenses.data.Category
 import com.voxapps.expenses.data.DuplicateRuleDao
 import com.voxapps.expenses.data.DuplicateRuleEntity
@@ -47,6 +48,7 @@ import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,12 +57,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ExpensesStateManager(
     private val settingsRepo: ExpensesSettingsRepository,
     private val expensesRepo: ExpensesRepository,
@@ -103,6 +107,40 @@ class ExpensesStateManager(
     private val _runtime = MutableStateFlow(Runtime())
 
     /**
+     * The narrowing the database is asked to do — [Runtime] projected down to the fields that
+     * parameterize the query. Its own type so a date-strip tap or a session tick doesn't re-run
+     * the SQL: the list re-subscribes only when one of these changes.
+     */
+    private data class SqlNarrowing(
+        val categoryId: Long?,
+        val dateFrom: Long?,
+        val dateTo: Long?,
+        val bank: FilterValue?,
+        val vendor: FilterValue?,
+        val location: FilterValue?,
+        val amount: VoxRange?,
+        val accountId: Long?,
+        val cardId: Long?,
+        val currency: String?,
+        val sort: SortMode
+    )
+
+    private fun Runtime.narrowing() = SqlNarrowing(
+        selectedCategoryId, dateFrom, dateTo, selectedBank, selectedVendor, selectedLocation,
+        selectedAmount, selectedAccountId, selectedCardId, selectedCurrency, sort
+    )
+
+    /** What the amount buckets and the currency/location/vendor pickers offer, read from every
+     *  record rather than from the narrowed list — brackets that narrowed themselves each time one
+     *  was picked would move under the finger — but as column aggregates, not by carrying rows. */
+    private data class ListVocabulary(
+        val currencies: List<String>,
+        val span: AmountSpan,
+        val locations: List<String>,
+        val vendors: List<String>
+    )
+
+    /**
      * The records with something missing, when that is what was asked for.
      *
      * Applied after the ordinary filters rather than inside them: "needs me" is a question about the
@@ -132,34 +170,63 @@ class ExpensesStateManager(
                     ?.nextScheduleTimeMillis
             }
 
-        // Paired rather than passed separately: combine is typed up to five sources, and the two
-        // lists that name a record's category and its account are read together every time anyway.
-        val namesFlow = combine(expensesRepo.categories, expensesRepo.bankAccounts) { c, a -> c to a }
+        // The rows arrive already narrowed and ordered by the query; only what SQL cannot say
+        // faithfully — FilterValue's Unicode matching, the bank resolved through the account —
+        // remains to check up here, on the small remainder. Re-keyed on the narrowing AND the
+        // accounts, since the account family and the bank names both resolve through the latter.
+        val filteredFlow = combine(
+            _runtime.map { it.narrowing() }.distinctUntilChanged(),
+            expensesRepo.bankAccounts
+        ) { narrowing, accounts -> narrowing to accounts }
+            .distinctUntilChanged()
+            .flatMapLatest { (f, accounts) ->
+                expensesRepo.observeFiltered(
+                    categoryId = f.categoryId,
+                    dateFrom = f.dateFrom,
+                    dateTo = f.dateTo,
+                    amountMin = f.amount?.from,
+                    amountMax = f.amount?.to,
+                    currency = f.currency,
+                    // A card answers for itself; an account answers for its cards too. The
+                    // narrower choice wins because it is the one made second.
+                    accountIds = (f.cardId ?: f.accountId)?.let { BankAccountTree.familyOf(it, accounts) },
+                    sortName = f.sort.name
+                ).map { rows ->
+                    ExpenseFilter.residual(
+                        rows, f.bank, { id -> BankAccountTree.bankNameFor(id, accounts) },
+                        f.vendor, f.location
+                    )
+                }
+            }
+
+        val vocabularyFlow = combine(
+            expensesRepo.currenciesInUse,
+            expensesRepo.amountSpan,
+            expensesRepo.locationsInUse,
+            expensesRepo.vendorsInUse
+        ) { currencies, span, locations, vendors -> ListVocabulary(currencies, span, locations, vendors) }
+
+        // Paired rather than passed separately: combine is typed up to five sources, and the lists
+        // that name a record's category and its account travel with the pickers' vocabularies.
+        val namesFlow = combine(expensesRepo.categories, expensesRepo.bankAccounts, vocabularyFlow) {
+            c, a, v -> Triple(c, a, v)
+        }
 
         combine(
             settingsRepo.settingsFlow,
-            expensesRepo.expensesWithDetails,
+            filteredFlow,
             namesFlow,
             _runtime,
             nextRunMillisFlow
         ) { settings, expenses, names, rt, nextRunMillis ->
-            val (categories, accounts) = names
+            val (categories, accounts, vocabulary) = names
             val locked = settings.isBiometricRequired &&
                 !sessionManager.isSessionValid(settings.sessionTimeoutMinutes)
             if (locked) {
                 ExpensesUiState.Locked
             } else {
                 ExpensesUiState.Unlocked(
-                    expenses = withAttentionFilter(rt, categories, accounts, ExpenseFilter.apply(
-                        expenses, rt.selectedCategoryId, rt.dateFrom, rt.dateTo, rt.selectedBank,
-                        { id -> BankAccountTree.bankNameFor(id, accounts) },
-                        rt.selectedVendor, rt.selectedLocation, rt.selectedAmount,
-                        // A card answers for itself; an account answers for its cards too. The
-                        // narrower choice wins because it is the one made second.
-                        (rt.selectedCardId ?: rt.selectedAccountId)
-                            ?.let { BankAccountTree.familyOf(it, accounts) },
-                        rt.selectedCurrency, rt.sort
-                    )),
+                    expenses = withAttentionFilter(rt, categories, accounts, expenses),
                     categories = categories,
                     selectedCategoryId = rt.selectedCategoryId,
                     sort = rt.sort,
@@ -176,20 +243,17 @@ class ExpensesStateManager(
                     selectedCurrency = rt.selectedCurrency,
                     onlyNeedsAttention = rt.onlyNeedsAttention,
                     bankAccounts = accounts,
-                    availableCurrencies = expenses.map { it.expense.currencyCode }
-                        .filter { it.isNotBlank() }.distinct().sorted(),
-                    // Read from every record rather than from the filtered list: brackets that
-                    // narrowed themselves each time one was picked would move under the finger.
+                    availableCurrencies = vocabulary.currencies,
                     amountBuckets = VoxRangeBuckets.of(
-                        expenses.minOfOrNull { it.expense.totalAmount } ?: 0.0,
-                        expenses.maxOfOrNull { it.expense.totalAmount } ?: 0.0
+                        vocabulary.span.min ?: 0.0,
+                        vocabulary.span.max ?: 0.0
                     ),
                     // The banks this device deals with are its accounts, not a column on its
                     // records: one list, and one place it can be wrong.
                     availableBanks = accounts.filter { it.isAccount }
                         .mapNotNull { BankAccountTree.bankNameOf(it, accounts) }.distinct().sorted(),
-                    availableLocations = expenses.mapNotNull { it.expense.location }.distinct().sorted(),
-                    availableVendors = expenses.mapNotNull { it.expense.vendor }.distinct().sorted(),
+                    availableLocations = vocabulary.locations,
+                    availableVendors = vocabulary.vendors,
                     nextScheduledDedupMillis = nextRunMillis
                 )
             }

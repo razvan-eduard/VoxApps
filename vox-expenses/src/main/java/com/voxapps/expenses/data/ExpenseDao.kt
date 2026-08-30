@@ -13,9 +13,10 @@ import com.voxapps.design.color.VoxColorPalette
 @Dao
 interface ExpenseDao {
     /**
-     * All expenses joined with category + line items, newest first. Category/date-range filtering and
-     * sort direction are applied in the state layer (mirrors vox-notes' NoteFilter) so the query stays
-     * simple and the logic stays pure/testable.
+     * All expenses joined with category + line items, newest first — for the paths that read the
+     * ledger whole regardless of any in-app filter: the widget, the IPC read/export responders, the
+     * duplicate machinery. The main list reads [observeFiltered] instead, so its narrowing happens
+     * in the query rather than after the rows have been carried up.
      *
      * The archive is the one thing the query itself decides, rather than the layer above. An
      * archived record has to be absent from every list, every total, every budget and every
@@ -25,6 +26,61 @@ interface ExpenseDao {
     @Transaction
     @Query("SELECT * FROM expenses WHERE archivedAt IS NULL ORDER BY dateTime DESC")
     fun observeExpensesWithDetails(): Flow<List<ExpenseWithDetails>>
+
+    /**
+     * The main list, narrowed and ordered by the database: every clause a filter chip can express
+     * in SQL — category, date span, amount span, account family, currency — lands here as a WHERE
+     * clause, so the rows that leave the database are already the rows the screen will show. What
+     * SQL cannot say faithfully (FilterValue's Unicode case-folding, a bank resolved through the
+     * record's account) is applied by the state layer's residual pass on this narrowed list.
+     *
+     * [sort] is a [com.voxapps.expenses.state.SortMode] name; the CASE ladder picks the matching
+     * ORDER BY, with newest-first as both the resting order and the tiebreak. [filterByAccount]
+     * carries "no account narrowing" separately from [accountIds], because SQL has no empty IN () —
+     * the list always holds at least a sentinel, and an account family that resolved to nothing
+     * passes a sentinel that matches no row.
+     */
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM expenses WHERE archivedAt IS NULL
+          AND (:categoryId IS NULL OR categoryId = :categoryId)
+          AND (:dateFrom IS NULL OR dateTime >= :dateFrom)
+          AND (:dateTo IS NULL OR dateTime <= :dateTo)
+          AND (:amountMin IS NULL OR totalAmount >= :amountMin)
+          AND (:amountMax IS NULL OR totalAmount <= :amountMax)
+          AND (:currency IS NULL OR currencyCode = :currency COLLATE NOCASE)
+          AND (:filterByAccount = 0 OR bankAccountId IN (:accountIds))
+        ORDER BY
+          CASE WHEN :sort = 'OLDEST' THEN dateTime END ASC,
+          CASE WHEN :sort = 'AMOUNT_ASC' THEN totalAmount END ASC,
+          CASE WHEN :sort = 'AMOUNT_DESC' THEN totalAmount END DESC,
+          dateTime DESC
+        """
+    )
+    fun observeFiltered(
+        categoryId: Long?,
+        dateFrom: Long?,
+        dateTo: Long?,
+        amountMin: Double?,
+        amountMax: Double?,
+        currency: String?,
+        filterByAccount: Boolean,
+        accountIds: List<Long>,
+        sort: String
+    ): Flow<List<ExpenseWithDetails>>
+
+    /** Every currency the ledger holds — the filter chips' vocabulary, read as one column rather
+     *  than through the rows. */
+    @Query("SELECT DISTINCT currencyCode FROM expenses WHERE archivedAt IS NULL AND TRIM(currencyCode) != '' ORDER BY currencyCode")
+    fun observeCurrenciesInUse(): Flow<List<String>>
+
+    @Query("SELECT DISTINCT location FROM expenses WHERE archivedAt IS NULL AND location IS NOT NULL AND TRIM(location) != '' ORDER BY location")
+    fun observeLocationsInUse(): Flow<List<String>>
+
+    /** The ledger's smallest and largest amounts — the two ends the amount buckets are drawn from. */
+    @Query("SELECT MIN(totalAmount) AS min, MAX(totalAmount) AS max FROM expenses WHERE archivedAt IS NULL")
+    fun observeAmountSpan(): Flow<AmountSpan>
 
     /** The archive itself, most recently put away first — the order somebody looking for what they
      *  just archived expects, which is not the order they were spent in. */
@@ -145,3 +201,6 @@ interface ExpenseDao {
     @Query("DELETE FROM expense_tombstones WHERE deletedAt < :before")
     suspend fun deleteStaleTombstones(before: Long)
 }
+
+/** MIN/MAX of the ledger's amounts, null when the ledger is empty — see [ExpenseDao.observeAmountSpan]. */
+data class AmountSpan(val min: Double?, val max: Double?)
