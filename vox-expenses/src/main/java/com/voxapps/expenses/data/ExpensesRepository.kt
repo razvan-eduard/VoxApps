@@ -6,6 +6,7 @@ import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.domain.accounts.BankAccounts
 import com.voxapps.expenses.domain.accounts.Recipients
 import android.content.Context
+import androidx.paging.PagingSource
 import com.voxapps.attachments.AttachmentDao
 import com.voxapps.datahygiene.NameCasing
 import com.voxapps.attachments.AttachmentEntity
@@ -355,6 +356,26 @@ class ExpensesRepository(
                 ?: listOf(NO_ACCOUNT_SENTINEL),
             sort = sortName
         ).distinctUntilChanged()
+
+    /** [observeFiltered]'s narrowing as a paging source — a fresh one per call, since an
+     *  invalidated source is spent and the pager asks again. */
+    fun pagedFiltered(
+        categoryId: Long?,
+        dateFrom: Long?,
+        dateTo: Long?,
+        amountMin: Double?,
+        amountMax: Double?,
+        currency: String?,
+        accountIds: Set<Long>?,
+        sortName: String
+    ): PagingSource<Int, ExpenseWithDetails> =
+        expenseDao.pagedFiltered(
+            categoryId, dateFrom, dateTo, amountMin, amountMax, currency,
+            filterByAccount = accountIds != null,
+            accountIds = accountIds?.toList()?.ifEmpty { listOf(NO_ACCOUNT_SENTINEL) }
+                ?: listOf(NO_ACCOUNT_SENTINEL),
+            sort = sortName
+        )
 
 
     /** What has been put out of the way — see [Expense.archivedAt]. */

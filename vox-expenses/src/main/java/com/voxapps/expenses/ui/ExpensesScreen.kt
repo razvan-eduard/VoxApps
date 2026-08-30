@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.itemKey
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -96,6 +98,12 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ExpensesScreen(
     state: ExpensesUiState.Unlocked,
+    /** The whole narrowed list, for everything that needs all of it at once — select-all, the day
+     *  dots, the calendar layout, predictions, bulk edit. Null until the first snapshot arrives,
+     *  which is not the same thing as an empty ledger. */
+    expenses: List<ExpenseWithDetails>?,
+    /** The same rows as a paging window — what the scrolling list actually renders. */
+    paged: LazyPagingItems<ExpenseWithDetails>,
     stateManager: ExpensesStateManager,
     calendarViewEnabled: Boolean,
     language: String,
@@ -141,7 +149,8 @@ fun ExpensesScreen(
     val filtered = state.dateFrom != null || state.dateTo != null ||
         state.selectedBank != null || state.selectedVendor != null ||
         state.selectedLocation != null || state.selectedCategoryId != null
-    val predictedPayments = remember(recurring, state.expenses, filtered) {
+    val snapshot = expenses.orEmpty()
+    val predictedPayments = remember(recurring, snapshot, filtered) {
         if (filtered) emptyList() else PaymentPredictor.predict(
             confirmed = recurring,
             nowMillis = System.currentTimeMillis()
@@ -150,7 +159,7 @@ fun ExpensesScreen(
             // knows about a payment the arrangement missed — a restored backup, or a bookkeeping
             // failure that was logged rather than thrown. Predicting a bill already paid is the one
             // mistake worth a second check.
-            state.expenses.any {
+            snapshot.any {
                 it.expense.dateTime > payment.lastSeenAt &&
                     RecurringPayment.vendorKeyOf(it.expense.vendor) == payment.vendorKey
             }
@@ -234,7 +243,7 @@ fun ExpensesScreen(
                 ) {
                     // One control for both halves of the same thought. Taking none leaves the mode
                     // with it, because a selection of nothing is not a mode, it is the list again.
-                    val listed = state.expenses.map { it.expense.id }
+                    val listed = snapshot.map { it.expense.id }
                     val allPicked = listed.isNotEmpty() && selection.ids.containsAll(listed)
                     IconButton(onClick = {
                         if (allPicked) selection.clear() else selection.selectAll(listed)
@@ -292,10 +301,10 @@ fun ExpensesScreen(
                             DropdownMenuItem(
                                 text = { Text(languageManager.getString("selection_select_all")) },
                                 leadingIcon = { Icon(Icons.Filled.Checklist, contentDescription = null) },
-                                enabled = state.expenses.isNotEmpty(),
+                                enabled = snapshot.isNotEmpty(),
                                 onClick = {
                                     menuOpen = false
-                                    selection.selectAll(state.expenses.map { it.expense.id })
+                                    selection.selectAll(snapshot.map { it.expense.id })
                                 }
                             )
                             DropdownMenuItem(
@@ -324,8 +333,8 @@ fun ExpensesScreen(
             }
         }
     ) { padding ->
-        val dayDots = remember(state.expenses) {
-            state.expenses.groupBy {
+        val dayDots = remember(snapshot) {
+            snapshot.groupBy {
                 com.voxapps.calendar.CalendarDateUtils.millisToLocalDate(it.expense.dateTime)
             }.mapValues { (_, expenses) ->
                 expenses.mapNotNull { it.category?.colorArgb }.distinct()
@@ -341,9 +350,9 @@ fun ExpensesScreen(
                 .collectAsStateWithLifecycle(initialValue = emptyList())
             val proposedRules by stateManager.proposedRuleCount.collectAsStateWithLifecycle(initialValue = 0)
             val seen by stateManager.dismissals.collectAsStateWithLifecycle(initialValue = Dismissals())
-            val incomplete = remember(state.expenses, state.categories, state.bankAccounts, seen) {
+            val incomplete = remember(snapshot, state.categories, state.bankAccounts, seen) {
                 ExpenseGaps.needingAttention(
-                    state.expenses,
+                    snapshot,
                     state.categories.firstOrNull { it.isDefault }?.id,
                     accountsInUse = state.bankAccounts.isNotEmpty()
                 ).count { it.expense.createdAt > seen.incompleteBefore }
@@ -408,7 +417,9 @@ fun ExpensesScreen(
             }
             ExpenseFilterBar(state = state, stateManager = stateManager)
 
-            if (state.expenses.isEmpty()) {
+            // The empty words only once the first snapshot has actually arrived — a query still on
+            // its way is not an empty ledger.
+            if (expenses != null && snapshot.isEmpty()) {
                 Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
                     Text(
                         languageManager.getString("no_expenses_yet"),
@@ -418,7 +429,7 @@ fun ExpensesScreen(
                 }
             } else if (effectiveViewIsCalendar) {
                 CalendarView(
-                    items = state.expenses.map(::ExpenseCalendarItem),
+                    items = snapshot.map(::ExpenseCalendarItem),
                     modifier = Modifier.fillMaxSize(),
                     locale = java.util.Locale.forLanguageTag(language),
                     todayContentDescription = languageManager.getString("today"),
@@ -461,7 +472,11 @@ fun ExpensesScreen(
                                 .firstOrNull { it.id == predicted.payment.categoryId }?.colorArgb
                         )
                     }
-                    items(state.expenses, key = { it.expense.id }) { ewd ->
+                    // The window, not the list: rows compose as the pager loads them, and the key
+                    // keeps scroll position across a page refresh exactly as it did across a list
+                    // emission.
+                    items(count = paged.itemCount, key = paged.itemKey { it.expense.id }) { index ->
+                        val ewd = paged[index] ?: return@items
                         ExpenseCard(
                             expenseWithDetails = ewd,
                             onClick = { onCardClick(ewd) },
@@ -526,7 +541,7 @@ fun ExpensesScreen(
         val settings by container.settingsRepository.settingsFlow
             .collectAsStateWithLifecycle(initialValue = ExpensesSettings())
         BulkEditSheet(
-            records = state.expenses.filter { it.expense.id in selection },
+            records = snapshot.filter { it.expense.id in selection },
             categories = state.categories,
             accounts = state.bankAccounts,
             locations = state.availableLocations,

@@ -45,7 +45,9 @@ enum class TransactionDirection { OUTGOING, INCOMING }
  */
 @Entity(
     tableName = "expenses",
-    indices = [Index("categoryId"), Index(value = ["uid"], unique = true)]
+    // (archivedAt, dateTime) serves the main list's shape — WHERE archivedAt IS NULL ordered by
+    // dateTime — as one ordered walk instead of a scan-and-sort.
+    indices = [Index("categoryId"), Index(value = ["uid"], unique = true), Index("archivedAt", "dateTime")]
 )
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

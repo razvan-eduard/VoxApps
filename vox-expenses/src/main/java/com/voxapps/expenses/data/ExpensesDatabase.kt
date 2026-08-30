@@ -24,7 +24,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         AttachmentEntity::class, DuplicateRuleEntity::class, com.voxapps.suggestions.FieldSuggestion::class,
         LearnedFieldCorrection::class, RemapRuleEntity::class, RemapPatternSighting::class,
         RecurringPayment::class, BankAccount::class, AccountBudget::class, Recipient::class],
-    version = 41,
+    version = 42,
     exportSchema = false
 )
 @TypeConverters(ExpensesConverters::class)
@@ -441,6 +441,17 @@ abstract class ExpensesDatabase : RoomDatabase() {
             }
         }
 
+        /** The index the main list's shape wants: archivedAt IS NULL, ordered by dateTime — one
+         *  ordered walk instead of a scan-and-sort, and the same walk a paging window steps. */
+        private val MIGRATION_41_42 = object : Migration(41, 42) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_expenses_archivedAt_dateTime " +
+                        "ON expenses (archivedAt, dateTime)"
+                )
+            }
+        }
+
         /**
          * A bank stops being a thing of its own: it is the name of an account whose number may not
          * be known yet — see [BankAccount].
@@ -747,7 +758,7 @@ abstract class ExpensesDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(DbKey.getOrCreatePassphrase(context))
             return Room.databaseBuilder(context, ExpensesDatabase::class.java, "vox-expenses.db")
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40, MIGRATION_40_41)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42)
                 // A brand-new install never runs a Migration (Room creates the full current schema
                 // directly from the @Entity annotations) — this seeds the same default rules for that
                 // path too, so a fresh install and an upgraded one both start with working duplicate

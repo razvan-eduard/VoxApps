@@ -20,9 +20,10 @@ class RecipientsMigrationGuardTest {
         ).map(::File).first { it.exists() }.readText()
 
     @Test
-    fun `the database is at 41 with the recipients entity`() {
+    fun `the database is at 41 or later with the recipients entity`() {
         val text = source()
-        assertTrue("version must be 41", text.contains("version = 41"))
+        val version = Regex("""version = (\d+)""").find(text)?.groupValues?.get(1)?.toInt() ?: 0
+        assertTrue("version must be at least 41", version >= 41)
         assertTrue("Recipient must be a Room entity", text.contains("Recipient::class"))
         assertTrue("recipientDao accessor must exist", text.contains("fun recipientDao(): RecipientDao"))
     }

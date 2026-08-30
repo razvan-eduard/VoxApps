@@ -92,22 +92,27 @@ it takes. Disabling rather than deleting is available, which is the right first 
 is only sometimes wrong.
 
 **The list under ten thousand rows.** The main list's narrowing happens in the database:
-`ExpenseDao.observeFiltered` carries category, date span, amount span, account family, currency and
-the sort order as SQL, so the rows that leave the database are the rows the screen shows.
-`ExpensesStateManager` re-keys that query through `flatMapLatest` on the filter projection, and runs
-only `ExpenseFilter.residual` — the vendor/location/bank matching SQL cannot say faithfully
-(Unicode case-folding, the bank resolved through the record's account) — on the narrowed remainder.
-The pickers' vocabularies (currencies, locations, vendors, the amount buckets' ends) are column
-aggregates (`SELECT DISTINCT`, `MIN`/`MAX`), not walks over carried rows. `expensesWithDetails`
+`ExpenseDao.pagedFiltered`/`observeFiltered` carry category, date span, amount span, account
+family, currency and the sort order as SQL — over the `(archivedAt, dateTime)` index, one ordered
+walk — so the rows that leave the database are the rows the screen shows. The scrolling list is a
+paging window (`ExpensesStateManager.pagedExpenses`, Paging3 over Room, cached in the manager's
+scope); the screens that hold a whole list — reports, the calendar layout, select-all, bulk edit,
+the day dots — collect the cold `filteredExpenses` snapshot only while they are showing, so a
+ledger write while the app sits in the background materializes nothing. Both views re-key through
+one `RowKey` and pass the same keep-or-drop answer: the SQL narrowing plus `ExpenseFilter`'s
+residual — the vendor/location/bank matching SQL cannot say faithfully (Unicode case-folding, the
+bank resolved through the record's account) — plus the needs-attention gate. The pickers'
+vocabularies (currencies, locations, vendors, the amount buckets' ends) are column aggregates
+(`SELECT DISTINCT`, `MIN`/`MAX`), and the ui state carries no rows at all. `expensesWithDetails`
 still observes every row, for the paths that genuinely read the ledger whole — the widget, IPC
 read/export, the duplicate machinery.
 
-> **Verdict.** Rules age well, and the list narrows where the rows live.
+> **Verdict.** Rules age well, and the list narrows, orders and pages where the rows live.
 >
-> **What remains open.** The table indexes `categoryId` and `uid` only — nothing on `dateTime`, so
-> the query scans (cheap at this scale, but an index belongs under it eventually) — and a narrowed
-> view is still materialized whole rather than paged. Paging is the next cut if a single filtered
-> view is ever itself ten thousand rows.
+> **What remains whole-list by design.** While the list screen is open, its aggregate features
+> (day dots, select-all, predictions, the incomplete count) hold the narrowed snapshot — their
+> questions are about all of it at once. The gap detector reads line items, so pushing those into
+> SQL would be a translation project, not a query tweak.
 
 ## 5. Offline, five per cent battery
 

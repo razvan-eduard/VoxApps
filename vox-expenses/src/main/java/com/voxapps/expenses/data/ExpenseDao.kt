@@ -1,5 +1,6 @@
 package com.voxapps.expenses.data
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
@@ -69,6 +70,41 @@ interface ExpenseDao {
         accountIds: List<Long>,
         sort: String
     ): Flow<List<ExpenseWithDetails>>
+
+    /**
+     * The same narrowing as [observeFiltered], stepped as a paging window instead of materialized
+     * whole — the scrolling list reads this; the snapshot the screen's aggregate features hold
+     * reads the other. Same clauses by construction: any narrowing added to one belongs in both.
+     */
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM expenses WHERE archivedAt IS NULL
+          AND (:categoryId IS NULL OR categoryId = :categoryId)
+          AND (:dateFrom IS NULL OR dateTime >= :dateFrom)
+          AND (:dateTo IS NULL OR dateTime <= :dateTo)
+          AND (:amountMin IS NULL OR totalAmount >= :amountMin)
+          AND (:amountMax IS NULL OR totalAmount <= :amountMax)
+          AND (:currency IS NULL OR currencyCode = :currency COLLATE NOCASE)
+          AND (:filterByAccount = 0 OR bankAccountId IN (:accountIds))
+        ORDER BY
+          CASE WHEN :sort = 'OLDEST' THEN dateTime END ASC,
+          CASE WHEN :sort = 'AMOUNT_ASC' THEN totalAmount END ASC,
+          CASE WHEN :sort = 'AMOUNT_DESC' THEN totalAmount END DESC,
+          dateTime DESC
+        """
+    )
+    fun pagedFiltered(
+        categoryId: Long?,
+        dateFrom: Long?,
+        dateTo: Long?,
+        amountMin: Double?,
+        amountMax: Double?,
+        currency: String?,
+        filterByAccount: Boolean,
+        accountIds: List<Long>,
+        sort: String
+    ): PagingSource<Int, ExpenseWithDetails>
 
     /** Every currency the ledger holds — the filter chips' vocabulary, read as one column rather
      *  than through the rows. */
