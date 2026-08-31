@@ -27,11 +27,27 @@ import java.util.Locale
  * because [CalendarMonthView] emits exactly one `item{}` per calendar day (with that day's cards
  * nested inside via a plain `Column`, not a further `items()` call) rather than a flat `items()`
  * over individual notes/expenses — so this is a simple offset, not a per-day item-count sum.
+ *
+ * The previous month's grayed peek is an item of its own when it is shown, so it shifts every day
+ * below it. Both directions of the mapping live here, and every caller goes through one of them:
+ * written out by hand at a call site, the offset is the kind of thing that is remembered in the
+ * place that scrolls and forgotten in the place that reads the scroll back.
  */
 internal fun dayIndexInList(month: YearMonth, date: LocalDate, hasPrevPeek: Boolean): Int {
     val prevOffset = if (hasPrevPeek) 1 else 0
     val dayOffset = date.dayOfMonth - 1
     return prevOffset + dayOffset
+}
+
+/**
+ * The inverse of [dayIndexInList]: which day of [month] a list index is showing, or null where the
+ * index is not a day of it at all — the previous month's peek above the days, or the next month's
+ * below them.
+ */
+internal fun dayForIndexInList(month: YearMonth, index: Int, hasPrevPeek: Boolean): LocalDate? {
+    val prevOffset = if (hasPrevPeek) 1 else 0
+    val dayOfMonth = index - prevOffset + 1
+    return if (dayOfMonth in 1..month.lengthOfMonth()) month.atDay(dayOfMonth) else null
 }
 
 /**
