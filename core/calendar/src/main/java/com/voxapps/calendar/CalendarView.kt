@@ -156,15 +156,34 @@ fun <T : CalendarItem> CalendarView(
                     val month = pagerState.monthForPage(page)
                     val selectedDate = remember(selectedDateMillis) { CalendarDateUtils.millisToLocalDate(selectedDateMillis) }
                     
-                    // Initialize list at the selected day if it's in this month, otherwise at day 1
-                    val initialIndex = remember(month) {
-                        if (YearMonth.from(selectedDate) == month) selectedDate.dayOfMonth - 1 else 0
+                    val prevPeekNonEmpty = remember(items, month, peekCount) {
+                        CalendarDateUtils.lastItemsOfPreviousMonth(items, month, peekCount).isNotEmpty()
+                    }
+
+                    // Opens on the selected day when it belongs to this month, otherwise at the top.
+                    // Through the shared mapping, so the peek section above the days is counted here
+                    // exactly as the Today button counts it.
+                    val initialIndex = remember(month, prevPeekNonEmpty) {
+                        if (YearMonth.from(selectedDate) == month) {
+                            dayIndexInList(month, selectedDate, prevPeekNonEmpty)
+                        } else {
+                            0
+                        }
                     }
                     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
                     val isDragged by listState.interactionSource.collectIsDraggedAsState()
-                    
-                    val prevPeekNonEmpty = remember(items, month, peekCount) {
-                        CalendarDateUtils.lastItemsOfPreviousMonth(items, month, peekCount).isNotEmpty()
+
+                    // A screen composes before its records arrive, so the first frame sees an empty
+                    // list and cannot know whether the previous month's peek will be there — and the
+                    // seeded position above is only read once. Re-aim at the selected day when that
+                    // answer changes, and stop the moment a finger has moved the list, which is the
+                    // point at which where it sits stops being this code's business.
+                    var userHasDragged by remember(month) { mutableStateOf(false) }
+                    LaunchedEffect(isDragged) { if (isDragged) userHasDragged = true }
+                    LaunchedEffect(month, prevPeekNonEmpty) {
+                        if (userHasDragged || pendingScroll != null) return@LaunchedEffect
+                        if (YearMonth.from(selectedDate) != month) return@LaunchedEffect
+                        listState.scrollToItem(dayIndexInList(month, selectedDate, prevPeekNonEmpty))
                     }
 
                     // Sync scroll -> global selected date. The selection is read through
@@ -177,9 +196,8 @@ fun <T : CalendarItem> CalendarView(
                                 .distinctUntilChanged()
                                 .filter { (isDragged || listState.isScrollInProgress) && pendingScroll == null }
                                 .collect { index ->
-                                    val dayOfMonth = index + 1
-                                    if (dayOfMonth <= month.lengthOfMonth()) {
-                                        val newDate = month.atDay(dayOfMonth)
+                                    val newDate = dayForIndexInList(month, index, prevPeekNonEmpty)
+                                    if (newDate != null) {
                                         val newMillis = CalendarDateUtils.startOfDayMillis(newDate)
                                         if (newMillis != currentSelectedMillis) {
                                             onDateSelected?.invoke(newMillis)
