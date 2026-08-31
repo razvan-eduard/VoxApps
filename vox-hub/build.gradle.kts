@@ -12,8 +12,8 @@ android {
         applicationId = "com.voxapps.hub"
         minSdk = 29
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.14"
+        versionCode = 15
+        versionName = "0.15"
         // No first-party native libs today; pins the ABI so a future transitive dependency with
         // multi-ABI .so files cannot quietly quadruple the APK.
         ndk { abiFilters += "arm64-v8a" }
