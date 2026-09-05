@@ -119,7 +119,7 @@ dependencies {
     // See vox-expenses/vox-notes' identical comment: forces a current fragment version so the
     // biometric prompt's registerForActivityResult doesn't crash against the modern
     // ActivityResultRegistry pulled in by the Compose stack.
-    implementation("androidx.fragment:fragment-ktx:1.8.9")
+    implementation("androidx.fragment:fragment-ktx:1.9.0")
 
     // Room + KSP
     implementation(libs.androidx.room.runtime)
@@ -131,7 +131,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     // Encrypted-at-rest storage: SQLCipher for Room + Keystore-backed passphrase.
-    implementation("net.zetetic:sqlcipher-android:4.17.0")
+    implementation("net.zetetic:sqlcipher-android:4.18.0")
     implementation("androidx.sqlite:sqlite:2.7.0")
     implementation(libs.androidx.security.crypto)
 
@@ -153,7 +153,7 @@ dependencies {
     testImplementation("org.json:json:20260719")
     // Pure-JVM SQLite (no Android/Robolectric) — lets the 9->10 migration test replay its real SQL
     // against a genuine SQLite engine, same "avoid Android-framework test doubles" spirit as org.json above.
-    testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
+    testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
 }
 
 // The Gson keep-rule test reads proguard-rules.pro, so a change there must invalidate the test task.
