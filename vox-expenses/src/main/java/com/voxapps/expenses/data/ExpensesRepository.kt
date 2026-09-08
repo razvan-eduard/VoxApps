@@ -30,6 +30,8 @@ import com.voxapps.logging.Logger
 import com.voxapps.textmatch.FuzzyNameMatcher
 import com.voxapps.textmatch.extract.FieldCorrections
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.combine
@@ -815,6 +817,13 @@ class ExpensesRepository(
 
     suspend fun expensesForDateRange(from: Long, to: Long): List<Expense> = expenseDao.getForDateRange(from, to)
 
+    /** Guards [addExpense]'s near-duplicate check-then-insert against itself: two calls racing on
+     *  separate coroutines (e.g. two bank notifications landing seconds apart, each handled by its
+     *  own [com.voxapps.expenses.receiver.LlmResultReceiver] launch) would otherwise both read "no
+     *  nearby match" before either had inserted, so neither ever sees the other and both land as
+     *  separate rows — caught later, if at all, only by the scheduled/manual scan. */
+    private val addExpenseMutex = Mutex()
+
     suspend fun addExpense(
         title: String?,
         totalAmount: Double,
@@ -898,45 +907,47 @@ class ExpensesRepository(
                 originsJson = ExpenseOrigins.encode(origins)
             )
 
-            if (checkForDuplicate && nearDuplicateCheckEnabled) {
-                val nearby = expenseDao.getForDateRange(
-                    dateTime - nearDuplicateConfig.timeWindowMillis,
-                    dateTime + nearDuplicateConfig.timeWindowMillis
-                )
-                val checker = buildDuplicateChecker(nearDuplicateConfig, automaticOnly = true)
-                val match = checker.findDuplicate(candidate, nearby)
-                if (match != null) {
-                    val enriched = enrichWithNearDuplicate(match, candidate)
-                    if (enriched !== match) expenseDao.update(enriched)
-                    // The candidate itself is never persisted as its own row here — its receipt photo
-                    // (if any) either got adopted onto the existing match (track it there) or is now
-                    // orphaned with nothing else able to reference it (safe to delete outright).
-                    if (imageName != null) {
-                        if (enriched.receiptImageName == imageName) {
-                            attachmentDao.insert(
-                                AttachmentEntity(
-                                    recordType = ExpensesAttachments.RECORD_TYPE,
-                                    recordId = match.id,
-                                    fileName = imageName,
-                                    source = AttachmentSource.SCANNED,
-                                    createdAt = System.currentTimeMillis()
+            val id = addExpenseMutex.withLock {
+                if (checkForDuplicate && nearDuplicateCheckEnabled) {
+                    val nearby = expenseDao.getForDateRange(
+                        dateTime - nearDuplicateConfig.timeWindowMillis,
+                        dateTime + nearDuplicateConfig.timeWindowMillis
+                    )
+                    val checker = buildDuplicateChecker(nearDuplicateConfig, automaticOnly = true)
+                    val match = checker.findDuplicate(candidate, nearby)
+                    if (match != null) {
+                        val enriched = enrichWithNearDuplicate(match, candidate)
+                        if (enriched !== match) expenseDao.update(enriched)
+                        // The candidate itself is never persisted as its own row here — its receipt photo
+                        // (if any) either got adopted onto the existing match (track it there) or is now
+                        // orphaned with nothing else able to reference it (safe to delete outright).
+                        if (imageName != null) {
+                            if (enriched.receiptImageName == imageName) {
+                                attachmentDao.insert(
+                                    AttachmentEntity(
+                                        recordType = ExpensesAttachments.RECORD_TYPE,
+                                        recordId = match.id,
+                                        fileName = imageName,
+                                        source = AttachmentSource.SCANNED,
+                                        createdAt = System.currentTimeMillis()
+                                    )
                                 )
-                            )
+                            } else {
+                                deleteReceiptFileRaw(imageName)
+                            }
+                        }
+                        return if (enriched === match) {
+                            Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${match.id})")
+                            DUPLICATE_ENTRY_RESULT
                         } else {
-                            deleteReceiptFileRaw(imageName)
+                            Logger.w("ExpensesRepository", "Near-duplicate merged into existing id=${match.id}")
+                            NEAR_DUPLICATE_MERGED_RESULT
                         }
                     }
-                    return if (enriched === match) {
-                        Logger.w("ExpensesRepository", "Duplicate entry — skipping insert (matches existing id=${match.id})")
-                        DUPLICATE_ENTRY_RESULT
-                    } else {
-                        Logger.w("ExpensesRepository", "Near-duplicate merged into existing id=${match.id}")
-                        NEAR_DUPLICATE_MERGED_RESULT
-                    }
                 }
-            }
 
-            val id = expenseDao.insert(candidate)
+                expenseDao.insert(candidate)
+            }
             if (id > 0) {
                 Logger.d("ExpensesRepository", "DB Insert SUCCESS - ID: $id")
                 // Counted after the write, never before: a payment that failed to store is not a
