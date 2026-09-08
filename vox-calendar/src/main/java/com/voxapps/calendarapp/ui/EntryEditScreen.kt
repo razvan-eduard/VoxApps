@@ -852,6 +852,11 @@ fun EntryEditScreen(
             onConfirm = { millis ->
                 startMillis = combineDate(millis, startMillis, zoneId)
                 showStartDatePicker = false
+                // The time has never been set on this brand-new entry: chain straight into the time
+                // picker rather than leaving whatever midnight-ish default combineDate produced.
+                if (!allDay && existing == null && !isStartTimeSetManually) {
+                    showStartTimePicker = true
+                }
             },
             languageManager = languageManager
         )
@@ -876,6 +881,11 @@ fun EntryEditScreen(
             onConfirm = { millis ->
                 endMillis = combineDate(millis, endMillis ?: startMillis, zoneId)
                 showEndDatePicker = false
+                // Same chaining as the start date: an end time that was never set gets prompted for
+                // right after the end date is, instead of silently inheriting the start's time-of-day.
+                if (!allDay && existing == null && !isEndTimeSetManually) {
+                    showEndTimePicker = true
+                }
             },
             languageManager = languageManager
         )
