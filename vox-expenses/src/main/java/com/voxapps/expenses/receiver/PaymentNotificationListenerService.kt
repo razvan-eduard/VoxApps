@@ -111,7 +111,6 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // text — so reading it as a capture reads nothing, every time, and the discard it produces
         // is indistinguishable in a log from a real message that could not be read.
         if (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
-        if (!force && processedKeys.isProcessed(sbn.key)) return
 
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
@@ -139,6 +138,13 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             (!cleanTitle.isNullOrBlank() && cleanText.isNullOrBlank())
         if (!redacted && cleanTitle.isNullOrBlank() && cleanText.isNullOrBlank()) return
 
+        // A key alone is not enough to call this notification seen — see ProcessedNotificationKeysStore's
+        // doc comment for the concrete case (Google Wallet's placeholder-then-update) this fingerprint
+        // exists to let through. Taken after redaction-cleaning: a redacted stub and its later
+        // recovery must fingerprint the same content the rest of this function goes on to read.
+        val contentFingerprint = (cleanTitle.orEmpty() + "\n" + cleanText.orEmpty() + "\n" + ticker.orEmpty()).hashCode()
+        if (!force && processedKeys.isProcessed(sbn.key, contentFingerprint)) return
+
         // A refusal is not a transaction. Before any field is read, any template is looked up or any
         // sentence is sent anywhere: if the message carries a word from the stop list, this app has
         // nothing to file. Everything downstream — the pre-parse, the template memory, the model,
@@ -153,7 +159,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         )
         if (stopWord != null) {
             Logger.d(TAG, "Stopped by \"$stopWord\": ${sbn.packageName}")
-            processedKeys.markProcessed(sbn.key)
+            processedKeys.markProcessed(sbn.key, contentFingerprint)
             return
         }
 
@@ -231,13 +237,13 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 settings.notificationModelUse
             )
         ) { _, prompt ->
-            sendForTriage(sbn, bankName, prompt, preParse, templateHash, inheritedDirection, paymentKnown)
+            sendForTriage(sbn, bankName, prompt, preParse, templateHash, inheritedDirection, paymentKnown, contentFingerprint)
         }
         // Marked once it has actually been handled. Where a request went out, the reply's own
         // arrival marks it instead, for the same reason it always has: a capture that got no answer
         // must stay eligible for the next attempt.
         if (outcome !is com.voxapps.recordflow.RecordFlow.Outcome.Asked) {
-            processedKeys.markProcessed(sbn.key)
+            processedKeys.markProcessed(sbn.key, contentFingerprint)
             // A gutted capture must NOT clear its source when recovery is on: the shade copy is the
             // last complete record of the payment, and the one thing the stub can still be
             // recovered from. Off, there is nothing to recover it with, so it dismisses as usual.
@@ -294,7 +300,12 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         preParse: com.voxapps.expenses.domain.llm.NotificationPreParse.Result,
         templateHash: String?,
         inheritedDirection: com.voxapps.expenses.data.TransactionDirection?,
-        paymentKnown: Boolean
+        paymentKnown: Boolean,
+        /** The fingerprint [processNotification] computed for this exact capture — carried through
+         *  to the reply rather than recomputed there, so the "processed" mark this notification's key
+         *  eventually gets (in LlmResultReceiver, once Commander answers) matches the same formula a
+         *  later repost's own fingerprint is compared against. See ProcessedNotificationKeysStore. */
+        contentFingerprint: Int
     ) {
         val container = (applicationContext as ExpensesApplication).container
         val title = sbn.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
@@ -306,14 +317,14 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // omitted — taskParts.getOrNull(2) must stay index-stable) when there's no known bank.
         val encodedBank = bankName?.let { Base64.encodeToString(it.toByteArray(Charsets.UTF_8), Base64.NO_WRAP) }.orEmpty()
         // enqueueAndSend persists this request (and appends its own trailing requestId segment to
-        // the task string, after encodedBank) before attempting delivery. The flag alone isn't
-        // enough here — not because it fails to wake a stopped app (it does; see
+        // the task string, after the fingerprint below) before attempting delivery. The flag alone
+        // isn't enough here — not because it fails to wake a stopped app (it does; see
         // VoxAppsDiscovery.ping) but because this send is fire-and-forget: nothing tells us the
         // reply never came. See VoxLlmRequestQueue's doc comment.
         val requestId = container.pendingLlmRequestQueue.enqueueAndSend(
             context = applicationContext,
             sourcePackage = packageName,
-            task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey:$encodedBank",
+            task = "${LlmTasks.NOTIFICATION_EXPENSE_PARSE}:$encodedKey:$encodedBank:$contentFingerprint",
             promptText = promptText,
             targetPackage = COMMANDER_PACKAGE,
             data = listOfNotNull(title, fullText)
