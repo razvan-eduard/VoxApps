@@ -305,6 +305,12 @@ class LlmResultReceiver : BroadcastReceiver() {
                 val knownBankName = taskParts.getOrNull(2)?.takeIf { it.isNotEmpty() }?.let {
                     try { String(android.util.Base64.decode(it, android.util.Base64.NO_WRAP), Charsets.UTF_8) } catch (e: Exception) { null }
                 }
+                // What PaymentNotificationListenerService fingerprinted this capture as — carried
+                // through so the mark this key gets below matches what a later repost's own
+                // fingerprint is compared against. Missing/unparseable only for a request already
+                // in flight when this segment was added; ProcessedNotificationKeysStore tolerates a
+                // wrong guess here the same way it tolerates any other content change.
+                val contentFingerprint = taskParts.getOrNull(3)?.toIntOrNull() ?: 0
                 val rawJson = result.rawJson
                 val isParseSuccess = result.status == VoxLlmResult.STATUS_SUCCESS && rawJson != null
                 if (!isParseSuccess) Logger.w(TAG, "Notification expense parse failed: ${result.error}")
@@ -337,7 +343,8 @@ class LlmResultReceiver : BroadcastReceiver() {
                         }
                         if (requestId != null) container.pendingLlmRequestQueue.markFulfilled(requestId)
                         if (notificationKey != null) {
-                            ProcessedNotificationKeysStore(context.applicationContext).markProcessed(notificationKey)
+                            ProcessedNotificationKeysStore(context.applicationContext)
+                                .markProcessed(notificationKey, contentFingerprint)
                         }
                         // Reunite the reply with what was resolved before it was asked —
                         // suppressed fields are absent from the JSON by design, and the
