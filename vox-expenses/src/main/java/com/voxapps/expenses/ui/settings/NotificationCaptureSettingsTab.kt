@@ -15,13 +15,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -223,291 +226,323 @@ fun NotificationCaptureSettingsTab(
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
+    // Hoisted above the list rather than declared beside BankAccountsSettingsCard/VocabularySettingsCard
+    // below: a LazyColumn's own item{}/items{} builder lambda is not itself @Composable, so a
+    // remember/collectAsStateWithLifecycle call has to happen up here, in the enclosing composable,
+    // for the items further down to simply read the result.
+    val provided = remember(settings) { FieldVocabularies.provided(context) }
+    val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val banksUsed by stateManager.banksInUse.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    // A tap stages the confirmation rather than acting at once: this clears every captured payment
+    // AND — since ExpensesStateManager.dismissAllNotificationExpenses now takes each entry's source
+    // notification out of the shade too — every notification behind them, all in one irreversible
+    // step. The backlog this exists for is exactly the size where a mis-tap would be expensive.
+    var confirmingDismissAll by remember { mutableStateOf(false) }
+
     // This tab's caller (SettingsScreen) passes a plain Modifier.fillMaxSize() with no scroll of its
     // own, and this was the only settings tab whose content could ever exceed one screen's height —
     // confirmed on-device: the payment-source-apps picker's expanded search box + app list were being
     // laid out below the visible viewport with no way to reach them, not actually empty.
-    Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+    //
+    // Lazy rather than a plain Column+verticalScroll: a backlog of captured payments can run into the
+    // hundreds, and a plain Column composes and lays out every one of their cards — chips, an amount
+    // field, two buttons apiece — at once regardless of what's on screen. Confirmed on-device as the
+    // cause of Dismiss appearing to do nothing on a real phone: the whole list recomposing on every
+    // change was slow enough to make the tap look like it hadn't registered. Each entry gets its own
+    // key (its id) below, so removing one animates and reflows without the rest losing their state.
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SettingsSectionCard(languageManager.getString("notification_capture_title")) {
-            Text(
-                languageManager.getString("notification_capture_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Button(
-                onClick = {
-                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (accessGranted) Color(0xFF4CAF50) else Color(0xFFF44336)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString("grant_notification_access_button"), color = Color.White)
-            }
-
-            Text(
-                languageManager.getString("battery_optimization_warning"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(
-                onClick = {
-                    if (batteryOptimizationIgnored) {
-                        Toast.makeText(context, languageManager.getString("battery_optimization_already_disabled"), Toast.LENGTH_SHORT).show()
-                    } else {
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (batteryOptimizationIgnored) Color(0xFF4CAF50) else Color(0xFFF44336)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString("disable_battery_optimization_button"), color = Color.White)
-            }
-
-            // Distinct from (and, on an affected OEM, more load-bearing than) the battery-optimization
-            // exemption above: Honor/Huawei's own "App launch management" gate can block this service
-            // from ever rebinding after the process is killed — confirmed on-device via logcat
-            // ("Service starting has been prevented by iaware or trustsbase") — independently of whatever
-            // ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS reports, since that's a separate, stock-Android
-            // mechanism this OEM's own manager sits on top of. No public Intent action reaches this
-            // screen directly, so this best-effort deep-links straight to that OEM's known component and
-            // falls back to this app's own App Info page (where "Launch" / "Auto-launch" controls live on
-            // some OEM skins) if that component isn't present at all.
-            Text(
-                languageManager.getString("app_launch_management_warning"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            OutlinedButton(
-                onClick = { openAppLaunchManagement(context) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(languageManager.getString("open_app_launch_management_button"))
-            }
-
-            OutlinedButton(
-                onClick = {
-                    if (!accessGranted) {
-                        Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
-                    } else if (!forceCheckOnCooldown) {
-                        // Re-checks every notification currently in the shade directly against the
-                        // "already processed" guard, bypassing it entirely for this explicit user action
-                        // (see PaymentNotificationListenerService.forceRecheckNow's doc comment) — no
-                        // longer relies on wiping the whole processed-keys history + hoping the OS honors
-                        // a rebind request, which this OEM can silently block outright.
-                        PaymentNotificationListenerService.forceRecheckNow(context)
-                        Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
-                        forceCheckOnCooldown = true
-                        scope.launch {
-                            delay(FORCE_CHECK_COOLDOWN_MILLIS)
-                            forceCheckOnCooldown = false
-                        }
-                    }
-                },
-                enabled = !forceCheckOnCooldown,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text(languageManager.getString("force_check_notifications_button"))
-            }
-
-        }
-
-        SettingsSectionCard(languageManager.getString("payment_source_apps_label")) {
-            Text(
-                languageManager.getString("payment_source_apps_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            LauncherAppsCache.scan(context)
-                        }
-                        installedApps = LauncherAppsCache.cachedApps
-                        settingsRepo.setAppCache(LauncherAppsCache.toJsonCache())
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text(languageManager.getString("rescan_apps"))
-            }
-            if (installedApps.isEmpty()) {
-                // Confirmed on-device: LauncherAppsCache.scan() (getInstalledApplications) is correctly
-                // implemented and QUERY_ALL_PACKAGES is granted at the stock-Android level, but this
-                // still comes back empty on Honor/MagicOS — logcat shows a separate OEM-only gate,
-                // ApplicationPackageManager.checkGetInstalledAppsPermissionStatus, denying the request.
-                // That toggle isn't exposed via a stable public Intent action, so the most reliable thing
-                // this app can do is point the user at its own App Info page, where this OEM surfaces the
-                // "Get installed apps" permission under Permissions / Other permissions.
+        item {
+            SettingsSectionCard(languageManager.getString("notification_capture_title")) {
                 Text(
-                    languageManager.getString("installed_apps_empty_warning"),
+                    languageManager.getString("notification_capture_desc"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                OutlinedButton(
+
+                Button(
                     onClick = {
-                        try {
+                        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (accessGranted) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("grant_notification_access_button"), color = Color.White)
+                }
+
+                Text(
+                    languageManager.getString("battery_optimization_warning"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = {
+                        if (batteryOptimizationIgnored) {
+                            Toast.makeText(context, languageManager.getString("battery_optimization_already_disabled"), Toast.LENGTH_SHORT).show()
+                        } else {
                             context.startActivity(
                                 Intent(
-                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                                     Uri.parse("package:${context.packageName}")
                                 )
                             )
-                        } catch (e: ActivityNotFoundException) {
-                            Toast.makeText(context, "Couldn't open system settings", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (batteryOptimizationIgnored) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("disable_battery_optimization_button"), color = Color.White)
+                }
+
+                // Distinct from (and, on an affected OEM, more load-bearing than) the battery-optimization
+                // exemption above: Honor/Huawei's own "App launch management" gate can block this service
+                // from ever rebinding after the process is killed — confirmed on-device via logcat
+                // ("Service starting has been prevented by iaware or trustsbase") — independently of whatever
+                // ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS reports, since that's a separate, stock-Android
+                // mechanism this OEM's own manager sits on top of. No public Intent action reaches this
+                // screen directly, so this best-effort deep-links straight to that OEM's known component and
+                // falls back to this app's own App Info page (where "Launch" / "Auto-launch" controls live on
+                // some OEM skins) if that component isn't present at all.
+                Text(
+                    languageManager.getString("app_launch_management_warning"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(
+                    onClick = { openAppLaunchManagement(context) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(languageManager.getString("open_app_launch_management_button"))
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        if (!accessGranted) {
+                            Toast.makeText(context, languageManager.getString("grant_notification_access_button"), Toast.LENGTH_SHORT).show()
+                        } else if (!forceCheckOnCooldown) {
+                            // Re-checks every notification currently in the shade directly against the
+                            // "already processed" guard, bypassing it entirely for this explicit user action
+                            // (see PaymentNotificationListenerService.forceRecheckNow's doc comment) — no
+                            // longer relies on wiping the whole processed-keys history + hoping the OS honors
+                            // a rebind request, which this OEM can silently block outright.
+                            PaymentNotificationListenerService.forceRecheckNow(context)
+                            Toast.makeText(context, languageManager.getString("force_check_notifications_started"), Toast.LENGTH_SHORT).show()
+                            forceCheckOnCooldown = true
+                            scope.launch {
+                                delay(FORCE_CHECK_COOLDOWN_MILLIS)
+                                forceCheckOnCooldown = false
+                            }
+                        }
+                    },
+                    enabled = !forceCheckOnCooldown,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text(languageManager.getString("force_check_notifications_button"))
+                }
+
+            }
+        }
+
+        item {
+            SettingsSectionCard(languageManager.getString("payment_source_apps_label")) {
+                Text(
+                    languageManager.getString("payment_source_apps_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                LauncherAppsCache.scan(context)
+                            }
+                            installedApps = LauncherAppsCache.cachedApps
+                            settingsRepo.setAppCache(LauncherAppsCache.toJsonCache())
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(languageManager.getString("open_app_permissions_button"))
+                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text(languageManager.getString("rescan_apps"))
                 }
-            }
-            AppPickerCard(
-                apps = installedApps,
-                selectedPackages = paymentSourcePackages.toList(),
-                onApply = { updated -> stateManager.setPaymentSourcePackages(updated.toSet()) },
-                strings = appPickerStrings,
-                modifier = Modifier.fillMaxWidth(),
-                label = languageManager.getString("payment_source_apps_label"),
-                starredPackages = bankingSourcePackages,
-                onApplyStarred = { updated -> stateManager.setBankingSourcePackages(updated) }
-            )
+                if (installedApps.isEmpty()) {
+                    // Confirmed on-device: LauncherAppsCache.scan() (getInstalledApplications) is correctly
+                    // implemented and QUERY_ALL_PACKAGES is granted at the stock-Android level, but this
+                    // still comes back empty on Honor/MagicOS — logcat shows a separate OEM-only gate,
+                    // ApplicationPackageManager.checkGetInstalledAppsPermissionStatus, denying the request.
+                    // That toggle isn't exposed via a stable public Intent action, so the most reliable thing
+                    // this app can do is point the user at its own App Info page, where this OEM surfaces the
+                    // "Get installed apps" permission under Permissions / Other permissions.
+                    Text(
+                        languageManager.getString("installed_apps_empty_warning"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                )
+                            } catch (e: ActivityNotFoundException) {
+                                Toast.makeText(context, "Couldn't open system settings", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(languageManager.getString("open_app_permissions_button"))
+                    }
+                }
+                AppPickerCard(
+                    apps = installedApps,
+                    selectedPackages = paymentSourcePackages.toList(),
+                    onApply = { updated -> stateManager.setPaymentSourcePackages(updated.toSet()) },
+                    strings = appPickerStrings,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = languageManager.getString("payment_source_apps_label"),
+                    starredPackages = bankingSourcePackages,
+                    onApplyStarred = { updated -> stateManager.setBankingSourcePackages(updated) }
+                )
 
+            }
         }
 
-        // The shared level card rather than hand-rolled radios: the same control scan and voice
-        // use, reading NOTIFICATION_FLOW_SUPPORT so what the UI offers and what the flow honours
-        // are one declaration. The stored value stays a rung name notificationLevelOf reads back.
-        RecordFlowLevelCard(
-            support = ExpensesSettings.NOTIFICATION_FLOW_SUPPORT,
-            level = ExpensesSettings.notificationLevelOf(notificationModelUse),
-            strings = RecordFlowStrings(
-                title = languageManager.getString("notification_model_use_label"),
-                sendNothing = languageManager.getString("flow_send_nothing"),
-                sendNothingDesc = languageManager.getString("notification_model_none_desc"),
-                sendMissing = languageManager.getString("flow_send_missing"),
-                sendMissingDesc = languageManager.getString("flow_send_missing_desc"),
-                sendHead = languageManager.getString("flow_send_head"),
-                sendHeadDesc = languageManager.getString("flow_send_head_desc"),
-                sendEverything = languageManager.getString("flow_send_everything"),
-                sendEverythingDesc = languageManager.getString("notification_model_full_desc"),
-                fillHead = languageManager.getString("scan_fill_head"),
-                cannotSuggest = languageManager.getString("flow_cannot_suggest")
-            ),
-            onLevelChange = { stateManager.setNotificationModelUse(it.name) }
-        )
+        item {
+            // The shared level card rather than hand-rolled radios: the same control scan and voice
+            // use, reading NOTIFICATION_FLOW_SUPPORT so what the UI offers and what the flow honours
+            // are one declaration. The stored value stays a rung name notificationLevelOf reads back.
+            RecordFlowLevelCard(
+                support = ExpensesSettings.NOTIFICATION_FLOW_SUPPORT,
+                level = ExpensesSettings.notificationLevelOf(notificationModelUse),
+                strings = RecordFlowStrings(
+                    title = languageManager.getString("notification_model_use_label"),
+                    sendNothing = languageManager.getString("flow_send_nothing"),
+                    sendNothingDesc = languageManager.getString("notification_model_none_desc"),
+                    sendMissing = languageManager.getString("flow_send_missing"),
+                    sendMissingDesc = languageManager.getString("flow_send_missing_desc"),
+                    sendHead = languageManager.getString("flow_send_head"),
+                    sendHeadDesc = languageManager.getString("flow_send_head_desc"),
+                    sendEverything = languageManager.getString("flow_send_everything"),
+                    sendEverythingDesc = languageManager.getString("notification_model_full_desc"),
+                    fillHead = languageManager.getString("scan_fill_head"),
+                    cannotSuggest = languageManager.getString("flow_cannot_suggest")
+                ),
+                onLevelChange = { stateManager.setNotificationModelUse(it.name) }
+            )
+        }
 
-        SettingsSectionCard(languageManager.getString("capture_amountless_label")) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        languageManager.getString("capture_amountless_desc"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        item {
+            SettingsSectionCard(languageManager.getString("capture_amountless_label")) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            languageManager.getString("capture_amountless_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = captureAmountlessPayments,
+                        onCheckedChange = { stateManager.setCaptureAmountlessPayments(it) }
                     )
                 }
-                Switch(
-                    checked = captureAmountlessPayments,
-                    onCheckedChange = { stateManager.setCaptureAmountlessPayments(it) }
-                )
             }
         }
 
-        SettingsSectionCard(languageManager.getString("guard_notification_label")) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    languageManager.getString("guard_notification_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = settings.guardNotificationEnabled,
-                    onCheckedChange = { stateManager.setGuardNotificationEnabled(it) }
-                )
-            }
-            // Only useful with the shade reader — the recovery reads the amount off the panel the
-            // person opens, which needs the accessibility service enabled. Shown only when the
-            // feature is on, and only while the service is still off.
-            if (settings.guardNotificationEnabled && !shadeReaderEnabled) {
-                Text(
-                    languageManager.getString("guard_accessibility_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                OutlinedButton(
-                    onClick = {
-                        try {
-                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        } catch (e: ActivityNotFoundException) {
-                            Toast.makeText(context, "Couldn't open accessibility settings", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                ) {
-                    Text(languageManager.getString("guard_enable_accessibility_button"))
+        item {
+            SettingsSectionCard(languageManager.getString("guard_notification_label")) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        languageManager.getString("guard_notification_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = settings.guardNotificationEnabled,
+                        onCheckedChange = { stateManager.setGuardNotificationEnabled(it) }
+                    )
                 }
-            } else if (settings.guardNotificationEnabled && shadeReaderEnabled) {
-                Text(
-                    languageManager.getString("guard_accessibility_active"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                // Only useful with the shade reader — the recovery reads the amount off the panel the
+                // person opens, which needs the accessibility service enabled. Shown only when the
+                // feature is on, and only while the service is still off.
+                if (settings.guardNotificationEnabled && !shadeReaderEnabled) {
+                    Text(
+                        languageManager.getString("guard_accessibility_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            } catch (e: ActivityNotFoundException) {
+                                Toast.makeText(context, "Couldn't open accessibility settings", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) {
+                        Text(languageManager.getString("guard_enable_accessibility_button"))
+                    }
+                } else if (settings.guardNotificationEnabled && shadeReaderEnabled) {
+                    Text(
+                        languageManager.getString("guard_accessibility_active"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
             }
         }
 
         // Only where it can act. With the text going to a model, the model answers the direction
         // and this never runs — showing it there would offer a choice with no effect.
         if (ExpensesSettings.notificationLevelOf(notificationModelUse).staysOnDevice) {
-            SettingsSectionCard(languageManager.getString("notification_assumed_direction_label")) {
-                Text(
-                    languageManager.getString("notification_assumed_direction_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val assumptions = listOf(
-                    ExpensesSettings.ASSUME_NOTHING to "notification_assume_nothing",
-                    ExpensesSettings.ASSUME_OUTGOING to "notification_assume_outgoing",
-                    ExpensesSettings.ASSUME_INCOMING to "notification_assume_incoming"
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for ((mode, key) in assumptions) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { stateManager.setNotificationAssumedDirection(mode) },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = notificationAssumedDirection == mode,
-                                onClick = { stateManager.setNotificationAssumedDirection(mode) }
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    languageManager.getString(key + "_desc"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            item {
+                SettingsSectionCard(languageManager.getString("notification_assumed_direction_label")) {
+                    Text(
+                        languageManager.getString("notification_assumed_direction_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val assumptions = listOf(
+                        ExpensesSettings.ASSUME_NOTHING to "notification_assume_nothing",
+                        ExpensesSettings.ASSUME_OUTGOING to "notification_assume_outgoing",
+                        ExpensesSettings.ASSUME_INCOMING to "notification_assume_incoming"
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for ((mode, key) in assumptions) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { stateManager.setNotificationAssumedDirection(mode) },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = notificationAssumedDirection == mode,
+                                    onClick = { stateManager.setNotificationAssumedDirection(mode) }
                                 )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(languageManager.getString(key), style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        languageManager.getString(key + "_desc"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -515,248 +550,288 @@ fun NotificationCaptureSettingsTab(
             }
         }
 
-        SettingsSectionCard(languageManager.getString("auto_accept_notification_expenses_label")) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    languageManager.getString("auto_accept_notification_expenses_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = autoAcceptNotificationExpenses,
-                    onCheckedChange = { stateManager.setAutoAcceptNotificationExpenses(it) }
-                )
+        item {
+            SettingsSectionCard(languageManager.getString("auto_accept_notification_expenses_label")) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        languageManager.getString("auto_accept_notification_expenses_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = autoAcceptNotificationExpenses,
+                        onCheckedChange = { stateManager.setAutoAcceptNotificationExpenses(it) }
+                    )
+                }
             }
         }
 
-        SettingsSectionCard(languageManager.getString("dismiss_on_capture_label")) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    languageManager.getString("dismiss_on_capture_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = dismissNotificationOnCapture,
-                    onCheckedChange = { stateManager.setDismissNotificationOnCapture(it) }
-                )
+        item {
+            SettingsSectionCard(languageManager.getString("dismiss_on_capture_label")) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        languageManager.getString("dismiss_on_capture_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = dismissNotificationOnCapture,
+                        onCheckedChange = { stateManager.setDismissNotificationOnCapture(it) }
+                    )
+                }
             }
         }
 
-        val provided = remember(settings) { FieldVocabularies.provided(context) }
-        // Beside the vocabularies but deliberately unlike them: an account is read from a format,
-        // never learned, so this card has no supplied list and nothing to switch off term by term.
-        val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-        val banksUsed by stateManager.banksInUse.collectAsStateWithLifecycle(initialValue = emptyList())
-        BankAccountsSettingsCard(
-            accounts = accounts,
-            autoCreateFromScans = settings.autoCreateAccountsFromScans,
-            autoCreateFromNotifications = settings.autoCreateAccountsFromNotifications,
-            knownCurrencies = remember(accounts, settings.defaultCurrency) {
-                (accounts.map { it.currencyCode } + settings.defaultCurrency)
-                    .filter { it.isNotBlank() }.distinct().sorted()
-            },
-            onAutoCreateFromScansChange = { stateManager.setAutoCreateAccountsFromScans(it) },
-            onAutoCreateFromNotificationsChange = { stateManager.setAutoCreateAccountsFromNotifications(it) },
-            onUpdate = { stateManager.updateBankAccount(it) },
-            onDelete = { stateManager.deleteBankAccount(it) },
-            // The same list the classifier reads a message's issuer with, so an account's bank and
-            // a capture's bank cannot drift into being two different vocabularies.
-            // The banks in play, and the whole vocabulary only a search away.
-            bankNames = remember(banksUsed, settings.customBanks) {
-                (banksUsed + settings.customBanks).distinctBy { it.lowercase() }.sorted()
-            },
-            knownBanks = remember(provided.banks, settings.customBanks, settings.disabledBanks) {
-                FieldVocabularies.merge(provided.banks, settings.customBanks, settings.disabledBanks)
-            },
-            onAddBank = { name -> scope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, name) } },
-            onAdd = { typed ->
-                stateManager.addTypedBankAccount(
-                    typed,
-                    settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency }
-                )
-            },
-            // This screen already shows its own "Capturing payments" hint; the card's would be a
-            // second dialog on the same entrance.
-            showHint = false
-        )
+        item {
+            // Beside the vocabularies but deliberately unlike them: an account is read from a format,
+            // never learned, so this card has no supplied list and nothing to switch off term by term.
+            BankAccountsSettingsCard(
+                accounts = accounts,
+                autoCreateFromScans = settings.autoCreateAccountsFromScans,
+                autoCreateFromNotifications = settings.autoCreateAccountsFromNotifications,
+                knownCurrencies = remember(accounts, settings.defaultCurrency) {
+                    (accounts.map { it.currencyCode } + settings.defaultCurrency)
+                        .filter { it.isNotBlank() }.distinct().sorted()
+                },
+                onAutoCreateFromScansChange = { stateManager.setAutoCreateAccountsFromScans(it) },
+                onAutoCreateFromNotificationsChange = { stateManager.setAutoCreateAccountsFromNotifications(it) },
+                onUpdate = { stateManager.updateBankAccount(it) },
+                onDelete = { stateManager.deleteBankAccount(it) },
+                // The same list the classifier reads a message's issuer with, so an account's bank and
+                // a capture's bank cannot drift into being two different vocabularies.
+                // The banks in play, and the whole vocabulary only a search away.
+                bankNames = remember(banksUsed, settings.customBanks) {
+                    (banksUsed + settings.customBanks).distinctBy { it.lowercase() }.sorted()
+                },
+                knownBanks = remember(provided.banks, settings.customBanks, settings.disabledBanks) {
+                    FieldVocabularies.merge(provided.banks, settings.customBanks, settings.disabledBanks)
+                },
+                onAddBank = { name -> scope.launch { stateManager.addVocabularyTerm(FieldVocabularies.VOCAB_BANK, name) } },
+                onAdd = { typed ->
+                    stateManager.addTypedBankAccount(
+                        typed,
+                        settings.defaultAccountCurrency.ifBlank { settings.defaultCurrency }
+                    )
+                },
+                // This screen already shows its own "Capturing payments" hint; the card's would be a
+                // second dialog on the same entrance.
+                showHint = false
+            )
+        }
 
-        // The one vocabulary that stays here: a refusal is a thing a notification says, and this
-        // list is what stops one becoming an expense. The names — banks, shops, designators — moved
-        // to the data they belong to; see NamesSettingsTab.
-        VocabularySettingsCard(
-            provided = provided.stopWords,
-            custom = settings.customStopWords,
-            disabledKeys = settings.disabledStopWords,
-            vocabulary = FieldVocabularies.VOCAB_STOP,
-            title = languageManager.getString("vocabulary_stop_title"),
-            description = languageManager.getString("vocabulary_stop_desc"),
-            stateManager = stateManager,
-            languageManager = languageManager
-        )
+        item {
+            // The one vocabulary that stays here: a refusal is a thing a notification says, and this
+            // list is what stops one becoming an expense. The names — banks, shops, designators — moved
+            // to the data they belong to; see NamesSettingsTab.
+            VocabularySettingsCard(
+                provided = provided.stopWords,
+                custom = settings.customStopWords,
+                disabledKeys = settings.disabledStopWords,
+                vocabulary = FieldVocabularies.VOCAB_STOP,
+                title = languageManager.getString("vocabulary_stop_title"),
+                description = languageManager.getString("vocabulary_stop_desc"),
+                stateManager = stateManager,
+                languageManager = languageManager
+            )
+        }
 
         if (pendingEntries.isNotEmpty()) {
-            SettingsSectionCard(languageManager.getString("pending_notification_expenses_title")) {
-                pendingEntries.forEach { entry ->
-                    // A capture whose message never said how much: everything else is known, so the
-                    // entry is worth keeping and the one missing figure is asked for here rather
-                    // than the whole thing being thrown away.
-                    var typedAmount by remember(entry.id) { mutableStateOf("") }
-                    val amount = entry.totalAmount ?: typedAmount.trim().replace(',', '.').toDoubleOrNull()
-                    // What this entry could teach, once somebody says so. Offered only where the
-                    // word is genuinely unknown to the lists — a bank already listed has nothing to
-                    // learn, and a merchant the app resolved was never in doubt.
-                    // A name already accepted under another spelling is renamed rather than listed:
-                    // a second entry for a shop the list already names is what makes the list a
-                    // worse copy of the ledger. So a rename, where there is one, replaces the offer.
-                    val bankToLearn = entry.bank?.takeIf { b ->
-                        entry.bankRenameTo == null && FieldVocabularies.rejectionFor(
-                            b, FieldVocabularies.VOCAB_BANK, context, settings
+            item {
+                Text(
+                    languageManager.getString("pending_notification_expenses_title"),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Each entry is its own lazy item, keyed on its id — the reason this section exists
+            // outside a single SettingsSectionCard wrapping a forEach any more (see the LazyColumn
+            // comment above): a backlog running into the hundreds must not compose and lay out every
+            // card at once just because a handful are on screen.
+            items(pendingEntries, key = { it.id }) { entry ->
+                // A capture whose message never said how much: everything else is known, so the
+                // entry is worth keeping and the one missing figure is asked for here rather
+                // than the whole thing being thrown away.
+                var typedAmount by remember(entry.id) { mutableStateOf("") }
+                val amount = entry.totalAmount ?: typedAmount.trim().replace(',', '.').toDoubleOrNull()
+                // What this entry could teach, once somebody says so. Offered only where the
+                // word is genuinely unknown to the lists — a bank already listed has nothing to
+                // learn, and a merchant the app resolved was never in doubt.
+                // A name already accepted under another spelling is renamed rather than listed:
+                // a second entry for a shop the list already names is what makes the list a
+                // worse copy of the ledger. So a rename, where there is one, replaces the offer.
+                val bankToLearn = entry.bank?.takeIf { b ->
+                    entry.bankRenameTo == null && FieldVocabularies.rejectionFor(
+                        b, FieldVocabularies.VOCAB_BANK, context, settings
+                    ) == null
+                }
+                val vendorToLearn = entry.vendorCandidate?.takeIf { v ->
+                    entry.vendor == null && entry.vendorRenameTo == null &&
+                        FieldVocabularies.rejectionFor(
+                            v, FieldVocabularies.VOCAB_VENDOR, context, settings
                         ) == null
-                    }
-                    val vendorToLearn = entry.vendorCandidate?.takeIf { v ->
-                        entry.vendor == null && entry.vendorRenameTo == null &&
-                            FieldVocabularies.rejectionFor(
-                                v, FieldVocabularies.VOCAB_VENDOR, context, settings
-                            ) == null
-                    }
-                    var learnBank by remember(entry.id) { mutableStateOf(false) }
-                    var learnVendor by remember(entry.id) { mutableStateOf(false) }
-                    var renameVendor by remember(entry.id) { mutableStateOf(false) }
-                    var renameBank by remember(entry.id) { mutableStateOf(false) }
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                entry.title?.takeIf { it.isNotBlank() } ?: entry.vendor ?: "—",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Text(
-                                (entry.totalAmount?.let { formatAmount(it, entry.currency) }
-                                    ?: languageManager.getString("notification_amount_unknown")) +
-                                    (entry.bank?.let { " · $it" } ?: "") +
-                                    (entry.category?.let { " · $it" } ?: "") +
-                                    " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.capturedAt)),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            // Amber, because the app is asking rather than offering: nothing
-                            // identified these, and accepting one teaches the lists permanently.
-                            if (bankToLearn != null || vendorToLearn != null ||
-                                entry.vendorRenameTo != null || entry.bankRenameTo != null
-                            ) {
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    entry.vendorRenameTo?.let { to ->
-                                        VoxSuggestionChip(
-                                            label = languageManager.getString("rename_chip")
-                                                .format(entry.vendorSpelling().orEmpty(), to),
-                                            asking = true,
-                                            selected = renameVendor,
-                                            leading = if (renameVendor) {
-                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                            } else null,
-                                            onClick = { renameVendor = !renameVendor }
-                                        )
-                                    }
-                                    entry.bankRenameTo?.let { to ->
-                                        VoxSuggestionChip(
-                                            label = languageManager.getString("rename_chip")
-                                                .format(entry.bank.orEmpty(), to),
-                                            asking = true,
-                                            selected = renameBank,
-                                            leading = if (renameBank) {
-                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                            } else null,
-                                            onClick = { renameBank = !renameBank }
-                                        )
-                                    }
-                                    vendorToLearn?.let {
-                                        VoxSuggestionChip(
-                                            label = languageManager.getString("learn_vendor_chip").format(it),
-                                            asking = true,
-                                            selected = learnVendor,
-                                            leading = if (learnVendor) {
-                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                            } else null,
-                                            onClick = { learnVendor = !learnVendor }
-                                        )
-                                    }
-                                    bankToLearn?.let {
-                                        VoxSuggestionChip(
-                                            label = languageManager.getString("learn_bank_chip").format(it),
-                                            asking = true,
-                                            selected = learnBank,
-                                            leading = if (learnBank) {
-                                                { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                            } else null,
-                                            onClick = { learnBank = !learnBank }
-                                        )
-                                    }
-                                }
-                            }
-                            if (entry.totalAmount == null) {
-                                OutlinedTextField(
-                                    value = typedAmount,
-                                    onValueChange = { typedAmount = it },
-                                    label = { Text(languageManager.getString("notification_enter_amount")) },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                                )
-                            }
-                            Row(
+                }
+                var learnBank by remember(entry.id) { mutableStateOf(false) }
+                var learnVendor by remember(entry.id) { mutableStateOf(false) }
+                var renameVendor by remember(entry.id) { mutableStateOf(false) }
+                var renameBank by remember(entry.id) { mutableStateOf(false) }
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            entry.title?.takeIf { it.isNotBlank() } ?: entry.vendor ?: "—",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            (entry.totalAmount?.let { formatAmount(it, entry.currency) }
+                                ?: languageManager.getString("notification_amount_unknown")) +
+                                (entry.bank?.let { " · $it" } ?: "") +
+                                (entry.category?.let { " · $it" } ?: "") +
+                                " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.capturedAt)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        // Amber, because the app is asking rather than offering: nothing
+                        // identified these, and accepting one teaches the lists permanently.
+                        if (bankToLearn != null || vendorToLearn != null ||
+                            entry.vendorRenameTo != null || entry.bankRenameTo != null
+                        ) {
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                OutlinedButton(
-                                    onClick = { stateManager.dismissNotificationExpense(entry.id) },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(languageManager.getString("dismiss_button"))
+                                entry.vendorRenameTo?.let { to ->
+                                    VoxSuggestionChip(
+                                        label = languageManager.getString("rename_chip")
+                                            .format(entry.vendorSpelling().orEmpty(), to),
+                                        asking = true,
+                                        selected = renameVendor,
+                                        leading = if (renameVendor) {
+                                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                        } else null,
+                                        onClick = { renameVendor = !renameVendor }
+                                    )
                                 }
-                                Button(
-                                    onClick = {
-                                        stateManager.approveNotificationExpense(
-                                            entry, context, amount,
-                                            learnBank = bankToLearn?.takeIf { learnBank },
-                                            learnVendor = vendorToLearn?.takeIf { learnVendor },
-                                            renameVendor = renameVendor,
-                                            renameBank = renameBank
-                                        )
-                                    },
-                                    // Nothing to approve until there is a figure: an expense of
-                                    // nothing is a gap wearing the shape of a record.
-                                    enabled = amount != null && amount > 0.0,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(languageManager.getString("approve_button"))
+                                entry.bankRenameTo?.let { to ->
+                                    VoxSuggestionChip(
+                                        label = languageManager.getString("rename_chip")
+                                            .format(entry.bank.orEmpty(), to),
+                                        asking = true,
+                                        selected = renameBank,
+                                        leading = if (renameBank) {
+                                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                        } else null,
+                                        onClick = { renameBank = !renameBank }
+                                    )
                                 }
+                                vendorToLearn?.let {
+                                    VoxSuggestionChip(
+                                        label = languageManager.getString("learn_vendor_chip").format(it),
+                                        asking = true,
+                                        selected = learnVendor,
+                                        leading = if (learnVendor) {
+                                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                        } else null,
+                                        onClick = { learnVendor = !learnVendor }
+                                    )
+                                }
+                                bankToLearn?.let {
+                                    VoxSuggestionChip(
+                                        label = languageManager.getString("learn_bank_chip").format(it),
+                                        asking = true,
+                                        selected = learnBank,
+                                        leading = if (learnBank) {
+                                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                        } else null,
+                                        onClick = { learnBank = !learnBank }
+                                    )
+                                }
+                            }
+                        }
+                        if (entry.totalAmount == null) {
+                            OutlinedTextField(
+                                value = typedAmount,
+                                onValueChange = { typedAmount = it },
+                                label = { Text(languageManager.getString("notification_enter_amount")) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { stateManager.dismissNotificationExpense(entry) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(languageManager.getString("dismiss_button"))
+                            }
+                            Button(
+                                onClick = {
+                                    stateManager.approveNotificationExpense(
+                                        entry, context, amount,
+                                        learnBank = bankToLearn?.takeIf { learnBank },
+                                        learnVendor = vendorToLearn?.takeIf { learnVendor },
+                                        renameVendor = renameVendor,
+                                        renameBank = renameBank
+                                    )
+                                },
+                                // Nothing to approve until there is a figure: an expense of
+                                // nothing is a gap wearing the shape of a record.
+                                enabled = amount != null && amount > 0.0,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(languageManager.getString("approve_button"))
                             }
                         }
                     }
                 }
+            }
 
+            item {
                 OutlinedButton(
-                    onClick = { stateManager.dismissAllNotificationExpenses() },
+                    onClick = { confirmingDismissAll = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(languageManager.getString("dismiss_all_button"))
                 }
             }
         }
+    }
+
+    if (confirmingDismissAll) {
+        AlertDialog(
+            onDismissRequest = { confirmingDismissAll = false },
+            title = { Text(languageManager.getString("dismiss_all_button")) },
+            text = { Text(languageManager.counted("dismiss_all_confirm", pendingEntries.size)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        stateManager.dismissAllNotificationExpenses()
+                        confirmingDismissAll = false
+                    }
+                ) {
+                    Text(languageManager.getString("dismiss_all_button"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDismissAll = false }) {
+                    Text(languageManager.getString("cancel"))
+                }
+            }
+        )
     }
 }
 

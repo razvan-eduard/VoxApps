@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Bundle
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -61,6 +63,18 @@ object VoxAppsDiscovery {
         context.packageManager.getApplicationInfo(packageName, 0).enabled
     } catch (e: PackageManager.NameNotFoundException) {
         false
+    }
+
+    /** [packageName]'s own launcher icon, rendered into a square bitmap — null if the package isn't
+     *  installed or can't be drawn. Shared so any app wanting to show a sibling app's icon (a
+     *  notification action, a chip) doesn't reimplement the drawable-to-bitmap conversion. */
+    fun loadAppIconBitmap(context: Context, packageName: String, sizePx: Int = 96): Bitmap? = try {
+        val drawable = context.packageManager.getApplicationIcon(packageName)
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).also { drawable.setBounds(0, 0, sizePx, sizePx); drawable.draw(it) }
+        bitmap
+    } catch (e: Exception) {
+        null
     }
 
     fun discover(context: Context): List<VoxAppInfo> {

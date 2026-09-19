@@ -423,7 +423,11 @@ class NotificationExpenseFlow(
                 // A capture the platform delivered gutted keeps its link to the shade copy — the
                 // one place the payment still exists whole, and the place it can be recovered from.
                 redactedStub = f?.redacted == true,
-                sourceKey = f?.sourceKey.takeIf { f?.redacted == true }
+                // Kept for every entry, not only a redacted one: it is how a repeat capture of the
+                // same still-shade notification is recognised and folded instead of duplicated (see
+                // PendingNotificationExpenseRepository.mergeBySourceKey), and how approving or
+                // dismissing this entry can take its source notification out of the shade too.
+                sourceKey = f?.sourceKey
             )
         )
         kept = Kept.REVIEW

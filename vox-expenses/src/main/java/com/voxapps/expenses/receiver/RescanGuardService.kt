@@ -9,9 +9,12 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.voxapps.expenses.ExpensesApplication
 import com.voxapps.expenses.data.TransactionDirection
 import com.voxapps.expenses.ui.formatAmount
+import com.voxapps.ipc.VoxAppsDiscovery
+import com.voxapps.ipc.VoxIpc
 import com.voxapps.widget.WidgetMidnightRefresh
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,10 +74,11 @@ class RescanGuardService : Service() {
                 container.expensesRepository.expenses,
                 container.pendingNotificationExpenseRepository.pendingFlow,
                 container.settingsRepository.settingsFlow,
+                container.expensesStateManager.dismissals,
                 midnightTicks()
-            ) { expenses, pending, settings, _ -> Triple(expenses, pending, settings) }
-                .collect { (expenses, pending, settings) ->
-                    val content = compute(container, expenses, pending, settings)
+            ) { expenses, pending, settings, seen, _ -> ComputeInput(expenses, pending, settings, seen) }
+                .collect { (expenses, pending, settings, seen) ->
+                    val content = compute(container, expenses, pending, settings, seen)
                     lastContent = content
                     // One notification, present only while it has a reason to be: the standing
                     // dashboard the person asked for, or a redacted payment waiting to be rescanned.
@@ -112,7 +116,8 @@ class RescanGuardService : Service() {
         container: com.voxapps.expenses.di.ExpensesContainer,
         expenses: List<com.voxapps.expenses.data.Expense>,
         pending: List<com.voxapps.expenses.domain.llm.PendingNotificationExpense>,
-        settings: com.voxapps.expenses.data.preferences.ExpensesSettings
+        settings: com.voxapps.expenses.data.preferences.ExpensesSettings,
+        seen: com.voxapps.expenses.data.preferences.Dismissals
     ): Content {
         val home = settings.homeCurrency
         val zone = ZoneId.systemDefault()
@@ -135,10 +140,32 @@ class RescanGuardService : Service() {
             todayIncome = sumSince(startOfToday, TransactionDirection.INCOMING),
             todayCount = expenses.count { it.direction == TransactionDirection.OUTGOING && it.dateTime >= startOfToday },
             currency = home,
-            reviewCount = pending.size,
-            redactedStubs = pending.count { it.redactedStub }
+            // The same "still new to you" line the main screen's own top banner counts by — see
+            // AttentionKind.STAGED — rather than every row ever queued: a person who has already
+            // glanced at the backlog once does not need this number climbing back at them for
+            // captures they have already acknowledged, only for what arrived since.
+            reviewCount = pending.count { it.id > seen.stagedBefore },
+            // Live presence, not the stored flag: a stub's redactedStub bit only says what the last
+            // read of it found, and can outlive the notification it pointed at (swiped away, replaced,
+            // or recovered some other way without this row having been told). Cross-checking against
+            // what PaymentNotificationListenerService can currently see in the shade is what makes
+            // "can be rescanned" — and the action button it gates — mean what it says: something is
+            // really still there to read. Read once, not once per row: it is a system call.
+            redactedStubs = run {
+                val liveKeys = PaymentNotificationListenerService.activeKeysFrom(settings.paymentSourcePackages)
+                pending.count { it.redactedStub && it.sourceKey in liveKeys }
+            }
         )
     }
+
+    /** What one recompute needs, carried through [combine] as a single value — a local stand-in for
+     *  a five-element tuple, which the standard library does not have one of. */
+    private data class ComputeInput(
+        val expenses: List<com.voxapps.expenses.data.Expense>,
+        val pending: List<com.voxapps.expenses.domain.llm.PendingNotificationExpense>,
+        val settings: com.voxapps.expenses.data.preferences.ExpensesSettings,
+        val seen: com.voxapps.expenses.data.preferences.Dismissals
+    )
 
     private data class Content(
         val today: Double, val week: Double, val month: Double,
@@ -185,12 +212,29 @@ class RescanGuardService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
 
         if (c.redactedStubs > 0) {
-            val rescan = PendingIntent.getBroadcast(
-                this, 1,
-                Intent(this, ExpenseActionReceiver::class.java).setAction(RescanGuard.ACTION_RESCAN),
+            // Left: the same global re-check the settings screen's own button already offers,
+            // exposed here too since this is where a stuck stub is actually noticed.
+            val forceRecheck = PendingIntent.getBroadcast(
+                this, 2,
+                Intent(this, ExpenseActionReceiver::class.java).setAction(RescanGuard.ACTION_FORCE_RECHECK),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            builder.addAction(0, lang.getString("rescan_action"), rescan)
+            builder.addAction(0, lang.getString("rescan_action"), forceRecheck)
+
+            // Right, only when Vision is there to do the OCR fallback this already relies on —
+            // request code and target action unchanged from what this single action used to be.
+            if (VoxAppsDiscovery.isAppInstalled(this, VoxIpc.VISION_PACKAGE)) {
+                val rescanOcr = PendingIntent.getBroadcast(
+                    this, 1,
+                    Intent(this, ExpenseActionReceiver::class.java).setAction(RescanGuard.ACTION_RESCAN),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val visionIcon = VoxAppsDiscovery.loadAppIconBitmap(this, VoxIpc.VISION_PACKAGE)
+                    ?.let { IconCompat.createWithBitmap(it) }
+                builder.addAction(
+                    NotificationCompat.Action.Builder(visionIcon, lang.getString("rescan_ocr_action"), rescanOcr).build()
+                )
+            }
         }
         return builder.build()
     }

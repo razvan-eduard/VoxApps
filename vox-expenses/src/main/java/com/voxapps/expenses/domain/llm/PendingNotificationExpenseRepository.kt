@@ -58,8 +58,12 @@ data class PendingNotificationExpense(
      * NOT dismissed: the shade copy is the last complete record of the payment.
      */
     val redactedStub: Boolean = false,
-    /** The source notification's [android.service.notification.StatusBarNotification.getKey] —
-     *  kept so a recovered stub can finally dismiss the notification it came from. */
+    /** The source notification's [android.service.notification.StatusBarNotification.getKey].
+     *  Carried by every capture, not only a redacted stub: it is how a repeat capture of the same
+     *  still-shade notification folds into this row instead of appending a duplicate (see
+     *  [mergeBySourceKey]), and how approving or dismissing this entry can finally take the
+     *  notification it came from out of the shade — the reason a redacted stub's recovery could
+     *  already do the same. */
     val sourceKey: String? = null
 ) {
     /** The spelling this entry carries for the merchant: the one that was resolved, or the one being
@@ -89,7 +93,7 @@ class PendingNotificationExpenseRepository(context: Context) {
     suspend fun addPending(entry: PendingNotificationExpense) {
         dataStore.edit {
             val current = it[Keys.PENDING_ENTRIES]?.let { json -> decode(json) } ?: emptyList()
-            it[Keys.PENDING_ENTRIES] = encode(current + entry)
+            it[Keys.PENDING_ENTRIES] = encode(mergeBySourceKey(current, entry))
         }
     }
 
@@ -167,4 +171,36 @@ class PendingNotificationExpenseRepository(context: Context) {
     } catch (e: Exception) {
         emptyList()
     }
+}
+
+/**
+ * Folds [incoming] into [current] by the source notification it came from, rather than always
+ * appending — the same still-shade notification gets handed to [PendingNotificationExpenseRepository.addPending]
+ * again on every listener reconnect (an OEM killing this app's process is routine, not rare) and on
+ * every "Force-check notifications now" tap (which bypasses the processed-keys guard by design),
+ * and neither caller de-duplicates before calling. Keyed on [PendingNotificationExpense.sourceKey]
+ * rather than any field of the parsed content, since two genuinely different payments can otherwise
+ * share every visible field (the same vendor, the same amount, paid twice in a row).
+ *
+ * A repeat capture replaces its row rather than being silently dropped: the second read of an
+ * in-place-updated notification, or a retried force-check, can carry a better parse than the first.
+ * The existing row's id and capturedAt survive the replacement — capturedAt is when the payment
+ * happened, not when it was last reprocessed, the same reasoning [RedactedStubRecovery] already
+ * applies when it fills a stub. Never lets a repeat erase an amount already resolved, the one
+ * direction a plain "freshest wins" rule would regress.
+ *
+ * A null [PendingNotificationExpense.sourceKey] cannot be matched against anything, so it always
+ * appends — the pre-fix behaviour, kept for entries already in the store from before this existed.
+ */
+internal fun mergeBySourceKey(
+    current: List<PendingNotificationExpense>,
+    incoming: PendingNotificationExpense
+): List<PendingNotificationExpense> {
+    val key = incoming.sourceKey ?: return current + incoming
+    val index = current.indexOfFirst { it.sourceKey == key }
+    if (index < 0) return current + incoming
+    val existing = current[index]
+    if (incoming.totalAmount == null && existing.totalAmount != null) return current
+    val merged = incoming.copy(id = existing.id, capturedAt = existing.capturedAt)
+    return current.toMutableList().also { it[index] = merged }
 }

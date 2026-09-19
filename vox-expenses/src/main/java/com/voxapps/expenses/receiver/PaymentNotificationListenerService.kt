@@ -391,5 +391,20 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 requestRebind(ComponentName(context, PaymentNotificationListenerService::class.java))
             }
         }
+
+        /**
+         * The keys of notifications, from any of [packages], still genuinely visible in the shade
+         * right now — what tells a stored "redacted stub" row that is still actionable from one whose
+         * source notification is already gone (swiped away, replaced, or recovered some other way
+         * without this row having been told). A stub's own
+         * [com.voxapps.expenses.domain.llm.PendingNotificationExpense.redactedStub] flag only says
+         * what the last read of it found; this says what is still there to read.
+         * Empty, like every other companion query here, when the listener isn't bound.
+         */
+        fun activeKeysFrom(packages: Set<String>): Set<String> =
+            activeInstance?.activeNotifications
+                ?.filter { it.packageName in packages }
+                ?.mapTo(mutableSetOf()) { it.key }
+                .orEmpty()
     }
 }
