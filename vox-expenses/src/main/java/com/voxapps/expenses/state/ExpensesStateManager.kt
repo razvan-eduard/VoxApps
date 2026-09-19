@@ -44,6 +44,7 @@ import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.PendingCategoryMergeRepository
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.receiver.PaymentNotificationListenerService
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
 import androidx.paging.Pager
@@ -1043,16 +1044,29 @@ class ExpensesStateManager(
             templateDirectionMemory.confirm(entry.templateHash, entry.direction)
             if (entry.templateHash != null) Logger.d("TemplateMemory", "approve confirmed ${entry.direction} for template ${entry.templateHash}")
             pendingNotificationExpenseRepo.removePending(setOf(entry.id))
+            // A person just filed this — its source notification has nothing left to say, so it
+            // comes out of the shade too, or the next reconnect/force-check would capture it again.
+            entry.sourceKey?.let { PaymentNotificationListenerService.dismissCaptured(it) }
             maybeRequestScopedDuplicateCheck(context, settings.duplicateCheckModeAutomatic, id, settings.toNearDuplicateConfig())
         }
     }
 
-    fun dismissNotificationExpense(id: Long) {
-        scope.launch { pendingNotificationExpenseRepo.removePending(setOf(id)) }
+    fun dismissNotificationExpense(entry: PendingNotificationExpense) {
+        scope.launch {
+            // Same reasoning as approval's own dismissal: a person explicitly decided this entry is
+            // done, so its source notification should stop being eligible to come back as a new one.
+            entry.sourceKey?.let { PaymentNotificationListenerService.dismissCaptured(it) }
+            pendingNotificationExpenseRepo.removePending(setOf(entry.id))
+        }
     }
 
     fun dismissAllNotificationExpenses() {
-        scope.launch { pendingNotificationExpenseRepo.clearAll() }
+        scope.launch {
+            pendingNotificationExpenseRepo.snapshot().forEach { entry ->
+                entry.sourceKey?.let { PaymentNotificationListenerService.dismissCaptured(it) }
+            }
+            pendingNotificationExpenseRepo.clearAll()
+        }
     }
 
     val spendingLimits: Flow<List<SpendingLimit>> = expensesRepo.spendingLimits

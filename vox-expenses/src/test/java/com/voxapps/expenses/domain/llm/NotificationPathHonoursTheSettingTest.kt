@@ -114,6 +114,23 @@ class NotificationPathHonoursTheSettingTest {
         )
     }
 
+    /**
+     * The source notification's key has to reach every queued entry, not only a redacted one — it
+     * is what lets a repeat capture of the same still-shade notification fold into its existing row
+     * instead of appending a duplicate, and what lets approving/dismissing it later take the
+     * notification out of the shade too. A gate here would silently drop that for every entry the
+     * gate excludes.
+     */
+    @Test
+    fun `queueForReview keeps the source key for every entry, not only a redacted one`() {
+        val text = flowSource()
+        assertTrue(text.contains("sourceKey = f?.sourceKey"))
+        assertFalse(
+            "a redacted-only gate here strands every ordinary entry without a dedup/dismiss key",
+            text.contains("sourceKey = f?.sourceKey.takeIf")
+        )
+    }
+
     @Test
     fun `only the none setting keeps the sentence on the device`() {
         assertEquals(

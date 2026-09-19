@@ -1055,14 +1055,7 @@ private fun transformThroughAnchor(
 private fun rememberAppIcon(packageName: String): androidx.compose.ui.graphics.ImageBitmap? {
     val context = LocalContext.current
     return remember(packageName) {
-        runCatching<androidx.compose.ui.graphics.ImageBitmap> {
-            val drawable = context.packageManager.getApplicationIcon(packageName)
-            val bitmap = android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bitmap)
-            drawable.setBounds(0, 0, 96, 96)
-            drawable.draw(canvas)
-            bitmap.asImageBitmap()
-        }.getOrNull()
+        com.voxapps.ipc.VoxAppsDiscovery.loadAppIconBitmap(context, packageName)?.asImageBitmap()
     }
 }
 

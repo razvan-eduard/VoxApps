@@ -19,6 +19,10 @@ object RescanGuard {
 
     const val ACTION_RESCAN = "com.voxapps.expenses.action.RESCAN_REDACTED"
 
+    /** The notification's second action: the same global re-check the settings screen's
+     *  "Force-check notifications now" button already offers, exposed at the point of need too. */
+    const val ACTION_FORCE_RECHECK = "com.voxapps.expenses.action.FORCE_RECHECK"
+
     /** Brings the presence service up. Safe to call repeatedly — the OS folds a re-start into the
      *  running instance, which just keeps drawing its notification. */
     fun start(context: Context) {
