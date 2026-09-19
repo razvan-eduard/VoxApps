@@ -84,7 +84,8 @@ fun SpendingLimitsSettingsTab(
             expenses = expenses,
             knownCurrencies = knownCurrencies,
             onUpsert = { stateManager.upsertAccountBudget(it) },
-            onDelete = { stateManager.deleteAccountBudget(it) }
+            onDelete = { stateManager.deleteAccountBudget(it) },
+            onReconcile = { budget, remaining -> stateManager.reconcileAccountBudget(budget, remaining) }
         )
 
         WidgetBudgetHeaderCard(

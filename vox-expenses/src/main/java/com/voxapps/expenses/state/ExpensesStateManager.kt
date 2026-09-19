@@ -1146,6 +1146,12 @@ class ExpensesStateManager(
         scope.launch { expensesRepo.deleteAccountBudget(budget) }
     }
 
+    fun reconcileAccountBudget(budget: com.voxapps.expenses.data.AccountBudget, remaining: Double) {
+        scope.launch {
+            expensesRepo.reconcileAccountBudget(budget.accountId, budget.currencyCode, remaining, System.currentTimeMillis())
+        }
+    }
+
     fun addSpendingLimit(categoryId: Long?, amountHomeCurrency: Double, period: String, ownDeviceOnly: Boolean = true) {
         scope.launch { expensesRepo.addSpendingLimit(categoryId, amountHomeCurrency, period, ownDeviceOnly = ownDeviceOnly) }
     }
