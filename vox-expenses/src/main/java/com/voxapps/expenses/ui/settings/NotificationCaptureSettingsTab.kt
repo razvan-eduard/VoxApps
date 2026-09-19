@@ -56,6 +56,7 @@ import com.voxapps.apppicker.AppPickerCard
 import com.voxapps.apppicker.AppPickerStrings
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.data.preferences.knownCurrencies
 import com.voxapps.expenses.domain.apps.LauncherAppsCache
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.receiver.PaymentNotificationListenerService
@@ -599,9 +600,8 @@ fun NotificationCaptureSettingsTab(
                 accounts = accounts,
                 autoCreateFromScans = settings.autoCreateAccountsFromScans,
                 autoCreateFromNotifications = settings.autoCreateAccountsFromNotifications,
-                knownCurrencies = remember(accounts, settings.defaultCurrency) {
-                    (accounts.map { it.currencyCode } + settings.defaultCurrency)
-                        .filter { it.isNotBlank() }.distinct().sorted()
+                knownCurrencies = remember(accounts, settings) {
+                    settings.knownCurrencies(accounts.map { it.currencyCode }).sorted()
                 },
                 onAutoCreateFromScansChange = { stateManager.setAutoCreateAccountsFromScans(it) },
                 onAutoCreateFromNotificationsChange = { stateManager.setAutoCreateAccountsFromNotifications(it) },
