@@ -108,12 +108,13 @@ class NotificationPreParseTest {
     }
 
     @Test
-    fun `a purchase with a balance line declines the amount`() {
-        // Two distinct currency-marked figures — choosing between them is not a regex's call.
+    fun `a purchase with a balance line resolves to the figure stated first`() {
+        // Two distinct currency-marked figures: the one stated first is the transaction, the one
+        // stated after is the account's new balance — never the reverse.
         val r = NotificationPreParse.parse(
             "Revolut", "You spent 45,20 RON at the shop. RON balance: 900,00 RON", vocabularies
         )
-        assertNull(r.amount)
+        assertEquals(45.2, r.amount!!, 0.0)
     }
 
     @Test

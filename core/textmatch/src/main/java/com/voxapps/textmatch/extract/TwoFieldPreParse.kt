@@ -18,9 +18,10 @@ package com.voxapps.textmatch.extract
  *    because "63,00 RON with ING Card ••4535" names ING, not a merchant called all of that;
  *  - when a bank is found and no legal form anywhere, the leftover field is the vendor — but only
  *    when it is short enough to be a name; a sentence is prose, and prose is the model's job;
- *  - the amount is taken only when the text carries exactly one distinct currency-marked figure —
- *    a purchase-plus-balance notification carries two, and choosing between them is not a regex's
- *    call.
+ *  - the amount is the one distinct currency-marked figure the text carries; with exactly two,
+ *    the first is taken and the second set aside — a payment notification states what happened
+ *    before it states the account's new state, never the reverse, so the earlier figure is the
+ *    transaction and the later one its balance. Three or more is genuinely ambiguous and declines.
  */
 object TwoFieldPreParse {
 
@@ -202,11 +203,21 @@ object TwoFieldPreParse {
     }
 
     private fun singleMarkedAmount(fields: List<String>): Double? {
-        // The finding of marked figures is core machinery; the certainty policy — exactly one
-        // distinct value or nothing — is this parser's own.
-        val values = fields.flatMap { f -> CurrencyMarkedAmounts.find(f) }
-            .map { it.value }.distinct()
-        return values.singleOrNull()?.takeIf { it > 0.0 }
+        // The finding of marked figures is core machinery; the certainty policy is this parser's
+        // own. [CurrencyMarkedAmounts.find] already returns findings in document order (field by
+        // field, line by line, left to right within a line), which is what lets the two-figure
+        // case below trust "first" to mean "stated first."
+        val findings = fields.flatMap { f -> CurrencyMarkedAmounts.find(f) }
+        val values = findings.map { it.value }.distinct()
+        return when (values.size) {
+            1 -> values.single().takeIf { it > 0.0 }
+            // A payment notification narrates what happened before it narrates the account's new
+            // state — "you spent X" precedes "balance: Y", never the reverse, across every
+            // bank/wallet template this has seen one of. Two distinct figures is exactly that
+            // shape: the one stated first is the transaction, the one stated after is left over.
+            2 -> findings.first().value.takeIf { it > 0.0 }
+            else -> null
+        }
     }
 
     /**
