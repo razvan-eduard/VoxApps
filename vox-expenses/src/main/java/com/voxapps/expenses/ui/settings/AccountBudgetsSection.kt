@@ -59,6 +59,7 @@ fun AccountBudgetsSection(
     knownCurrencies: List<String>,
     onUpsert: (AccountBudget) -> Unit,
     onDelete: (AccountBudget) -> Unit,
+    onReconcile: (AccountBudget, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
@@ -113,7 +114,8 @@ fun AccountBudgetsSection(
                                 reconciledRemaining = null
                             )
                         )
-                    }
+                    },
+                    onReconcile = { remaining -> onReconcile(budget, remaining) }
                 )
             }
             if (addingFor == account.id) {
@@ -236,11 +238,14 @@ private fun BudgetRow(
     accounts: List<BankAccount>,
     languageManager: LanguageManager,
     onDelete: () -> Unit,
-    onTopUp: () -> Unit
+    onTopUp: () -> Unit,
+    onReconcile: (Double) -> Unit
 ) {
     val opening = BudgetMath.openingBalance(budget)
     val remaining = BudgetMath.remaining(budget, expenses, accounts)
     val fraction = if (opening > 0) (remaining / opening).coerceIn(0.0, 1.0).toFloat() else 0f
+    var reconciling by remember(budget.id) { mutableStateOf(false) }
+    var reconcileText by remember(budget.id) { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -267,6 +272,12 @@ private fun BudgetRow(
                     )
                 }
             }
+            TextButton(onClick = { reconciling = !reconciling }) {
+                Text(
+                    languageManager.getString("budget_reconcile_action"),
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Filled.Delete,
@@ -290,6 +301,34 @@ private fun BudgetRow(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (reconciling) {
+            Text(
+                languageManager.getString("budget_reconcile_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            OutlinedTextField(
+                value = reconcileText,
+                onValueChange = { reconcileText = it },
+                label = { Text(languageManager.getString("budget_reconcile_label")) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                TextButton(
+                    onClick = {
+                        reconcileText.trim().replace(',', '.').toDoubleOrNull()?.let(onReconcile)
+                        reconciling = false
+                        reconcileText = ""
+                    },
+                    enabled = reconcileText.trim().replace(',', '.').toDoubleOrNull() != null
+                ) { Text(languageManager.getString("save")) }
+                TextButton(onClick = { reconciling = false; reconcileText = "" }) {
+                    Text(languageManager.getString("cancel"))
+                }
+            }
+        }
     }
 }
 
