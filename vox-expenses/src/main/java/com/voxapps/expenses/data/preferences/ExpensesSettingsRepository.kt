@@ -28,6 +28,7 @@ interface ExpensesSettingsRepository {
     suspend fun setPaymentSourcePackages(packages: Set<String>)
     suspend fun setBankingSourcePackages(packages: Set<String>)
     suspend fun setAutoAcceptNotificationExpenses(enabled: Boolean)
+    suspend fun setNotificationBalanceReconcileMode(mode: String)
     suspend fun setDebugLoggingEnabled(enabled: Boolean)
     /** See [ExpensesSettings.vatDisplay]; unknown values are ignored rather than stored. */
     suspend fun setVatDisplay(mode: String)

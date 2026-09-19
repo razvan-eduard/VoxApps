@@ -44,6 +44,8 @@ import com.voxapps.expenses.domain.llm.ExpenseSummary
 import com.voxapps.expenses.domain.llm.PendingCategoryMergeRepository
 import com.voxapps.expenses.domain.llm.PendingNotificationExpense
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.domain.budget.PendingBudgetReconcile
+import com.voxapps.expenses.domain.budget.PendingBudgetReconcileRepository
 import com.voxapps.expenses.receiver.PaymentNotificationListenerService
 import com.voxapps.ipc.VoxLlmRequestQueue
 import com.voxapps.logging.Logger
@@ -78,6 +80,7 @@ class ExpensesStateManager(
     private val pendingCategoryMergeRepo: PendingCategoryMergeRepository,
     private val expenseDeduplicationRepo: ExpenseDeduplicationRepository,
     private val pendingNotificationExpenseRepo: PendingNotificationExpenseRepository,
+    private val pendingBudgetReconcileRepo: PendingBudgetReconcileRepository,
     private val recurringPaymentRepo: com.voxapps.expenses.domain.recurring.RecurringPaymentRepository,
     private val spendingLimitAlertRepo: SpendingLimitAlertRepository,
     private val pendingLlmRequestQueue: VoxLlmRequestQueue,
@@ -401,6 +404,7 @@ class ExpensesStateManager(
     fun setPaymentSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setPaymentSourcePackages(packages) } }
     fun setBankingSourcePackages(packages: Set<String>) { scope.launch { settingsRepo.setBankingSourcePackages(packages) } }
     fun setAutoAcceptNotificationExpenses(enabled: Boolean) { scope.launch { settingsRepo.setAutoAcceptNotificationExpenses(enabled) } }
+    fun setNotificationBalanceReconcileMode(mode: String) { scope.launch { settingsRepo.setNotificationBalanceReconcileMode(mode) } }
     fun setDebugLoggingEnabled(enabled: Boolean) {
         Logger.setEnabled(enabled)
         scope.launch { settingsRepo.setDebugLoggingEnabled(enabled) }
@@ -1143,13 +1147,32 @@ class ExpensesStateManager(
     }
 
     fun deleteAccountBudget(budget: com.voxapps.expenses.data.AccountBudget) {
-        scope.launch { expensesRepo.deleteAccountBudget(budget) }
+        scope.launch {
+            expensesRepo.deleteAccountBudget(budget)
+            // Otherwise a pending suggestion for this exact (account, currency) key would sit in
+            // the DataStore forever, invisible, since its BudgetRow no longer renders.
+            pendingBudgetReconcileRepo.removePending(budget.accountId, budget.currencyCode)
+        }
     }
 
     fun reconcileAccountBudget(budget: com.voxapps.expenses.data.AccountBudget, remaining: Double) {
         scope.launch {
             expensesRepo.reconcileAccountBudget(budget.accountId, budget.currencyCode, remaining, System.currentTimeMillis())
         }
+    }
+
+    val pendingBudgetReconciles: Flow<List<PendingBudgetReconcile>> = pendingBudgetReconcileRepo.pendingFlow
+
+    /** Believes the suggestion — the exact same write the row's own manual Reconcile button makes. */
+    fun applyPendingBudgetReconcile(entry: PendingBudgetReconcile) {
+        scope.launch {
+            expensesRepo.reconcileAccountBudget(entry.accountId, entry.currencyCode, entry.remaining, entry.statedAt)
+            pendingBudgetReconcileRepo.removePending(entry.accountId, entry.currencyCode)
+        }
+    }
+
+    fun dismissPendingBudgetReconcile(entry: PendingBudgetReconcile) {
+        scope.launch { pendingBudgetReconcileRepo.removePending(entry.accountId, entry.currencyCode) }
     }
 
     fun addSpendingLimit(categoryId: Long?, amountHomeCurrency: Double, period: String, ownDeviceOnly: Boolean = true) {

@@ -348,6 +348,16 @@ class NotificationPreParseTest {
         assertNull(r.currency)
     }
 
+    /** The parser stays a neutral fact-reporter: it still surfaces the second figure even when the
+     *  message names two currencies. Whether a caller may trust it as this account's own balance
+     *  in that case is the caller's policy (see NotificationBalanceReconciler), not this parser's. */
+    @Test
+    fun `a second figure is exposed even when the currencies disagree, for the caller to judge`() {
+        val r = NotificationPreParse.parse("Revolut", "Paid 10 EUR, balance 200 RON", vocabularies, known)
+        assertNull(r.currency)
+        assertEquals(200.0, r.secondAmount!!, 0.001)
+    }
+
     @Test
     fun `a message with no currency reads none`() {
         assertNull(NotificationPreParse.parse("Revolut", "Your card was delivered", vocabularies, known).currency)

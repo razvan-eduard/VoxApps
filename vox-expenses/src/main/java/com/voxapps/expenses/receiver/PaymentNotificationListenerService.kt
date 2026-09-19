@@ -199,6 +199,22 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             amountAnchorsVendor = sbn.packageName in settings.bankingSourcePackages
         )
         val bankName = preParse.bank ?: knownBankName
+        // Independent of whatever this notification's own amount/vendor/bank resolve to below — a
+        // two-figure message's second figure is the account's own stated balance, and whether it is
+        // believed, offered, or ignored is a fact about the account, not about this one capture.
+        // Wrapped so a bug in this brand-new path can never break the capture pipeline it sits beside.
+        runCatching {
+            com.voxapps.expenses.domain.budget.NotificationBalanceReconciler.reconcile(
+                container = container,
+                settings = settings,
+                fromStarredBank = sbn.packageName in settings.bankingSourcePackages,
+                statedAt = sbn.postTime,
+                bankName = bankName,
+                sourceText = listOfNotNull(cleanTitle, fullText).joinToString(" "),
+                secondAmount = preParse.secondAmount,
+                currency = preParse.currency
+            )
+        }.onFailure { Logger.w(TAG, "Balance reconcile from notification failed: ${it.message}") }
         // The template axis: reduce the message to its template's byte-shape and ask the memory
         // whether a human has already said what this exact sentence means. A hit suppresses
         // direction from the model the same way the other resolved fields are suppressed.

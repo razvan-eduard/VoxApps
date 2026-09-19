@@ -21,6 +21,9 @@ class TwoFieldPreParseAmountTest {
     private fun amount(title: String?, text: String?) =
         TwoFieldPreParse.parse(title, text, vocabularies, roles, setOf("RON")).amount
 
+    private fun secondAmount(title: String?, text: String?) =
+        TwoFieldPreParse.parse(title, text, vocabularies, roles, setOf("RON")).secondAmount
+
     @Test
     fun `a single marked figure is taken outright`() {
         assertEquals(37.0, amount("Some Shop", "37,00 RON")!!, 0.0)
@@ -49,5 +52,29 @@ class TwoFieldPreParseAmountTest {
     @Test
     fun `no marked figure at all resolves to nothing`() {
         assertNull(amount("Some Shop", "no currency here"))
+    }
+
+    @Test
+    fun `two distinct figures expose the second as secondAmount`() {
+        assertEquals(728.49, secondAmount(null, "You spent 19,83 RON\nBalance: 728,49 RON")!!, 0.0)
+    }
+
+    @Test
+    fun `a single marked figure has no secondAmount`() {
+        assertNull(secondAmount("Some Shop", "37,00 RON"))
+    }
+
+    @Test
+    fun `three distinct figures have no secondAmount either`() {
+        assertNull(secondAmount(null, "Paid 19,83 RON, fee 2,00 RON\nBalance: 728,49 RON"))
+    }
+
+    @Test
+    fun `a figure repeated alongside one other distinct figure still resolves secondAmount to the true second value`() {
+        assertEquals(
+            728.49,
+            secondAmount(null, "You spent 19,83 RON\n19,83 RON was deducted\nBalance: 728,49 RON")!!,
+            0.0
+        )
     }
 }
