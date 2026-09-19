@@ -26,6 +26,7 @@ import com.voxapps.expenses.data.ExchangeRateApiKeyStore
 import com.voxapps.expenses.data.ExchangeRateRepository
 import com.voxapps.expenses.data.ExternalServiceConfig
 import com.voxapps.expenses.data.preferences.ExpensesSettings
+import com.voxapps.expenses.data.preferences.knownCurrencies
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.ui.LocalLanguageManager
 import kotlinx.coroutines.launch
@@ -63,9 +64,8 @@ fun CurrencySettingsTab(
     // providers use, through the same picklist.
     // What the records already name, so the account default is chosen from currencies in use.
     val accounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-    val knownCurrencies = remember(accounts, settings.defaultCurrency) {
-        (accounts.map { it.currencyCode } + settings.defaultCurrency)
-            .filter { it.isNotBlank() }.distinct().sorted()
+    val knownCurrencies = remember(accounts, settings) {
+        settings.knownCurrencies(accounts.map { it.currencyCode }).sorted()
     }
 
     val services = remember { ExternalServiceConfig.currencyServices(context) }

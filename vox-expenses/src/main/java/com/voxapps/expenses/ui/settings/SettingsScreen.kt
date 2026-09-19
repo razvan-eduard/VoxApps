@@ -69,6 +69,7 @@ import com.voxapps.design.toEnumOr
 import com.voxapps.expenses.data.ExchangeRateRepository
 import com.voxapps.expenses.data.preferences.ExpensesSettings
 import com.voxapps.expenses.data.preferences.ExpensesSettingsRepository
+import com.voxapps.expenses.data.preferences.knownCurrencies
 import com.voxapps.expenses.state.ExpensesStateManager
 import com.voxapps.expenses.state.ExpensesUiState
 import com.voxapps.expenses.ui.LocalLanguageManager
@@ -443,9 +444,8 @@ fun SettingsScreen(
                 budgets = accountBudgets,
                 expenses = expenses,
                 listState = ui as? ExpensesUiState.Unlocked,
-                knownCurrencies = remember(budgetAccounts, settings.homeCurrency, settings.defaultCurrency) {
-                    (budgetAccounts.map { it.currencyCode } + settings.homeCurrency + settings.defaultCurrency)
-                        .filter { it.isNotBlank() }.distinct().sorted()
+                knownCurrencies = remember(budgetAccounts, settings) {
+                    settings.knownCurrencies(budgetAccounts.map { it.currencyCode }).sorted()
                 },
                 widgetBudgetMode = settings.widgetBudgetMode,
                 widgetBudgetAccountIds = settings.widgetBudgetAccountIds,
