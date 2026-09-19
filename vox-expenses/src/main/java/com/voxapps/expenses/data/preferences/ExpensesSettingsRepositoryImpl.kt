@@ -78,6 +78,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         val PAYMENT_SOURCE_PACKAGES = stringSetPreferencesKey("payment_source_packages")
         val BANKING_SOURCE_PACKAGES = stringSetPreferencesKey("banking_source_packages")
         val AUTO_ACCEPT_NOTIFICATION_EXPENSES = booleanPreferencesKey("auto_accept_notification_expenses")
+        val NOTIFICATION_BALANCE_RECONCILE_MODE = stringPreferencesKey("notification_balance_reconcile_mode")
         val DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val VAT_DISPLAY_ENABLED = booleanPreferencesKey("vat_display_enabled")
         val VAT_DISPLAY = stringPreferencesKey("vat_display")
@@ -195,6 +196,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             paymentSourcePackages = prefs[Keys.PAYMENT_SOURCE_PACKAGES] ?: emptySet(),
             bankingSourcePackages = prefs[Keys.BANKING_SOURCE_PACKAGES] ?: emptySet(),
             autoAcceptNotificationExpenses = prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] ?: false,
+            notificationBalanceReconcileMode = prefs[Keys.NOTIFICATION_BALANCE_RECONCILE_MODE] ?: ExpensesSettings.BALANCE_RECONCILE_OFF,
             debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             // The old two-state setting is read once, where the new one has never been written:
             // somebody who had the breakdown showing keeps it showing, and somebody who had it off
@@ -463,6 +465,10 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
         dataStore.edit { it[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] = enabled }
     }
 
+    override suspend fun setNotificationBalanceReconcileMode(mode: String) {
+        dataStore.edit { it[Keys.NOTIFICATION_BALANCE_RECONCILE_MODE] = mode }
+    }
+
     override suspend fun setDebugLoggingEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.DEBUG_LOGGING_ENABLED] = enabled }
     }
@@ -728,6 +734,7 @@ class ExpensesSettingsRepositoryImpl(appContext: Context) : ExpensesSettingsRepo
             prefs[Keys.PAYMENT_SOURCE_PACKAGES] = settings.paymentSourcePackages
             prefs[Keys.BANKING_SOURCE_PACKAGES] = settings.bankingSourcePackages
             prefs[Keys.AUTO_ACCEPT_NOTIFICATION_EXPENSES] = settings.autoAcceptNotificationExpenses
+            prefs[Keys.NOTIFICATION_BALANCE_RECONCILE_MODE] = settings.notificationBalanceReconcileMode
             prefs[Keys.DEBUG_LOGGING_ENABLED] = settings.debugLoggingEnabled
             prefs[Keys.VAT_DISPLAY] = settings.vatDisplay
             prefs[Keys.DECIMAL_SEPARATOR] = settings.decimalSeparator

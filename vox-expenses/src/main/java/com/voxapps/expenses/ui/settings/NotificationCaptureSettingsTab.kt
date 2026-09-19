@@ -131,6 +131,7 @@ fun NotificationCaptureSettingsTab(
     paymentSourcePackages: Set<String>,
     bankingSourcePackages: Set<String>,
     autoAcceptNotificationExpenses: Boolean,
+    notificationBalanceReconcileMode: String,
     notificationModelUse: String,
     notificationAssumedDirection: String,
     captureAmountlessPayments: Boolean,
@@ -568,6 +569,29 @@ fun NotificationCaptureSettingsTab(
                         checked = autoAcceptNotificationExpenses,
                         onCheckedChange = { stateManager.setAutoAcceptNotificationExpenses(it) }
                     )
+                }
+            }
+        }
+
+        item {
+            SettingsSectionCard(languageManager.getString("notification_balance_reconcile_mode_label")) {
+                Text(
+                    languageManager.getString("notification_balance_reconcile_mode_desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    listOf(
+                        ExpensesSettings.BALANCE_RECONCILE_OFF to "notification_balance_reconcile_off",
+                        ExpensesSettings.BALANCE_RECONCILE_SUGGEST to "notification_balance_reconcile_suggest",
+                        ExpensesSettings.BALANCE_RECONCILE_AUTO to "notification_balance_reconcile_auto"
+                    ).forEach { (mode, labelKey) ->
+                        FilterChip(
+                            selected = notificationBalanceReconcileMode == mode,
+                            onClick = { stateManager.setNotificationBalanceReconcileMode(mode) },
+                            label = { Text(languageManager.getString(labelKey)) }
+                        )
+                    }
                 }
             }
         }

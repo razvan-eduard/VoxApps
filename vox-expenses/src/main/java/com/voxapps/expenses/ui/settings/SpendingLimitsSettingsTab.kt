@@ -56,6 +56,7 @@ fun SpendingLimitsSettingsTab(
      *  reached from the screen it changes. Absent only while the app is locked. */
     listState: com.voxapps.expenses.state.ExpensesUiState.Unlocked?,
     knownCurrencies: List<String>,
+    pendingBudgetReconciles: List<com.voxapps.expenses.domain.budget.PendingBudgetReconcile>,
     widgetBudgetMode: String,
     widgetBudgetAccountIds: Set<Long>,
     stateManager: ExpensesStateManager,
@@ -83,9 +84,12 @@ fun SpendingLimitsSettingsTab(
             budgets = budgets,
             expenses = expenses,
             knownCurrencies = knownCurrencies,
+            pendingReconciles = pendingBudgetReconciles,
             onUpsert = { stateManager.upsertAccountBudget(it) },
             onDelete = { stateManager.deleteAccountBudget(it) },
-            onReconcile = { budget, remaining -> stateManager.reconcileAccountBudget(budget, remaining) }
+            onReconcile = { budget, remaining -> stateManager.reconcileAccountBudget(budget, remaining) },
+            onApplyPending = { stateManager.applyPendingBudgetReconcile(it) },
+            onDismissPending = { stateManager.dismissPendingBudgetReconcile(it) }
         )
 
         WidgetBudgetHeaderCard(

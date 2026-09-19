@@ -441,6 +441,13 @@ class ExpensesRepository(
         accountBudgetDao?.delete(budget)
     }
 
+    /** The budget already on file for this account and currency, or null when none has been set up
+     *  — the gate [com.voxapps.expenses.domain.budget.NotificationBalanceReconciler] and any other
+     *  automatic writer of this table must pass, since nothing here invents a budget nobody
+     *  configured. */
+    suspend fun accountBudgetFor(accountId: Long, currencyCode: String): AccountBudget? =
+        accountBudgetDao?.forAccount(accountId, currencyCode)
+
     /**
      * Believes a statement: from this moment, what is left is this, and only records newer than it
      * count against it. See [AccountBudget.reconciledAt].
@@ -448,6 +455,14 @@ class ExpensesRepository(
     suspend fun reconcileAccountBudget(accountId: Long, currencyCode: String, remaining: Double, atMillis: Long) {
         val dao = accountBudgetDao ?: return
         val budget = dao.forAccount(accountId, currencyCode) ?: return
+        // A statement believed once already is not un-believed by an older one arriving late — an
+        // automatic caller can see the same notification more than once (a reconnect catch-up scan,
+        // a forced re-check), and a stale replay must never move reconciledAt backward, which would
+        // make records already counted since the real reconciliation start counting again.
+        if (budget.reconciledAt != null && atMillis < budget.reconciledAt) {
+            Logger.d(TAG_ACCOUNTS, "Ignored an older statement than what budget ${budget.id} already believes")
+            return
+        }
         dao.update(budget.copy(reconciledAt = atMillis, reconciledRemaining = remaining))
         Logger.d(TAG_ACCOUNTS, "Budget ${budget.id} believed a statement of $remaining $currencyCode")
     }

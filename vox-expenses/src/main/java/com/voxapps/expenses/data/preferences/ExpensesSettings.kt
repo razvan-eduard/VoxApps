@@ -44,6 +44,9 @@ import com.voxapps.design.effects.TodayEffectStyle
  *   parses successfully is inserted straight away (same as manual/voice entry, editable afterward)
  *   instead of sitting in the pending-review queue for an explicit Approve tap. See
  *   [com.voxapps.expenses.receiver.LlmResultReceiver]'s `NOTIFICATION_EXPENSE_PARSE` handling.
+ * - [notificationBalanceReconcileMode]: off by default — what a two-figure payment notification's
+ *   second figure (the account's own stated balance) becomes: ignored, offered as a suggestion, or
+ *   believed automatically. See [com.voxapps.expenses.domain.budget.NotificationBalanceReconciler].
  * - [debugLoggingEnabled]: gates `com.voxapps.logging.Logger` output — off by default.
  * - [vatDisplayEnabled]: shows the optional per-line-item net/VAT/gross breakdown (see
  *   `ExpenseLineItem.netAmount`/`vatAmount`/`grossAmount`) on the edit screen — off by default since
@@ -254,6 +257,16 @@ data class ExpensesSettings(
     val paymentSourcePackages: Set<String> = emptySet(),
     val bankingSourcePackages: Set<String> = emptySet(),
     val autoAcceptNotificationExpenses: Boolean = false,
+    /** [BALANCE_RECONCILE_OFF] by default — a wholly new capability nobody has opted into yet. A
+     *  payment notification stating two figures (see [com.voxapps.textmatch.extract.TwoFieldPreParse])
+     *  carries the account's own remaining balance as the second one; this decides what becomes of
+     *  it: ignored, offered on the matching [com.voxapps.expenses.data.AccountBudget] row
+     *  ([BALANCE_RECONCILE_SUGGEST]), or believed outright — the same write the row's own manual
+     *  Reconcile button makes ([BALANCE_RECONCILE_AUTO]). Only ever considered for a starred
+     *  banking source, an account already on file with an existing budget, and a message naming
+     *  one currency for its whole text — see
+     *  [com.voxapps.expenses.domain.budget.NotificationBalanceReconciler]. */
+    val notificationBalanceReconcileMode: String = BALANCE_RECONCILE_OFF,
     val debugLoggingEnabled: Boolean = false,
     /**
      * Whether the net/VAT/gross breakdown is shown — see [VAT_OFF], [VAT_AUTO], [VAT_ON].
@@ -632,6 +645,10 @@ data class ExpensesSettings(
 
         const val CORRECTION_APPLY_SUGGEST = "SUGGEST"
         const val CORRECTION_APPLY_AUTO = "AUTO"
+
+        const val BALANCE_RECONCILE_OFF = "OFF"
+        const val BALANCE_RECONCILE_SUGGEST = "SUGGEST"
+        const val BALANCE_RECONCILE_AUTO = "AUTO"
 
         const val THICKNESS_THIN = 1
         const val THICKNESS_MEDIUM = 2

@@ -19,9 +19,10 @@ package com.voxapps.textmatch.extract
  *  - when a bank is found and no legal form anywhere, the leftover field is the vendor — but only
  *    when it is short enough to be a name; a sentence is prose, and prose is the model's job;
  *  - the amount is the one distinct currency-marked figure the text carries; with exactly two,
- *    the first is taken and the second set aside — a payment notification states what happened
- *    before it states the account's new state, never the reverse, so the earlier figure is the
- *    transaction and the later one its balance. Three or more is genuinely ambiguous and declines.
+ *    the first is taken as the amount and the second is surfaced as [Result.secondAmount] — a
+ *    payment notification states what happened before it states the account's new state, never
+ *    the reverse, so the earlier figure is the transaction and the later one its balance. Three
+ *    or more is genuinely ambiguous and declines.
  */
 object TwoFieldPreParse {
 
@@ -31,7 +32,12 @@ object TwoFieldPreParse {
         val bank: String?,
         /** The currency the message states, under the same certainty rule as the amount: exactly
          *  one, or none. A figure is almost never sent without saying what it is a figure of. */
-        val currency: String? = null
+        val currency: String? = null,
+        /** The later of two figures, when there were exactly two — see [singleMarkedAmount]. Null
+         *  whenever [amount] came from a single-figure, zero, or ambiguous (3+) reading. Reported
+         *  regardless of [currency]: whether a caller may trust it as this account's own balance
+         *  when the message names more than one currency is the caller's policy, not this reader's. */
+        val secondAmount: Double? = null
     )
 
     /**
@@ -163,13 +169,15 @@ object TwoFieldPreParse {
             }
         }
 
+        val amounts = singleMarkedAmount(fields)
         return Result(
-            amount = singleMarkedAmount(fields),
+            amount = amounts.amount,
             vendor = vendor,
             bank = bank,
             // Read from the whole message rather than from beside the figure: a line states its
             // currency once and it is the same currency wherever in the line it stands.
-            currency = CurrencyCodes.find(fields.joinToString("\n"), knownCurrencies)
+            currency = CurrencyCodes.find(fields.joinToString("\n"), knownCurrencies),
+            secondAmount = amounts.secondAmount
         )
     }
 
@@ -202,21 +210,27 @@ object TwoFieldPreParse {
         return tokens.joinToString(" ")
     }
 
-    private fun singleMarkedAmount(fields: List<String>): Double? {
+    /** [amount]/[secondAmount] pulled apart so [parse] can report both — see [Result.secondAmount]. */
+    private data class AmountReading(val amount: Double?, val secondAmount: Double? = null)
+
+    private fun singleMarkedAmount(fields: List<String>): AmountReading {
         // The finding of marked figures is core machinery; the certainty policy is this parser's
         // own. [CurrencyMarkedAmounts.find] already returns findings in document order (field by
         // field, line by line, left to right within a line), which is what lets the two-figure
-        // case below trust "first" to mean "stated first."
+        // case below trust "first" to mean "stated first" and "second" to mean "stated after."
         val findings = fields.flatMap { f -> CurrencyMarkedAmounts.find(f) }
         val values = findings.map { it.value }.distinct()
         return when (values.size) {
-            1 -> values.single().takeIf { it > 0.0 }
+            1 -> AmountReading(values.single().takeIf { it > 0.0 })
             // A payment notification narrates what happened before it narrates the account's new
             // state — "you spent X" precedes "balance: Y", never the reverse, across every
             // bank/wallet template this has seen one of. Two distinct figures is exactly that
             // shape: the one stated first is the transaction, the one stated after is left over.
-            2 -> findings.first().value.takeIf { it > 0.0 }
-            else -> null
+            2 -> AmountReading(
+                amount = findings.first().value.takeIf { it > 0.0 },
+                secondAmount = values[1].takeIf { it > 0.0 }
+            )
+            else -> AmountReading(null)
         }
     }
 

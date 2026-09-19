@@ -116,6 +116,7 @@ fun SettingsScreen(
     val spendingLimits by stateManager.spendingLimits.collectAsStateWithLifecycle(initialValue = emptyList())
     val budgetAccounts by stateManager.bankAccountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val accountBudgets by stateManager.accountBudgets.collectAsStateWithLifecycle(initialValue = emptyList())
+    val pendingBudgetReconciles by stateManager.pendingBudgetReconciles.collectAsStateWithLifecycle(initialValue = emptyList())
     val recurringPayments by stateManager.recurringPayments.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var page by remember { mutableStateOf(startPage ?: SettingsPage.MENU) }
@@ -422,6 +423,7 @@ fun SettingsScreen(
                 paymentSourcePackages = settings.paymentSourcePackages,
                 bankingSourcePackages = settings.bankingSourcePackages,
                 autoAcceptNotificationExpenses = settings.autoAcceptNotificationExpenses,
+                notificationBalanceReconcileMode = settings.notificationBalanceReconcileMode,
                     notificationModelUse = settings.notificationModelUse,
                     notificationAssumedDirection = settings.notificationAssumedDirection,
                     captureAmountlessPayments = settings.captureAmountlessPayments,
@@ -447,6 +449,7 @@ fun SettingsScreen(
                 knownCurrencies = remember(budgetAccounts, settings) {
                     settings.knownCurrencies(budgetAccounts.map { it.currencyCode }).sorted()
                 },
+                pendingBudgetReconciles = pendingBudgetReconciles,
                 widgetBudgetMode = settings.widgetBudgetMode,
                 widgetBudgetAccountIds = settings.widgetBudgetAccountIds,
                 stateManager = stateManager,

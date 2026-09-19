@@ -14,6 +14,7 @@ import com.voxapps.expenses.domain.limits.SpendingLimitAlertRepository
 import com.voxapps.expenses.domain.llm.ExpenseDeduplicationRepository
 import com.voxapps.expenses.domain.llm.PendingCategoryMergeRepository
 import com.voxapps.expenses.domain.llm.PendingNotificationExpenseRepository
+import com.voxapps.expenses.domain.budget.PendingBudgetReconcileRepository
 import com.voxapps.expenses.domain.llm.ScanPreParseRepository
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.state.ExpensesStateManager
@@ -90,6 +91,7 @@ class ExpensesContainer(context: Context) {
     val pendingCategoryMergeRepository = PendingCategoryMergeRepository(appContext)
     val expenseDeduplicationRepository = ExpenseDeduplicationRepository(appContext)
     val pendingNotificationExpenseRepository = PendingNotificationExpenseRepository(appContext)
+    val pendingBudgetReconcileRepository = PendingBudgetReconcileRepository(appContext)
     val scanPreParseRepository = ScanPreParseRepository(appContext)
     val templateDirectionMemory = com.voxapps.expenses.domain.llm.TemplateDirectionMemory(appContext)
     val exchangeRateRepository = ExchangeRateRepository(appContext)
@@ -104,6 +106,7 @@ class ExpensesContainer(context: Context) {
         pendingCategoryMergeRepository,
         expenseDeduplicationRepository,
         pendingNotificationExpenseRepository,
+        pendingBudgetReconcileRepository,
         recurringPaymentRepository,
         spendingLimitAlertRepository,
         pendingLlmRequestQueue,

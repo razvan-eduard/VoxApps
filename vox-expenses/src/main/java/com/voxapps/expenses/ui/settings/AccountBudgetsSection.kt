@@ -16,6 +16,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,8 +38,12 @@ import com.voxapps.expenses.data.Expense
 import com.voxapps.expenses.data.SpendingLimit
 import com.voxapps.expenses.domain.accounts.BankAccountTree
 import com.voxapps.expenses.domain.budget.BudgetMath
+import com.voxapps.expenses.domain.budget.PendingBudgetReconcile
 import com.voxapps.expenses.domain.localization.LanguageManager
 import com.voxapps.expenses.ui.LocalLanguageManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * What there is left to spend, per account and per currency.
@@ -57,9 +62,12 @@ fun AccountBudgetsSection(
     budgets: List<AccountBudget>,
     expenses: List<Expense>,
     knownCurrencies: List<String>,
+    pendingReconciles: List<PendingBudgetReconcile>,
     onUpsert: (AccountBudget) -> Unit,
     onDelete: (AccountBudget) -> Unit,
     onReconcile: (AccountBudget, Double) -> Unit,
+    onApplyPending: (PendingBudgetReconcile) -> Unit,
+    onDismissPending: (PendingBudgetReconcile) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val languageManager = LocalLanguageManager.current
@@ -103,6 +111,9 @@ fun AccountBudgetsSection(
                     expenses = expenses,
                     accounts = accounts,
                     languageManager = languageManager,
+                    pending = pendingReconciles.find {
+                        it.accountId == budget.accountId && it.currencyCode.equals(budget.currencyCode, ignoreCase = true)
+                    },
                     onDelete = { onDelete(budget) },
                     onTopUp = {
                         // Filling a pot starts its window here: what was spent out of the last one
@@ -115,7 +126,9 @@ fun AccountBudgetsSection(
                             )
                         )
                     },
-                    onReconcile = { remaining -> onReconcile(budget, remaining) }
+                    onReconcile = { remaining -> onReconcile(budget, remaining) },
+                    onApplyPending = onApplyPending,
+                    onDismissPending = onDismissPending
                 )
             }
             if (addingFor == account.id) {
@@ -237,17 +250,60 @@ private fun BudgetRow(
     expenses: List<Expense>,
     accounts: List<BankAccount>,
     languageManager: LanguageManager,
+    pending: PendingBudgetReconcile?,
     onDelete: () -> Unit,
     onTopUp: () -> Unit,
-    onReconcile: (Double) -> Unit
+    onReconcile: (Double) -> Unit,
+    onApplyPending: (PendingBudgetReconcile) -> Unit,
+    onDismissPending: (PendingBudgetReconcile) -> Unit
 ) {
     val opening = BudgetMath.openingBalance(budget)
     val remaining = BudgetMath.remaining(budget, expenses, accounts)
     val fraction = if (opening > 0) (remaining / opening).coerceIn(0.0, 1.0).toFloat() else 0f
     var reconciling by remember(budget.id) { mutableStateOf(false) }
     var reconcileText by remember(budget.id) { mutableStateOf("") }
+    val dateFormat = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        // The notification pipeline's own proposal for this budget, ahead of everything else here:
+        // it is a question about the SAME figure the row below answers, and answering it first is
+        // what lets Apply simply become the row's usual state instead of a second thing to track.
+        if (pending != null) {
+            Surface(
+                tonalElevation = 2.dp,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+            ) {
+                Column(Modifier.padding(10.dp)) {
+                    Text(
+                        languageManager.getString("budget_balance_suggestion_desc"),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                        Text(
+                            "%.2f %s".format(pending.remaining, pending.currencyCode),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            languageManager.getString("budget_balance_suggestion_as_of")
+                                .format(dateFormat.format(Date(pending.statedAt))),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        TextButton(onClick = { onApplyPending(pending) }) {
+                            Text(languageManager.getString("apply"))
+                        }
+                        TextButton(onClick = { onDismissPending(pending) }) {
+                            Text(languageManager.getString("dismiss_button"))
+                        }
+                    }
+                }
+            }
+        }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "%.2f %s".format(remaining, budget.currencyCode),
