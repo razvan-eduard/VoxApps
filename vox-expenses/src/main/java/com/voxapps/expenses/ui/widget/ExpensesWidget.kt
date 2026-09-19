@@ -139,6 +139,24 @@ class ExpensesWidget : GlanceAppWidget() {
                 )
             }
             val recentExpenses = if (uiState is ExpensesUiState.Unlocked) allExpenses else emptyList()
+            // What each day's own heading shows spent — outgoing only, the same "Today: X" sense the
+            // persistent notification and the widget's own budget line already use, converted to
+            // home currency the same way BudgetHeadline is so a mixed-currency day still sums to one
+            // figure. Scoped to the same 20 rows RecentExpensesList actually groups and shows — see
+            // its own identical take(20)/groupBy, which this has to mirror to total the same days.
+            val dayTotals by produceState<Map<LocalDate, Double>>(emptyMap(), recentExpenses, settingsSnapshot) {
+                val zoneId = ZoneId.systemDefault()
+                val totals = mutableMapOf<LocalDate, Double>()
+                for (item in recentExpenses.sortedByDescending { it.expense.dateTime }.take(20)) {
+                    if (item.expense.direction != TransactionDirection.OUTGOING) continue
+                    val day = Instant.ofEpochMilli(item.expense.dateTime).atZone(zoneId).toLocalDate()
+                    val converted = container.exchangeRateRepository.convertToHome(
+                        item.expense.totalAmount, item.expense.currencyCode, settingsSnapshot.homeCurrency
+                    ) ?: item.expense.totalAmount
+                    totals[day] = (totals[day] ?: 0.0) + converted
+                }
+                value = totals
+            }
 
             GlanceTheme {
                 ExpensesWidgetContent(
@@ -164,7 +182,9 @@ class ExpensesWidget : GlanceAppWidget() {
                         TodayEffect.NONE
                     },
                     todayEffectStyle = settingsSnapshot.todayEffectStyle.toEnumOr(TodayEffectStyle.RING),
-                    todayEffectColor = Color(settingsSnapshot.todayEffectColor.toInt())
+                    todayEffectColor = Color(settingsSnapshot.todayEffectColor.toInt()),
+                    dayTotals = dayTotals,
+                    homeCurrency = settingsSnapshot.homeCurrency
                 )
             }
         }
@@ -220,7 +240,9 @@ private fun ExpensesWidgetContent(
     borderColor: Color,
     todayEffect: TodayEffect,
     todayEffectStyle: TodayEffectStyle,
-    todayEffectColor: Color
+    todayEffectColor: Color,
+    dayTotals: Map<LocalDate, Double>,
+    homeCurrency: String
 ) {
     VoxWidgetScaffold(
         title = languageManager.getString("widget_app_name"),
@@ -264,7 +286,7 @@ private fun ExpensesWidgetContent(
         }
         RecentExpensesList(
             expenses, attachedExpenseIds, languageManager, locale, borderEnabled, borderThicknessDp, borderColor,
-            todayEffect, todayEffectStyle, todayEffectColor
+            todayEffect, todayEffectStyle, todayEffectColor, dayTotals, homeCurrency
         )
     }
 }
@@ -280,7 +302,9 @@ private fun RecentExpensesList(
     borderColor: Color,
     todayEffect: TodayEffect,
     todayEffectStyle: TodayEffectStyle,
-    todayEffectColor: Color
+    todayEffectColor: Color,
+    dayTotals: Map<LocalDate, Double>,
+    homeCurrency: String
 ) {
     val zoneId = ZoneId.systemDefault()
     val today = LocalDate.now(zoneId)
@@ -317,7 +341,7 @@ private fun RecentExpensesList(
         today = today,
         chrome = chrome,
         emptyDayText = languageManager.getString("widget_nothing_today"),
-        dayLabel = { date -> dayLabel(date, today, languageManager, locale) }
+        dayLabel = { date -> dayLabel(date, today, languageManager, locale, dayTotals[date] ?: 0.0, homeCurrency) }
     ) { day, dayItems ->
         // Today is the day you are still living through, so when a payment happened is worth
         // knowing; on any earlier day it is settled and the hour says nothing you need.
@@ -413,20 +437,28 @@ private fun RecentExpensesList(
 
 private const val ROW_TINT_ALPHA = 0.18f
 
-private fun dayLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale): String {
+private fun dayLabel(
+    date: LocalDate,
+    today: LocalDate,
+    languageManager: LanguageManager,
+    locale: Locale,
+    total: Double,
+    currency: String
+): String {
     val shortDate = WidgetDayFormats.short(date, locale)
-    return when (date) {
+    val datePart = when (date) {
         today -> "${languageManager.getString("today")}, $shortDate"
         today.plusDays(1) -> "${languageManager.getString("tomorrow")} - $shortDate"
         else -> WidgetDayFormats.weekday(date, locale)
     }
+    return "$datePart • ${formatAmount(total, currency)}"
 }
 
 /** The day heading for this widget: its own wording, the shared presentation. */
 @Composable
-private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale) {
+private fun DaySeparatorLabel(date: LocalDate, today: LocalDate, languageManager: LanguageManager, locale: Locale, total: Double, currency: String) {
     DaySeparatorLabel(
-        text = dayLabel(date, today, languageManager, locale),
+        text = dayLabel(date, today, languageManager, locale, total, currency),
         isToday = date == today,
         style = DaySeparatorStyle.Pill
     )
