@@ -56,9 +56,10 @@ object AmountText {
 /**
  * Every figure with a currency marker directly beside it, either side, either spelling. The
  * marker requirement is what separates money from the other numbers a message carries — card
- * fragments, reference codes, counts. Reports all of them; choosing among them is the caller's
- * (a notification parser wanting certainty takes exactly one distinct value and declines on
- * more — see the purchase-plus-balance case).
+ * fragments, reference codes, counts. Reports all of them, in document order (field by field,
+ * line by line, left to right within a line); choosing among them is the caller's — see
+ * [com.voxapps.textmatch.extract.TwoFieldPreParse]'s handling of the purchase-plus-balance case,
+ * which relies on that ordering.
  */
 object CurrencyMarkedAmounts {
 
