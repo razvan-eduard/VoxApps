@@ -18,7 +18,11 @@ import com.voxapps.ipc.VoxCapabilityClient
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val TAG = "PaymentNotificationListenerService"
@@ -106,6 +110,12 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val container = (applicationContext as ExpensesApplication).container
         val settings = container.settingsRepository.getSnapshot()
         if (sbn.packageName !in settings.paymentSourcePackages) return
+        // Reached for a post, a removal, a reconnect's catch-up scan and a forced re-check alike —
+        // every path that means the shade for a package this app cares about may have just changed.
+        // The reactive half of activeKeysFrom's live poll: a caller combining on this recomputes
+        // exactly when that might be true, not only when something else it already tracks happens
+        // to also change (see RescanGuardService's redactedStubs).
+        _shadeChanges.update { it + 1 }
         // A group summary is a container, not a message. The OS posts one whenever several
         // notifications from the same app pile up, and it carries their count rather than their
         // text — so reading it as a capture reads nothing, every time, and the discard it produces
@@ -366,6 +376,14 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         // OEM that rebind can be silently blocked entirely — "Service starting has been prevented by
         // iaware or trustsbase" — so it's not a reliable way to force anything).
         @Volatile private var activeInstance: PaymentNotificationListenerService? = null
+
+        // A plain counter, not a Set<String> of live keys: the value carries no information of its
+        // own, only its emission timing — the same "just a trigger" shape midnightTicks() already
+        // is in RescanGuardService. Surviving the listener unbinding (a companion val, not tied to
+        // any instance) means a caller combining on this doesn't need to also handle the service
+        // being briefly unbound across a reconnect.
+        private val _shadeChanges = MutableStateFlow(0)
+        val shadeChanges: StateFlow<Int> = _shadeChanges.asStateFlow()
 
         /**
          * Takes a captured notification out of the shade.

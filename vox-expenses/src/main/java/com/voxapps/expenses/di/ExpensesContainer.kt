@@ -146,7 +146,19 @@ class ExpensesContainer(context: Context) {
                 // Expenses themselves don't change when an attachment is added/removed on one of
                 // them, so the widget's paperclip indicator would otherwise only catch up on the
                 // next unrelated refresh instead of promptly.
-                attachmentDao.observeRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE)
+                attachmentDao.observeRecordIdsWithAttachments(ExpensesAttachments.RECORD_TYPE),
+                // Three more "just a trigger" sources folded into one Unit-producing flow, since
+                // combine tops out at five typed arguments: the widget's own budgetLine reads
+                // accountBudgets and bankAccounts directly, so a Reconcile tap (manual or the
+                // notification pipeline's automatic one), an upsert or a delete would otherwise sit
+                // un-reflected on a dormant widget session until one of the four sources above
+                // happened to also change; the exchange-rate cache refreshing is the same gap for
+                // whatever budgetLine/dayTotals last converted through it.
+                combine(
+                    expensesRepository.accountBudgets,
+                    expensesRepository.bankAccounts,
+                    exchangeRateRepository.cacheUpdatedAt
+                ) { _, _, _ -> Unit }
             // conflate(): each emission drives a Glance updateAll() — an IPC round-trip to the
             // launcher — and a bulk import or a P2P sync merge emits once per record, so the
             // widget would be redrawn N times to show one final state. Conflating drops the
@@ -154,7 +166,7 @@ class ExpensesContainer(context: Context) {
             // refresh rate is bounded by how fast updateAll() completes rather than by how fast
             // rows are written. No debounce: nothing here is latency-sensitive enough to justify
             // delaying the common single-change case.
-            ) { _, _, _, _ -> }.conflate().collect { ExpensesWidget().updateAll(appContext) }
+            ) { _, _, _, _, _ -> }.conflate().collect { ExpensesWidget().updateAll(appContext) }
         }
 
         // Warm the launcher-apps cache before any UI composes (mirrors vox-commander's AppContainer

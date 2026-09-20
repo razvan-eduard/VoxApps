@@ -7,7 +7,10 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.voxapps.expenses.data.preferences.DataStoreProvider
 import com.voxapps.logging.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -34,6 +37,13 @@ class ExchangeRateRepository(private val context: Context) {
         val CACHED_RATES_JSON = stringPreferencesKey("exchange_rate_cached_rates_json")
         val CACHED_AT = longPreferencesKey("exchange_rate_cached_at")
     }
+
+    /** Bumps whenever the cached rate table is (re)written — [getRates]'s cache is read on demand
+     *  and refreshed only once its own staleness window elapses, so a display that already converted
+     *  a total off the old table has no other way to know a fresher one just landed. A caller
+     *  combining on this recomputes the moment a refresh actually changes what "converted" means,
+     *  rather than only when something else it already tracks happens to also change. */
+    val cacheUpdatedAt: Flow<Long?> = dataStore.data.map { it[Keys.CACHED_AT] }.distinctUntilChanged()
 
     private val httpClient by lazy {
         OkHttpClient.Builder()
