@@ -75,7 +75,18 @@ class RescanGuardService : Service() {
                 container.pendingNotificationExpenseRepository.pendingFlow,
                 container.settingsRepository.settingsFlow,
                 container.expensesStateManager.dismissals,
-                midnightTicks()
+                // Three "just a trigger" signals folded into one Unit-producing flow, since
+                // kotlinx.coroutines' typed combine tops out at five: the midnight tick, the shade
+                // actually changing (posts/removals for a watched package — see
+                // PaymentNotificationListenerService.shadeChanges, what makes redactedStubs' live
+                // poll below recompute right when it might have changed rather than only when
+                // something else here does), and the exchange-rate cache being refreshed (what the
+                // today/week/month sums convert through, below).
+                combine(
+                    midnightTicks(),
+                    PaymentNotificationListenerService.shadeChanges,
+                    container.exchangeRateRepository.cacheUpdatedAt
+                ) { _, _, _ -> Unit }
             ) { expenses, pending, settings, seen, _ -> ComputeInput(expenses, pending, settings, seen) }
                 .collect { (expenses, pending, settings, seen) ->
                     val content = compute(container, expenses, pending, settings, seen)

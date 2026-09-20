@@ -97,8 +97,6 @@ class ExpensesWidget : GlanceAppWidget() {
             putExtra(ExpensesActivity.EXTRA_QUICK_ADD, true)
         }
         val openAppIntent = Intent(context, ExpensesActivity::class.java)
-        val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
-            VoxAppsDiscovery.isCommanderInstalled(context)
 
         // Every dynamic value is collected INSIDE the composition, never read into a val out here:
         // provideGlance runs once per Glance session, while an updateAll() on a live session only
@@ -119,15 +117,28 @@ class ExpensesWidget : GlanceAppWidget() {
             val settingsSnapshot by container.settingsRepository.settingsFlow
                 .collectAsState(initial = container.settingsRepository.getSnapshot())
             val locale = Locale.forLanguageTag(settingsSnapshot.language)
+            // Was hoisted above provideContent{} until this widget's own day-total work found it —
+            // the exact anti-pattern the comment above warns about: a session left running across a
+            // Vision/Commander install or uninstall would have shown a stale scan row forever,
+            // rather than catching up on the widget's next unrelated recomposition like everything
+            // else here does.
+            val scanEnabled = VoxAppsDiscovery.isAppInstalled(context, VoxIpc.VISION_PACKAGE) &&
+                VoxAppsDiscovery.isCommanderInstalled(context)
             val pendingCaptures by container.pendingLlmRequestCount.collectAsState(initial = 0)
             val budgets by container.expensesRepository.accountBudgets.collectAsState(initial = emptyList())
             // The tree, because a payment is filed against the card it was made with and comes out
             // of the account that card reaches.
             val budgetAccounts by container.expensesRepository.bankAccounts.collectAsState(initial = emptyList())
+            // A rate refreshing in the background doesn't change any of the other keys below, so
+            // without this a widget session left running across that refresh would keep showing
+            // whatever the old rate last converted until something else it tracks also changed.
+            val rateGeneration by container.exchangeRateRepository.cacheUpdatedAt.collectAsState(initial = null)
             // Rates are fetched, so a mixed-currency total is worked out off the composition and
             // recomputed when either half changes. A rate that has never been fetched leaves its
             // budget out rather than adding it as though it were already home currency.
-            val budgetLine by produceState<BudgetHeadline.Line?>(null, budgets, budgetAccounts, allExpenses, settingsSnapshot) {
+            val budgetLine by produceState<BudgetHeadline.Line?>(
+                null, budgets, budgetAccounts, allExpenses, settingsSnapshot, rateGeneration
+            ) {
                 value = BudgetHeadline.of(
                     settings = settingsSnapshot,
                     budgets = budgets,
@@ -144,7 +155,9 @@ class ExpensesWidget : GlanceAppWidget() {
             // home currency the same way BudgetHeadline is so a mixed-currency day still sums to one
             // figure. Scoped to the same 20 rows RecentExpensesList actually groups and shows — see
             // its own identical take(20)/groupBy, which this has to mirror to total the same days.
-            val dayTotals by produceState<Map<LocalDate, Double>>(emptyMap(), recentExpenses, settingsSnapshot) {
+            val dayTotals by produceState<Map<LocalDate, Double>>(
+                emptyMap(), recentExpenses, settingsSnapshot, rateGeneration
+            ) {
                 val zoneId = ZoneId.systemDefault()
                 val totals = mutableMapOf<LocalDate, Double>()
                 for (item in recentExpenses.sortedByDescending { it.expense.dateTime }.take(20)) {
