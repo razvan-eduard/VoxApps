@@ -6,6 +6,7 @@ import com.voxapps.commander.data.remote.RemoteModelRegistry
 import com.voxapps.commander.domain.model.ImportedModelId
 import com.voxapps.commander.di.AppContainer
 import com.voxapps.commander.service.OAuth2Manager
+import com.voxapps.logging.LogLevel
 import com.voxapps.logging.Logger
 import com.voxapps.services.SchemaCatalog
 import com.voxapps.commander.utils.NetworkMonitor
@@ -41,7 +42,11 @@ class VoxApplication : Application() {
         // process gets a logger and nothing else; everything it genuinely needs (library dir,
         // model path, engine name) arrives through its binding intent.
         if (!isMainProcess()) {
-            Logger.initialize(this, "VoxCommander")
+            // LogLevel.NONE: matches every other app's off-by-default convention instead of the
+            // 2-arg overload's LOGCAT_ONLY default, which hardcoded this process's logcat on
+            // regardless of the user's real setting (never synced here — see above). forcelog
+            // still reaches this process the same as any other if it's ever needed.
+            Logger.initialize(this, "VoxCommander", LogLevel.NONE)
             return
         }
 

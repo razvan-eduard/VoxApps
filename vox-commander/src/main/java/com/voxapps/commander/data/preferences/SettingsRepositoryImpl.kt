@@ -414,7 +414,7 @@ class SettingsRepositoryImpl(
             defaultIntentFallbackProcessor = prefs[Keys.DEFAULT_INTENT_FALLBACK_PROCESSOR],
             defaultIntentFallbackModel = prefs[Keys.DEFAULT_INTENT_FALLBACK_MODEL],
 
-            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: true,
+            debugLoggingEnabled = prefs[Keys.DEBUG_LOGGING_ENABLED] ?: false,
             debugToastsEnabled = prefs[Keys.DEBUG_TOASTS_ENABLED] ?: false,
             themeDarkMode = prefs[Keys.THEME_DARK_MODE] ?: "SYSTEM",
             themeColored = prefs[Keys.THEME_COLORED] ?: false,
