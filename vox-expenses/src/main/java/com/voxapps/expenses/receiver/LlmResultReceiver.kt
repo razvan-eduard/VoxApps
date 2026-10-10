@@ -446,9 +446,11 @@ class LlmResultReceiver : BroadcastReceiver() {
                                 didSomething = true
                             }
                         }
-                        val toastKey = if (didSomething) "toast_lineitems_rescanned" else "toast_lineitems_rescan_empty"
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(context, container.languageManager.getString(toastKey), Toast.LENGTH_SHORT).show()
+                        if (container.settingsRepository.getSnapshot().voiceSaveToastEnabled) {
+                            val toastKey = if (didSomething) "toast_lineitems_rescanned" else "toast_lineitems_rescan_empty"
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, container.languageManager.getString(toastKey), Toast.LENGTH_SHORT).show()
+                            }
                         }
                     } finally {
                         pending.finish()
@@ -697,8 +699,10 @@ class LlmResultReceiver : BroadcastReceiver() {
             )
         }
 
-        withContext(Dispatchers.Main) {
-            Toast.makeText(appContext, container.languageManager.getString("toast_expense_saved"), Toast.LENGTH_SHORT).show()
+        if (settings.voiceSaveToastEnabled) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(appContext, container.languageManager.getString("toast_expense_saved"), Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

@@ -351,6 +351,7 @@ fun SettingsScreen(
             ) {
                 ExpensesNotificationCard(settings, stateManager, languageManager, pickSound, triggerPreview)
                 PermanentNotificationCard(settings, stateManager, languageManager)
+                SaveToastCard(settings, stateManager, languageManager)
             }
             SettingsPage.VOICE -> VoiceSettingsTab(
                 settings = settings,
@@ -575,6 +576,32 @@ private fun PermanentNotificationCard(
         }
         NotifContentRow(languageManager.getString("permanent_notif_review"), on && settings.notifShowReviewCount, on) {
             stateManager.setNotifShowReviewCount(it)
+        }
+    }
+}
+
+/**
+ * The confirmation toast for an expense the app saved on its own: from voice, a scan, or a captured
+ * notification. Every one of those paths ends in the same save, which reads this one switch.
+ */
+@Composable
+private fun SaveToastCard(
+    settings: ExpensesSettings,
+    stateManager: ExpensesStateManager,
+    languageManager: com.voxapps.expenses.domain.localization.LanguageManager
+) {
+    SettingsSectionCard(languageManager.getString("save_toast")) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                languageManager.getString("save_toast_desc"),
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = settings.voiceSaveToastEnabled,
+                onCheckedChange = { stateManager.setVoiceSaveToastEnabled(it) }
+            )
         }
     }
 }

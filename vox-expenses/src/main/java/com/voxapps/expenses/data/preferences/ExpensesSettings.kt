@@ -22,8 +22,10 @@ import com.voxapps.design.effects.TodayEffectStyle
  * - [language]: drives the app's own UI copy (LanguageManager) and the language instruction sent to
  *   Commander's LLM for voice-expense parsing — one setting serves both, mirroring vox-notes.
  * - [defaultCurrency]: the currency assigned to a new expense when the user hasn't picked one.
- * - [defaultVoiceCategoryId]/[voiceSaveToastEnabled]/[autoCreateVoiceCategory]: same semantics as
- *   vox-notes' equivalents, for expenses created via Commander's voice pipeline (Stage 2).
+ * - [defaultVoiceCategoryId]/[autoCreateVoiceCategory]: same semantics as vox-notes' equivalents,
+ *   for expenses created via Commander's voice pipeline (Stage 2).
+ * - [voiceSaveToastEnabled]: a confirmation toast for every expense the app saves on its own (voice,
+ *   scan, captured notification). Shown on the Notifications settings page.
  * - [scheduledMergeInterval]/[scheduledExpenseDedupInterval]: how often Auto-Merge Categories /
  *   expense deduplication run automatically in the background ([INTERVAL_OFF] = manual button only).
  *   Independent settings, mirroring vox-notes' precedent of not coupling the two features' schedules.

@@ -63,23 +63,6 @@ fun VoiceSettingsTab(
             onLevelChange = { stateManager.setVoiceModelUse(it.name) }
         )
 
-        // --- Toast on voice save ---
-        SettingsSectionCard(languageManager.getString("voice_save_toast")) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    languageManager.getString("voice_save_toast_desc"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = settings.voiceSaveToastEnabled,
-                    onCheckedChange = { stateManager.setVoiceSaveToastEnabled(it) }
-                )
-            }
-
-        }
-
         // --- Default category for voice/unresolved expenses ---
         SettingsSectionCard(languageManager.getString("default_voice_category")) {
             Text(
