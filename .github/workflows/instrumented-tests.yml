@@ -59,7 +59,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # -PvoxSkipNativePrep below skips both native engines, and whisper stays skipped (its
       # runtime is downloaded at test time anyway). The llama build is compiled here on purpose:
